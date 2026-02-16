@@ -10,6 +10,7 @@ import type {
 	CommitDetail,
 	CommitInfo,
 	BranchInfo,
+	StashDetail,
 	StashEntry,
 	RemoteInfo,
 	CommitResult,
@@ -153,6 +154,15 @@ const repo = {
 		validateProjectId(projectId);
 		return ipcRenderer.invoke("repo:discardAllUnstaged", projectId);
 	},
+	deleteUntrackedFiles: (projectId: string, paths: string[]): Promise<void> => {
+		validateProjectId(projectId);
+		paths.forEach(validatePath);
+		return ipcRenderer.invoke("repo:deleteUntrackedFiles", projectId, paths);
+	},
+	discardAll: (projectId: string): Promise<void> => {
+		validateProjectId(projectId);
+		return ipcRenderer.invoke("repo:discardAll", projectId);
+	},
 	commit: (
 		projectId: string,
 		message: string,
@@ -282,6 +292,10 @@ const repo = {
 	stashDrop: (projectId: string, index?: number): Promise<void> => {
 		validateProjectId(projectId);
 		return ipcRenderer.invoke("repo:stashDrop", projectId, index);
+	},
+	stashShow: (projectId: string, index: number): Promise<StashDetail | null> => {
+		validateProjectId(projectId);
+		return ipcRenderer.invoke("repo:stashShow", projectId, index);
 	},
 	listTags: (projectId: string): Promise<string[]> => {
 		validateProjectId(projectId);

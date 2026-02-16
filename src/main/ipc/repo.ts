@@ -501,6 +501,14 @@ export function registerRepoHandlers(): void {
 		await runMutation(projectId, (git, cwd) => git.discardAllUnstaged(cwd));
 	});
 
+	ipcMain.handle("repo:deleteUntrackedFiles", async (_, projectId: string, paths: string[]) => {
+		await runMutation(projectId, (git, cwd) => git.deleteUntrackedFiles(cwd, paths));
+	});
+
+	ipcMain.handle("repo:discardAll", async (_, projectId: string) => {
+		await runMutation(projectId, (git, cwd) => git.discardAll(cwd));
+	});
+
 	ipcMain.handle(
 		"repo:openInEditor",
 		async (_, projectId: string, filePath: string): Promise<void> => {
@@ -843,6 +851,17 @@ export function registerRepoHandlers(): void {
 
 	ipcMain.handle("repo:stashDrop", async (_, projectId: string, index?: number) => {
 		await runMutation(projectId, (git, cwd) => git.stashDrop(cwd, index));
+	});
+
+	ipcMain.handle("repo:stashShow", async (_, projectId: string, index: number) => {
+		const cwd = await getRepoPath(projectId);
+		if (!cwd) return null;
+		try {
+			return (await getGitProvider()).stashShow(cwd, index);
+		} catch (error) {
+			emitRepoError(projectId, error);
+			return null;
+		}
 	});
 
 	// Tags

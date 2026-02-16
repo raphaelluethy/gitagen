@@ -51,6 +51,8 @@ import WorktreeSelector from "./components/WorktreeSelector";
 import LogPanel from "./components/LogPanel";
 import CommitDetailView from "./components/CommitDetailView";
 import StashPanel from "./components/StashPanel";
+import StashDetailView from "./components/StashDetailView";
+import StashDialog from "./components/StashDialog";
 import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
 import SyncButtons from "./components/SyncButtons";
@@ -314,6 +316,9 @@ function AppContent() {
 	);
 	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
 	const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
+	const [selectedStashIndex, setSelectedStashIndex] = useState<number | null>(null);
+	const [showStashDialog, setShowStashDialog] = useState(false);
+	const [stashRefreshKey, setStashRefreshKey] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
 	const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
@@ -389,6 +394,11 @@ function AppContent() {
 
 	const handleViewAll = useCallback(() => {
 		setViewMode("all");
+	}, []);
+
+	const handleSelectFile = useCallback((file: GitFileStatus) => {
+		setSelectedFile(file);
+		setSelectedCommitOid(null);
 	}, []);
 
 	const openGitAgent = useCallback((initialPrompt?: string) => {
@@ -649,10 +659,7 @@ function AppContent() {
 			onToggleRightPanel: toggleRightPanel,
 			onRefreshStatus: refreshStatus,
 			onRefreshStatusAndPrefs: refreshStatusAndPrefs,
-			onSelectFile: (file) => {
-				setSelectedFile(file);
-				setSelectedCommitOid(null);
-			},
+			onSelectFile: handleSelectFile,
 			onOpenCommitDetail: (oid) => {
 				setSelectedCommitOid(oid);
 			},
@@ -665,6 +672,7 @@ function AppContent() {
 		}),
 		[
 			handleAddProject,
+			handleSelectFile,
 			openGitAgent,
 			refreshStatus,
 			refreshStatusAndPrefs,
@@ -716,6 +724,17 @@ function AppContent() {
 					}}
 					projectId={activeProject.id}
 					initialPrompt={gitAgentInitialPrompt}
+				/>
+			)}
+			{activeProject && (
+				<StashDialog
+					open={showStashDialog}
+					onClose={() => setShowStashDialog(false)}
+					projectId={activeProject.id}
+					onStashCreated={() => {
+						refreshStatus();
+						setStashRefreshKey((k) => k + 1);
+					}}
 				/>
 			)}
 		</>
@@ -818,7 +837,7 @@ function AppContent() {
 							projectId={activeProject.id}
 							status={gitStatus}
 							selectedFile={selectedFile}
-							onSelectFile={setSelectedFile}
+							onSelectFile={handleSelectFile}
 							onRefresh={refreshStatus}
 							onBack={() => setActiveProject(null)}
 							projects={projects}
@@ -1002,6 +1021,17 @@ function AppContent() {
 									diffStyle={diffStyle}
 									onClose={() => setSelectedCommitOid(null)}
 								/>
+							) : selectedStashIndex !== null ? (
+								<StashDetailView
+									projectId={activeProject.id}
+									index={selectedStashIndex}
+									diffStyle={diffStyle}
+									onClose={() => setSelectedStashIndex(null)}
+									onActionComplete={() => {
+										refreshStatus();
+										setStashRefreshKey((k) => k + 1);
+									}}
+								/>
 							) : (
 								<Group
 									className="flex min-h-0 flex-1 flex-col"
@@ -1128,6 +1158,10 @@ function AppContent() {
 										<StashPanel
 											projectId={activeProject.id}
 											onRefresh={refreshStatus}
+											selectedIndex={selectedStashIndex}
+											onSelect={setSelectedStashIndex}
+											onOpenCreateDialog={() => setShowStashDialog(true)}
+											refreshKey={stashRefreshKey}
 										/>
 									</div>
 									<div

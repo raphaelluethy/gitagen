@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { readFileSync, statSync } from "fs";
 import { join, resolve } from "path";
 import simpleGit, { SimpleGit, StatusResult } from "simple-git";
+import type { StashDetail } from "../../../shared/types.js";
 
 const MAX_NEW_FILE_BYTES = 1024 * 1024;
 const STATUS_CACHE_TTL_MS = 1000;
@@ -387,6 +388,17 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			await git.checkout(["."]);
 		},
 
+		async deleteUntrackedFiles(cwd: string, paths: string[]): Promise<void> {
+			const git = createGit(cwd, binary);
+			await git.clean("f", ["-f", "--", ...paths]);
+		},
+
+		async discardAll(cwd: string): Promise<void> {
+			const git = createGit(cwd, binary);
+			await git.reset(["HEAD", "--hard"]);
+			await git.clean("f", ["-d", "-f"]);
+		},
+
 		async commit(cwd, opts): Promise<{ oid: string; signed: boolean }> {
 			const git = createGit(cwd, binary);
 			const customArgs: string[] = [];
@@ -648,6 +660,38 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			const git = createGit(cwd, binary);
 			if (index != null) await git.stash(["drop", `stash@{${index}}`]);
 			else await git.stash(["drop"]);
+		},
+
+		async stashShow(cwd: string, index: number): Promise<StashDetail | null> {
+			const git = createGit(cwd, binary);
+			const stashRef = `stash@{${index}}`;
+
+			const [listOut, patchOut] = await Promise.all([
+				git.raw(["stash", "list", "-1", stashRef, "--format=%H%n%s%n%an%n%ae%n%ai%n%D"]),
+				git.raw(["stash", "show", "-p", stashRef]),
+			]);
+
+			const lines = listOut.trim().split("\n");
+			if (lines.length < 5 || !lines[0]) return null;
+
+			const oid = lines[0];
+			const message = lines[1] ?? "";
+			const authorName = lines[2] ?? "";
+			const authorEmail = lines[3] ?? "";
+			const date = lines[4] ?? "";
+
+			const branchMatch = listOut.match(/On\s+(.+?):/);
+			const branch = branchMatch?.[1] ?? "";
+
+			return {
+				index,
+				message,
+				oid,
+				branch,
+				author: { name: authorName, email: authorEmail },
+				date,
+				patch: patchOut,
+			};
 		},
 
 		async listTags(cwd: string): Promise<string[]> {

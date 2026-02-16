@@ -7,6 +7,7 @@ import type {
 	PushResultSummary,
 	RepoStatus,
 	RemoteInfo,
+	StashDetail,
 	StashEntry,
 	TreeNode,
 	WorktreeInfo,
@@ -47,6 +48,8 @@ export interface GitProvider {
 	unstageAll(cwd: string): Promise<void>;
 	discardFiles(cwd: string, paths: string[]): Promise<void>;
 	discardAllUnstaged(cwd: string): Promise<void>;
+	deleteUntrackedFiles(cwd: string, paths: string[]): Promise<void>;
+	discardAll(cwd: string): Promise<void>;
 
 	commit(
 		cwd: string,
@@ -104,6 +107,7 @@ export interface GitProvider {
 	stashApply(cwd: string, index?: number): Promise<void>;
 	stashList(cwd: string): Promise<StashEntry[]>;
 	stashDrop(cwd: string, index?: number): Promise<void>;
+	stashShow(cwd: string, index: number): Promise<StashDetail | null>;
 
 	listTags(cwd: string): Promise<string[]>;
 	createTag(

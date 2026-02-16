@@ -38,6 +38,8 @@ export type IpcChannel =
 	| "repo:unstageAll"
 	| "repo:discardFiles"
 	| "repo:discardAllUnstaged"
+	| "repo:deleteUntrackedFiles"
+	| "repo:discardAll"
 	| "repo:commit"
 	| "repo:undoLastCommit"
 	| "repo:getUnpushedOids"
@@ -62,6 +64,7 @@ export type IpcChannel =
 	| "repo:stashApply"
 	| "repo:stashList"
 	| "repo:stashDrop"
+	| "repo:stashShow"
 	| "repo:listTags"
 	| "repo:createTag"
 	| "repo:deleteTag"
@@ -240,6 +243,16 @@ export interface StashEntry {
 	index: number;
 	message: string;
 	oid: string;
+}
+
+export interface StashDetail {
+	index: number;
+	message: string;
+	oid: string;
+	branch: string;
+	author: { name: string; email: string };
+	date: string;
+	patch: string;
 }
 
 export interface RemoteInfo {

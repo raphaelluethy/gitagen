@@ -11,7 +11,10 @@ import {
 	ListMinus,
 	ListPlus,
 	Minus,
+	MoreHorizontal,
 	Plus,
+	RotateCcw,
+	Trash2,
 } from "lucide-react";
 import type { GitStatus, GitFileStatus } from "../../../shared/types";
 import type { Project } from "../../../shared/types";
@@ -19,6 +22,19 @@ import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 import { useSettings } from "../settings/provider";
 import { useToast } from "../toast/provider";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import {
+	ContextMenu,
+	ContextMenuTrigger,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+} from "./ui/context-menu";
+import {
+	DropdownMenu,
+	DropdownMenuTrigger,
+	DropdownMenuContent,
+	DropdownMenuItem,
+} from "./ui/dropdown-menu";
 
 interface SidebarProps {
 	projectId: string;
@@ -157,6 +173,7 @@ function TreeItem({
 	const isExpanded = isFolder && expandedFolders.has(node.path);
 	const childNodes = isFolder ? (node.children as FileTreeNode[]) : [];
 	const paths = isFolder ? collectFilePaths(node) : [];
+	const isUntracked = section === "untracked";
 
 	const handleStage = useCallback(
 		async (e: React.MouseEvent) => {
@@ -196,8 +213,70 @@ function TreeItem({
 		[projectId, paths, canStage, onRefresh, toast]
 	);
 
+	const handleDiscardFile = useCallback(async () => {
+		if (!isFile) return;
+		const confirmed = await window.gitagen.app.confirm({
+			title: "Discard Changes",
+			message: `Discard changes to "${node.name}"?`,
+			detail: isUntracked
+				? "This will permanently delete the file."
+				: "This will restore the file to its last committed state.",
+			confirmLabel: "Discard",
+			cancelLabel: "Cancel",
+		});
+		if (!confirmed) return;
+		try {
+			if (isUntracked) {
+				await window.gitagen.repo.deleteUntrackedFiles(projectId, [node.file!.path]);
+			} else {
+				await window.gitagen.repo.discardFiles(projectId, [node.file!.path]);
+			}
+			onRefresh();
+			toast.success("Changes discarded");
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Discard failed", msg);
+		}
+	}, [projectId, node, isFile, isUntracked, onRefresh, toast]);
+
+	const handleDiscardFolder = useCallback(async () => {
+		if (paths.length === 0) return;
+		const confirmed = await window.gitagen.app.confirm({
+			title: "Discard Changes",
+			message: `Discard changes to ${paths.length} file${paths.length > 1 ? "s" : ""} in "${node.name}"?`,
+			detail: isUntracked
+				? "This will permanently delete these files."
+				: "This will restore the files to their last committed state.",
+			confirmLabel: "Discard",
+			cancelLabel: "Cancel",
+		});
+		if (!confirmed) return;
+		try {
+			if (isUntracked) {
+				await window.gitagen.repo.deleteUntrackedFiles(projectId, paths);
+			} else {
+				await window.gitagen.repo.discardFiles(projectId, paths);
+			}
+			onRefresh();
+			toast.success("Changes discarded");
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Discard failed", msg);
+		}
+	}, [projectId, paths, node.name, isUntracked, onRefresh, toast]);
+
+	const handleOpenInEditor = useCallback(async () => {
+		if (!isFile) return;
+		try {
+			await window.gitagen.repo.openInEditor(projectId, node.file!.path);
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Failed to open file", msg);
+		}
+	}, [projectId, node, isFile, toast]);
+
 	if (isFile) {
-		return (
+		const fileContent = (
 			<div
 				className={`group flex w-full items-center py-1.5 text-left text-[13px] outline-none transition-all ${
 					isSelected
@@ -230,27 +309,79 @@ function TreeItem({
 						{node.name}
 					</span>
 				</button>
-				<button
-					type="button"
-					onClick={handleStage}
-					className={`ml-auto shrink-0 rounded p-0.5 opacity-0 transition-all duration-120 group-hover:opacity-100 hover:bg-(--bg-tertiary) text-(--text-muted) ${
-						canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
-					}`}
-					title={canStage ? "Stage file" : "Unstage file"}
-					aria-label={canStage ? "Stage file" : "Unstage file"}
-				>
-					{canStage ? (
-						<Plus size={14} strokeWidth={2} />
-					) : (
-						<Minus size={14} strokeWidth={2} />
-					)}
-				</button>
+				<div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-120 group-hover:opacity-100">
+					<button
+						type="button"
+						onClick={handleDiscardFile}
+						className="rounded p-0.5 text-(--text-muted) transition-colors hover:bg-(--bg-tertiary) hover:text-(--danger)"
+						title="Discard changes"
+						aria-label="Discard changes"
+					>
+						<Trash2 size={14} strokeWidth={2} />
+					</button>
+					<button
+						type="button"
+						onClick={handleStage}
+						className={`rounded p-0.5 text-(--text-muted) transition-colors hover:bg-(--bg-tertiary) ${
+							canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
+						}`}
+						title={canStage ? "Stage file" : "Unstage file"}
+						aria-label={canStage ? "Stage file" : "Unstage file"}
+					>
+						{canStage ? (
+							<Plus size={14} strokeWidth={2} />
+						) : (
+							<Minus size={14} strokeWidth={2} />
+						)}
+					</button>
+				</div>
 			</div>
+		);
+
+		return (
+			<ContextMenu>
+				<ContextMenuTrigger>{fileContent}</ContextMenuTrigger>
+				<ContextMenuContent>
+					<ContextMenuItem onClick={handleOpenInEditor}>
+						<File size={14} strokeWidth={2} />
+						Open in Editor
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					{canStage && (
+						<ContextMenuItem
+							onClick={() =>
+								window.gitagen.repo
+									.stageFiles(projectId, [node.file!.path])
+									.then(onRefresh)
+							}
+						>
+							<Plus size={14} strokeWidth={2} />
+							Stage file
+						</ContextMenuItem>
+					)}
+					{!canStage && (
+						<ContextMenuItem
+							onClick={() =>
+								window.gitagen.repo
+									.unstageFiles(projectId, [node.file!.path])
+									.then(onRefresh)
+							}
+						>
+							<Minus size={14} strokeWidth={2} />
+							Unstage file
+						</ContextMenuItem>
+					)}
+					<ContextMenuItem onClick={handleDiscardFile} variant="destructive">
+						<Trash2 size={14} strokeWidth={2} />
+						Discard changes
+					</ContextMenuItem>
+				</ContextMenuContent>
+			</ContextMenu>
 		);
 	}
 
 	if (isFolder) {
-		return (
+		const folderContent = (
 			<div key={node.path}>
 				<div
 					className="group flex w-full items-center py-1.5 text-left text-[13px] text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
@@ -282,21 +413,34 @@ function TreeItem({
 						<span className="truncate font-medium">{node.name}</span>
 					</button>
 					{paths.length > 0 && (
-						<button
-							type="button"
-							onClick={handleStageFolder}
-							className={`ml-auto shrink-0 rounded p-0.5 opacity-0 transition-all duration-120 group-hover:opacity-100 hover:bg-(--bg-tertiary) text-(--text-muted) ${
-								canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
-							}`}
-							title={canStage ? "Stage folder" : "Unstage folder"}
-							aria-label={canStage ? "Stage folder" : "Unstage folder"}
-						>
-							{canStage ? (
-								<Plus size={14} strokeWidth={2} />
-							) : (
-								<Minus size={14} strokeWidth={2} />
-							)}
-						</button>
+						<div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-120 group-hover:opacity-100">
+							<button
+								type="button"
+								onClick={handleDiscardFolder}
+								className="rounded p-0.5 text-(--text-muted) transition-colors hover:bg-(--bg-tertiary) hover:text-(--danger)"
+								title="Discard folder changes"
+								aria-label="Discard folder changes"
+							>
+								<Trash2 size={14} strokeWidth={2} />
+							</button>
+							<button
+								type="button"
+								onClick={handleStageFolder}
+								className={`rounded p-0.5 text-(--text-muted) transition-colors hover:bg-(--bg-tertiary) ${
+									canStage
+										? "hover:text-(--success)"
+										: "hover:text-(--text-muted)"
+								}`}
+								title={canStage ? "Stage folder" : "Unstage folder"}
+								aria-label={canStage ? "Stage folder" : "Unstage folder"}
+							>
+								{canStage ? (
+									<Plus size={14} strokeWidth={2} />
+								) : (
+									<Minus size={14} strokeWidth={2} />
+								)}
+							</button>
+						</div>
 					)}
 				</div>
 				{isExpanded && (
@@ -318,6 +462,40 @@ function TreeItem({
 					</div>
 				)}
 			</div>
+		);
+
+		return (
+			<ContextMenu>
+				<ContextMenuTrigger>{folderContent}</ContextMenuTrigger>
+				<ContextMenuContent>
+					{canStage && paths.length > 0 && (
+						<ContextMenuItem
+							onClick={() =>
+								window.gitagen.repo.stageFiles(projectId, paths).then(onRefresh)
+							}
+						>
+							<Plus size={14} strokeWidth={2} />
+							Stage folder
+						</ContextMenuItem>
+					)}
+					{!canStage && paths.length > 0 && (
+						<ContextMenuItem
+							onClick={() =>
+								window.gitagen.repo.unstageFiles(projectId, paths).then(onRefresh)
+							}
+						>
+							<Minus size={14} strokeWidth={2} />
+							Unstage folder
+						</ContextMenuItem>
+					)}
+					{paths.length > 0 && (
+						<ContextMenuItem onClick={handleDiscardFolder} variant="destructive">
+							<Trash2 size={14} strokeWidth={2} />
+							Discard folder changes
+						</ContextMenuItem>
+					)}
+				</ContextMenuContent>
+			</ContextMenu>
 		);
 	}
 
@@ -357,13 +535,13 @@ function FileTreeSection({
 	const { toast } = useToast();
 	const tree = useMemo(() => buildFileTree(files), [files]);
 
-	function getAutoExpandPaths(nodes: FileTreeNode[]): string[] {
+	const getAutoExpandPaths = useCallback((nodes: FileTreeNode[]): string[] => {
 		const folders = nodes.filter((n) => n.type === "folder");
 		if (folders.length === 1) {
 			return [folders[0].path, ...getAutoExpandPaths(folders[0].children ?? [])];
 		}
 		return [];
-	}
+	}, []);
 
 	useEffect(() => {
 		if (settings.autoExpandSingleFolder && tree.length > 0) {
@@ -372,7 +550,7 @@ function FileTreeSection({
 				onExpandAll(new Set(paths));
 			}
 		}
-	}, [settings.autoExpandSingleFolder, tree, onExpandAll]);
+	}, [settings.autoExpandSingleFolder, tree, onExpandAll, getAutoExpandPaths]);
 
 	if (tree.length === 0) return null;
 
@@ -498,6 +676,7 @@ export default function Sidebar({
 	onAddProject,
 	onViewAll,
 }: SidebarProps) {
+	const { toast } = useToast();
 	type SectionKey = "staged" | "unstaged" | "untracked";
 	const [expandedFoldersBySection, setExpandedFoldersBySection] = useState<
 		Record<SectionKey, Set<string>>
@@ -545,6 +724,26 @@ export default function Sidebar({
 	const onFoldAllUntracked = useCallback(() => foldAllFolders("untracked"), [foldAllFolders]);
 
 	const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
+
+	const handleDiscardAll = useCallback(async () => {
+		if (totalChanges === 0) return;
+		const confirmed = await window.gitagen.app.confirm({
+			title: "Discard All Changes",
+			message: `Discard all ${totalChanges} change${totalChanges > 1 ? "s" : ""}?`,
+			detail: "This will restore all files to their last committed state and delete untracked files. This action cannot be undone.",
+			confirmLabel: "Discard All",
+			cancelLabel: "Cancel",
+		});
+		if (!confirmed) return;
+		try {
+			await window.gitagen.repo.discardAll(projectId);
+			onRefresh();
+			toast.success("All changes discarded");
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Discard failed", msg);
+		}
+	}, [projectId, totalChanges, onRefresh, toast]);
 
 	return (
 		<aside className="flex h-full min-w-0 flex-1 flex-col bg-(--bg-sidebar)">
@@ -622,7 +821,7 @@ export default function Sidebar({
 						<GitBranch size={12} className="shrink-0 text-(--text-muted)" />
 						<h2 className="section-title truncate">Changes</h2>
 						{totalChanges > 0 && (
-							<span className="ml-auto shrink-0 rounded-full bg-(--bg-tertiary) px-1.5 py-0.5 font-mono text-[10px] font-medium text-(--text-muted)">
+							<span className="ml-1 shrink-0 rounded-full bg-(--bg-tertiary) px-1.5 py-0.5 font-mono text-[10px] font-medium text-(--text-muted)">
 								{totalChanges}
 							</span>
 						)}
@@ -634,6 +833,24 @@ export default function Sidebar({
 						{status.repoPath}
 					</p>
 				</div>
+				{totalChanges > 0 && (
+					<DropdownMenu>
+						<DropdownMenuTrigger
+							asChild
+							className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+						>
+							<button type="button" title="More actions">
+								<MoreHorizontal size={16} />
+							</button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onClick={handleDiscardAll} variant="destructive">
+								<RotateCcw size={14} strokeWidth={2} />
+								Discard All Changes
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				)}
 			</div>
 			<div className="min-w-0 flex-1 overflow-y-auto py-3">
 				<FileTreeSection

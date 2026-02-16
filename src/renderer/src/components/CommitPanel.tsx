@@ -58,13 +58,11 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 	};
 
 	return (
-		<div className="shrink-0 border-t border-(--border-primary) bg-(--bg-secondary) px-4 py-4">
-			<div className="mb-3 flex items-center justify-between gap-2">
-				<div className="flex items-center gap-2">
-					<GitCommit size={16} className="text-(--text-primary)" />
-					<span className="font-mono text-xs font-semibold uppercase tracking-wider text-(--text-secondary)">
-						Commit
-					</span>
+		<div className="shrink-0 border-t border-(--border-primary) bg-(--bg-secondary) px-4 py-3">
+			<div className="mb-2 flex items-center justify-between gap-2">
+				<div className="flex items-center gap-1.5">
+					<GitCommit size={14} className="text-(--text-muted)" />
+					<span className="section-title">Commit</span>
 				</div>
 				<button
 					type="button"
@@ -74,7 +72,7 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 					title="Generate commit message with AI"
 				>
 					<Sparkles
-						size={14}
+						size={13}
 						className={generating ? "animate-pulse text-(--accent)" : ""}
 					/>
 				</button>
@@ -85,12 +83,12 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 				onKeyDown={handleKeyDown}
 				placeholder="Enter commit message... (⌘+Enter to commit)"
 				rows={3}
-				className="input commit-message-text mb-3 resize-none rounded-md"
+				className="input commit-message-text mb-2.5 resize-none rounded-md"
 				disabled={disabled}
 				style={{ fontSize: "var(--commit-message-font-size)" }}
 			/>
 			<div className="flex items-center justify-between gap-3">
-				<label className="flex cursor-pointer items-center gap-2 text-xs text-(--text-secondary) hover:text-(--text-primary) transition-colors">
+				<label className="flex cursor-pointer items-center gap-2 text-xs text-(--text-secondary) transition-colors hover:text-(--text-primary)">
 					<input
 						type="checkbox"
 						checked={amend}
@@ -98,9 +96,9 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 					/>
 					Amend previous
 				</label>
-				<div className="flex items-center gap-3">
+				<div className="flex items-center gap-2">
 					{error && (
-						<span className="max-w-[200px] truncate text-xs text-(--danger)">
+						<span className="max-w-[180px] truncate text-[11px] text-(--danger)">
 							{error}
 						</span>
 					)}
@@ -108,9 +106,9 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 						type="button"
 						onClick={handleCommit}
 						disabled={disabled || loading || !message.trim()}
-						className="btn btn-primary rounded-full px-4"
+						className="btn btn-primary"
 					>
-						<Send size={14} />
+						<Send size={13} />
 						{loading ? "Committing..." : "Commit"}
 					</button>
 				</div>

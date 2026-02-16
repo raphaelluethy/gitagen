@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Search, TriangleAlert } from "lucide-react";
 import { matchLabelWithKeywords, type FuzzyMatch } from "../lib/fuzzyMatch";
+import { Dialog, DialogContent } from "./ui/dialog";
 import type {
 	CommandConfirm,
 	CommandInputSpec,
@@ -46,6 +47,11 @@ type PaletteStep = BaseStep | ConfirmStep;
 type RootMatch = {
 	command: CommandItem;
 	match: FuzzyMatch;
+};
+
+type GroupedRootMatch = {
+	entry: RootMatch;
+	uiIndex: number;
 };
 
 type SubMatch = {
@@ -220,16 +226,6 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 	}, [step]);
 
 	useEffect(() => {
-		if (step.kind !== "root") return;
-		setStep((prev) => {
-			if (prev.kind !== "root") return prev;
-			const nextActive = clampIndex(prev.activeIndex, rootMatches.length);
-			if (nextActive === prev.activeIndex) return prev;
-			return { ...prev, activeIndex: nextActive };
-		});
-	}, [rootMatches.length, step.kind]);
-
-	useEffect(() => {
 		if (step.kind !== "drilldown") return;
 		setStep((prev) => {
 			if (prev.kind !== "drilldown") return prev;
@@ -239,7 +235,46 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 		});
 	}, [drillMatches.length, step.kind]);
 
-	const activeRoot = step.kind === "root" ? (rootMatches[step.activeIndex] ?? null) : null;
+	const groupedRoot = useMemo(() => {
+		if (step.kind !== "root") return [];
+		const groups = new Map<string, RootMatch[]>();
+		for (const entry of rootMatches) {
+			const category = entry.command.category;
+			const list = groups.get(category);
+			if (list) list.push(entry);
+			else groups.set(category, [entry]);
+		}
+		const result: Array<[string, GroupedRootMatch[]]> = [];
+		let uiIndex = 0;
+		for (const [category, entries] of groups.entries()) {
+			result.push([
+				category,
+				entries.map((entry) => {
+					const next: GroupedRootMatch = { entry, uiIndex };
+					uiIndex += 1;
+					return next;
+				}),
+			]);
+		}
+		return result;
+	}, [rootMatches, step.kind]);
+
+	const rootVisibleMatches: RootMatch[] = useMemo(() => {
+		if (step.kind !== "root") return [];
+		return groupedRoot.flatMap(([, entries]) => entries.map(({ entry }) => entry));
+	}, [groupedRoot, step.kind]);
+
+	useEffect(() => {
+		if (step.kind !== "root") return;
+		setStep((prev) => {
+			if (prev.kind !== "root") return prev;
+			const nextActive = clampIndex(prev.activeIndex, rootVisibleMatches.length);
+			if (nextActive === prev.activeIndex) return prev;
+			return { ...prev, activeIndex: nextActive };
+		});
+	}, [rootVisibleMatches.length, step.kind]);
+
+	const activeRoot = step.kind === "root" ? (rootVisibleMatches[step.activeIndex] ?? null) : null;
 	const activeSub = step.kind === "drilldown" ? (drillMatches[step.activeIndex] ?? null) : null;
 
 	const activeDescription =
@@ -251,17 +286,19 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 					? step.command.description
 					: step.confirm.detail;
 
-	const groupedRoot = useMemo(() => {
-		if (step.kind !== "root") return [];
-		const groups = new Map<string, RootMatch[]>();
-		for (const match of rootMatches) {
-			const category = match.command.category;
-			const list = groups.get(category);
-			if (list) list.push(match);
-			else groups.set(category, [match]);
-		}
-		return Array.from(groups.entries());
-	}, [rootMatches, step.kind]);
+	const activeListIndex =
+		step.kind === "root" || step.kind === "drilldown" ? step.activeIndex : -1;
+
+	useEffect(() => {
+		if (step.kind !== "root" && step.kind !== "drilldown") return;
+		const container = panelRef.current?.querySelector<HTMLElement>(".command-palette-list");
+		if (!container) return;
+		const activeItem = container.querySelector<HTMLElement>(
+			'.command-palette-item[data-active="true"]'
+		);
+		if (!activeItem) return;
+		activeItem.scrollIntoView({ block: "nearest" });
+	}, [step.kind, activeListIndex]);
 
 	const closePalette = () => {
 		onClose();
@@ -382,9 +419,9 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 		closePalette();
 	};
 
-	const handleListKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
+	const handleListKeyDown = async (event: React.KeyboardEvent<HTMLElement>) => {
 		if (step.kind !== "root" && step.kind !== "drilldown") return;
-		const list = step.kind === "root" ? rootMatches : drillMatches;
+		const list = step.kind === "root" ? rootVisibleMatches : drillMatches;
 		if (event.key === "Escape") {
 			event.preventDefault();
 			handleBack();
@@ -409,7 +446,7 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 			const delta = event.key === "ArrowDown" ? 1 : -1;
 			const candidates =
 				step.kind === "root"
-					? rootMatches.map((entry) => ({ disabled: entry.command.disabled }))
+					? rootVisibleMatches.map((entry) => ({ disabled: entry.command.disabled }))
 					: drillMatches.map((entry) => ({ disabled: entry.item.disabled }));
 			const next = nextEnabledIndex(candidates, step.activeIndex, delta);
 			if (next < 0) return;
@@ -446,20 +483,51 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 		}
 	};
 
-	if (!open) return null;
 	const isListStep = step.kind === "root" || step.kind === "drilldown";
 	const isInputStep = step.kind === "input";
 	const isConfirmStep = step.kind === "confirm";
+	const listResultCount =
+		step.kind === "root"
+			? rootVisibleMatches.length
+			: step.kind === "drilldown"
+				? drillMatches.length
+				: 0;
 
 	return (
-		<div className="command-palette-backdrop" onClick={closePalette} role="presentation">
-			<div
-				className="command-palette-panel"
+		<Dialog
+			open={open}
+			onOpenChange={(nextOpen) => {
+				if (!nextOpen) closePalette();
+			}}
+		>
+			<DialogContent
+				unstyled
+				showCloseButton={false}
+				overlayClassName="command-palette-backdrop"
+				className="command-palette-content command-palette-panel"
 				data-step={step.kind}
-				role="dialog"
-				aria-modal="true"
-				onClick={(event) => event.stopPropagation()}
 				ref={panelRef}
+				onOpenAutoFocus={(event) => {
+					event.preventDefault();
+					requestAnimationFrame(() => {
+						searchInputRef.current?.focus();
+						searchInputRef.current?.select();
+					});
+				}}
+				onEscapeKeyDown={(event) => {
+					event.preventDefault();
+					handleBack();
+				}}
+				onKeyDownCapture={(event) => {
+					const target = event.target as HTMLElement | null;
+					if (
+						target instanceof HTMLInputElement ||
+						target instanceof HTMLTextAreaElement
+					) {
+						return;
+					}
+					void handleListKeyDown(event);
+				}}
 			>
 				{(step.kind === "root" || step.kind === "drilldown") && (
 					<>
@@ -497,10 +565,15 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 								}
 								className="command-palette-search"
 							/>
+							<span className="command-palette-meta">
+								{step.kind === "root"
+									? `${listResultCount} commands`
+									: `${listResultCount} items`}
+							</span>
 						</div>
 						<div className="command-palette-results">
 							<div className="command-palette-list" role="listbox">
-								{step.kind === "root" && rootMatches.length === 0 && (
+								{step.kind === "root" && rootVisibleMatches.length === 0 && (
 									<div className="command-palette-empty">
 										No matching commands
 									</div>
@@ -511,14 +584,11 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 											<p className="section-title command-palette-group-title">
 												{category}
 											</p>
-											{matches.map((entry) => {
-												const index = rootMatches.findIndex(
-													(match) => match.command.id === entry.command.id
-												);
-												const isActive = index === step.activeIndex;
+											{matches.map(({ entry, uiIndex }) => {
+												const isActive = uiIndex === step.activeIndex;
 												return (
 													<button
-														key={entry.command.id}
+														key={`${entry.command.id}-${uiIndex}`}
 														type="button"
 														className="command-palette-item"
 														data-active={isActive}
@@ -527,13 +597,13 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 																? "true"
 																: "false"
 														}
-														onMouseEnter={() => {
+														onMouseMove={() => {
 															setStep((prev) => {
 																if (prev.kind !== "root")
 																	return prev;
 																return {
 																	...prev,
-																	activeIndex: index,
+																	activeIndex: uiIndex,
 																};
 															});
 														}}
@@ -582,12 +652,12 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 								{step.kind === "drilldown" &&
 									drillMatches.map((entry, index) => (
 										<button
-											key={entry.item.id}
+											key={`${entry.item.id}-${index}`}
 											type="button"
 											className="command-palette-item"
 											data-active={index === step.activeIndex}
 											data-disabled={entry.item.disabled ? "true" : "false"}
-											onMouseEnter={() => {
+											onMouseMove={() => {
 												setStep((prev) => {
 													if (prev.kind !== "drilldown") return prev;
 													return { ...prev, activeIndex: index };
@@ -772,7 +842,7 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 						</>
 					)}
 				</div>
-			</div>
-		</div>
+			</DialogContent>
+		</Dialog>
 	);
 }

@@ -53,6 +53,7 @@ export interface AppSettings {
 	gpuAcceleration: boolean;
 	devMode: boolean;
 	autoExpandSingleFolder: boolean;
+	showWorktreePanel: boolean;
 }
 
 export interface Project {
@@ -177,6 +178,17 @@ export interface RemoteInfo {
 	name: string;
 	url: string;
 	pushUrl?: string;
+}
+
+/** Bundled response from repo:openProject - status, branches, remotes, cachedLog, prefs in one IPC call */
+export interface ProjectOpenData {
+	status: RepoStatus | null;
+	branches: BranchInfo[];
+	remotes: RemoteInfo[];
+	cachedLog: CommitInfo[] | null;
+	/** Cached unpushed OIDs for annotating cachedLog with pushed status */
+	cachedUnpushedOids: string[] | null;
+	prefs: ProjectPrefs | null;
 }
 
 /** Summary returned from fetch for toast display */

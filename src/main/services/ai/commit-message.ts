@@ -8,23 +8,23 @@ import type { CommitStyle } from "../../../shared/types.js";
 
 const AI_COMMIT_CHUNK = "ai:commitChunk";
 
-function getRepoPath(projectId: string): string | null {
-	const project = getProject(projectId);
+async function getRepoPath(projectId: string): Promise<string | null> {
+	const project = await getProject(projectId);
 	if (!project) return null;
-	const prefs = getProjectPrefs(projectId);
+	const prefs = await getProjectPrefs(projectId);
 	const activePath = prefs?.active_worktree_path;
 	return activePath && activePath.trim() !== "" ? activePath : project.path;
 }
 
-function createGit(cwd: string) {
-	const settings = getAppSettings();
+async function createGit(cwd: string) {
+	const settings = await getAppSettings();
 	const opts: { baseDir: string; binary?: string } = { baseDir: cwd };
 	if (settings.gitBinaryPath) opts.binary = settings.gitBinaryPath;
 	return simpleGit(opts);
 }
 
 async function getDiff(cwd: string): Promise<string> {
-	const git = createGit(cwd);
+	const git = await createGit(cwd);
 	const staged = (await git.diff(["--cached"])) || "";
 	if (staged.trim()) return staged;
 	return (await git.diff()) || "";
@@ -34,7 +34,7 @@ export async function generateCommitMessage(
 	projectId: string,
 	webContents: WebContents
 ): Promise<string> {
-	const repoPath = getRepoPath(projectId);
+	const repoPath = await getRepoPath(projectId);
 	if (!repoPath) throw new Error("Project not found");
 
 	const settings = await getAppSettingsWithKeys();

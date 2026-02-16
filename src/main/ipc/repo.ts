@@ -14,6 +14,8 @@ import {
 	invalidateProjectCache,
 	getLogCache,
 	setLogCache,
+	updateProjectLastOpened,
+	type ProjectPrefsRow,
 } from "../services/cache/queries.js";
 import {
 	listWorktrees as listWorktreesManager,
@@ -25,9 +27,14 @@ import { emitConflictDetected, emitRepoError, emitRepoUpdated } from "./events.j
 import type {
 	AddWorktreeOptions,
 	AddWorktreeResult,
+	BranchInfo,
+	CommitInfo,
 	ConfirmDialogOptions,
 	ConflictState,
 	FileChange,
+	ProjectOpenData,
+	ProjectPrefs,
+	RemoteInfo,
 	RepoStatus,
 	TreeNode,
 } from "../../shared/types.js";
@@ -63,16 +70,16 @@ function migrateRepoStatus(raw: unknown): RepoStatus | null {
 	};
 }
 
-function getRepoPath(projectId: string): string | null {
-	const project = getProject(projectId);
+async function getRepoPath(projectId: string): Promise<string | null> {
+	const project = await getProject(projectId);
 	if (!project) return null;
-	const prefs = getProjectPrefs(projectId);
+	const prefs = await getProjectPrefs(projectId);
 	const activePath = prefs?.active_worktree_path;
 	return activePath && activePath.trim() !== "" ? activePath : project.path;
 }
 
-function getGitProvider(): GitProvider {
-	const settings = getAppSettings();
+async function getGitProvider(): Promise<GitProvider> {
+	const settings = await getAppSettings();
 	return createGitProvider(settings);
 }
 
@@ -107,36 +114,36 @@ function parseJsonSafe<T>(value: string | null): T | null {
 	}
 }
 
-function setRepoCacheSafe(
+async function setRepoCacheSafe(
 	projectId: string,
 	fingerprint: string,
 	includeIgnored: boolean,
 	treeData: string | null,
 	statusData: string | null
-): void {
+): Promise<void> {
 	try {
-		setRepoCache(projectId, fingerprint, includeIgnored, treeData, statusData);
+		await setRepoCache(projectId, fingerprint, includeIgnored, treeData, statusData);
 	} catch {
 		// Cache writes are best-effort and must never block live git responses.
 	}
 }
 
-function setPatchCacheSafe(
+async function setPatchCacheSafe(
 	projectId: string,
 	filePath: string,
 	scope: string,
 	fingerprint: string,
 	patchText: string
-): void {
+): Promise<void> {
 	try {
-		setPatchCache(projectId, filePath, scope, fingerprint, patchText);
+		await setPatchCache(projectId, filePath, scope, fingerprint, patchText);
 	} catch {
 		// Cache writes are best-effort and must never block live git responses.
 	}
 }
 
-function invalidateAndEmit(projectId: string): void {
-	invalidateProjectCache(projectId);
+async function invalidateAndEmit(projectId: string): Promise<void> {
+	await invalidateProjectCache(projectId);
 	emitRepoUpdated(projectId);
 }
 
@@ -159,12 +166,12 @@ async function runMutation<T>(
 	action: (git: GitProvider, cwd: string) => Promise<T>,
 	opts?: { emitConflicts?: boolean }
 ): Promise<T> {
-	const cwd = getRepoPath(projectId);
+	const cwd = await getRepoPath(projectId);
 	if (!cwd) throw new Error("Project not found");
-	const git = getGitProvider();
+	const git = await getGitProvider();
 	try {
 		const result = await action(git, cwd);
-		invalidateAndEmit(projectId);
+		await invalidateAndEmit(projectId);
 		if (opts?.emitConflicts) {
 			await emitConflictsIfAny(projectId, git, cwd);
 		}
@@ -175,13 +182,106 @@ async function runMutation<T>(
 	}
 }
 
+function prefsRowToPrefs(row: ProjectPrefsRow): ProjectPrefs {
+	return {
+		includeIgnored: Boolean(row.include_ignored),
+		changedOnly: Boolean(row.changed_only),
+		expandedDirs: JSON.parse(row.expanded_dirs || "[]"),
+		selectedFilePath: row.selected_file_path,
+		sidebarScrollTop: row.sidebar_scroll_top,
+		activeWorktreePath: row.active_worktree_path ?? null,
+	};
+}
+
 export function registerRepoHandlers(): void {
+	ipcMain.handle(
+		"repo:openProject",
+		async (_, projectId: string): Promise<ProjectOpenData | null> => {
+			const project = await getProject(projectId);
+			if (!project) return null;
+
+			const now = Math.floor(Date.now() / 1000);
+			await updateProjectLastOpened(projectId, now);
+
+			const prefsRow = await getProjectPrefs(projectId);
+			const prefs: ProjectPrefs | null = prefsRow ? prefsRowToPrefs(prefsRow) : null;
+
+			const cachedLogRow = await getLogCache(projectId);
+			let cachedLog: CommitInfo[] | null = null;
+			let cachedUnpushedOids: string[] | null = null;
+			if (cachedLogRow) {
+				try {
+					cachedLog = JSON.parse(cachedLogRow.commits_json) as CommitInfo[];
+					if (cachedLogRow.unpushed_oids_json) {
+						cachedUnpushedOids = JSON.parse(
+							cachedLogRow.unpushed_oids_json
+						) as string[];
+					}
+				} catch {
+					// ignore parse errors
+				}
+			}
+
+			const cwd = await getRepoPath(projectId);
+			if (!cwd) {
+				return {
+					status: null,
+					branches: [],
+					remotes: [],
+					cachedLog,
+					cachedUnpushedOids,
+					prefs,
+				};
+			}
+
+			const git = await getGitProvider();
+			const [status, branches, remotes] = await Promise.all([
+				(async () => {
+					try {
+						const baseFingerprint = await getBaseFingerprintKey(git, cwd);
+						if (baseFingerprint) {
+							const cached = await getRepoCache(projectId, baseFingerprint, false);
+							const raw = parseJsonSafe<unknown>(cached?.status_data ?? null);
+							const cachedStatus = raw ? migrateRepoStatus(raw) : null;
+							if (cachedStatus) return cachedStatus;
+						}
+						const s = await git.getStatus(cwd);
+						if (baseFingerprint && s) {
+							setRepoCacheSafe(
+								projectId,
+								baseFingerprint,
+								false,
+								null,
+								JSON.stringify(s)
+							);
+						}
+						return s;
+					} catch {
+						emitRepoError(projectId, new Error("Failed to get status"));
+						return null;
+					}
+				})(),
+				git.listBranches(cwd).catch(() => [] as BranchInfo[]),
+				git.listRemotes(cwd).catch(() => [] as RemoteInfo[]),
+			]);
+
+			return {
+				status,
+				branches,
+				remotes,
+				cachedLog,
+				cachedUnpushedOids,
+				prefs,
+			};
+		}
+	);
+
 	ipcMain.handle(
 		"repo:getTree",
 		async (_, projectId: string, includeIgnored?: boolean, changedOnly?: boolean) => {
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) return [];
-			const git = getGitProvider();
+			const git = await getGitProvider();
 			const includeIgnoredFlag = Boolean(includeIgnored);
 			const changedOnlyFlag = Boolean(changedOnly);
 			try {
@@ -190,7 +290,11 @@ export function registerRepoHandlers(): void {
 					? `${baseFingerprint}|tree:${changedOnlyFlag ? "1" : "0"}`
 					: null;
 				if (treeFingerprint) {
-					const cached = getRepoCache(projectId, treeFingerprint, includeIgnoredFlag);
+					const cached = await getRepoCache(
+						projectId,
+						treeFingerprint,
+						includeIgnoredFlag
+					);
 					const cachedTree = parseJsonSafe<TreeNode[]>(cached?.tree_data ?? null);
 					if (cachedTree) return cachedTree;
 				}
@@ -218,13 +322,13 @@ export function registerRepoHandlers(): void {
 	);
 
 	ipcMain.handle("repo:getStatus", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return null;
-		const git = getGitProvider();
+		const git = await getGitProvider();
 		try {
 			const baseFingerprint = await getBaseFingerprintKey(git, cwd);
 			if (baseFingerprint) {
-				const cached = getRepoCache(projectId, baseFingerprint, false);
+				const cached = await getRepoCache(projectId, baseFingerprint, false);
 				const raw = parseJsonSafe<unknown>(cached?.status_data ?? null);
 				const cachedStatus = raw ? migrateRepoStatus(raw) : null;
 				if (cachedStatus) return cachedStatus;
@@ -249,14 +353,19 @@ export function registerRepoHandlers(): void {
 			filePath: string,
 			scope: "staged" | "unstaged" | "untracked"
 		) => {
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) return null;
-			const git = getGitProvider();
+			const git = await getGitProvider();
 			try {
 				const baseFingerprint = await getBaseFingerprintKey(git, cwd);
 				const patchFingerprint = baseFingerprint ? `${baseFingerprint}|patch` : null;
 				if (patchFingerprint) {
-					const cached = getPatchCache(projectId, filePath, scope, patchFingerprint);
+					const cached = await getPatchCache(
+						projectId,
+						filePath,
+						scope,
+						patchFingerprint
+					);
 					if (cached != null) return cached;
 				}
 
@@ -272,8 +381,43 @@ export function registerRepoHandlers(): void {
 		}
 	);
 
+	ipcMain.handle(
+		"repo:getAllDiffs",
+		async (_, projectId: string): Promise<{ path: string; scope: string; diff: string }[]> => {
+			const cwd = await getRepoPath(projectId);
+			if (!cwd) return [];
+			const git = await getGitProvider();
+			try {
+				const status = await git.getStatus(cwd);
+				if (!status) return [];
+
+				const entries: { path: string; scope: "staged" | "unstaged" | "untracked" }[] = [];
+				for (const f of status.staged) entries.push({ path: f.path, scope: "staged" });
+				for (const f of status.unstaged) entries.push({ path: f.path, scope: "unstaged" });
+				for (const f of status.untracked)
+					entries.push({ path: f.path, scope: "untracked" });
+
+				const results: { path: string; scope: string; diff: string }[] = [];
+				for (const entry of entries) {
+					const patch = await git.getPatch({
+						cwd,
+						filePath: entry.path,
+						scope: entry.scope,
+					});
+					if (patch != null) {
+						results.push({ path: entry.path, scope: entry.scope, diff: patch });
+					}
+				}
+				return results;
+			} catch (error) {
+				emitRepoError(projectId, error);
+				return [];
+			}
+		}
+	);
+
 	ipcMain.handle("repo:refresh", async (_, projectId: string) => {
-		invalidateAndEmit(projectId);
+		await invalidateAndEmit(projectId);
 	});
 
 	// Staging
@@ -304,7 +448,7 @@ export function registerRepoHandlers(): void {
 	ipcMain.handle(
 		"repo:openInEditor",
 		async (_, projectId: string, filePath: string): Promise<void> => {
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) throw new Error("Project not found");
 			const fullPath = join(cwd, filePath);
 			await shell.openPath(fullPath);
@@ -345,16 +489,16 @@ export function registerRepoHandlers(): void {
 			message: string,
 			opts?: { amend?: boolean; sign?: boolean }
 		) => {
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) throw new Error("Project not found");
-			const git = getGitProvider();
+			const git = await getGitProvider();
 			try {
 				const result = await git.commit(cwd, {
 					message,
 					amend: opts?.amend,
-					sign: opts?.sign ?? getAppSettings().signing.enabled,
+					sign: opts?.sign ?? (await getAppSettings()).signing.enabled,
 				});
-				invalidateAndEmit(projectId);
+				await invalidateAndEmit(projectId);
 				await emitConflictsIfAny(projectId, git, cwd);
 				return result;
 			} catch (error) {
@@ -369,10 +513,10 @@ export function registerRepoHandlers(): void {
 	});
 
 	ipcMain.handle("repo:getUnpushedOids", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return null;
 		try {
-			return await getGitProvider().getUnpushedOids(cwd);
+			return (await getGitProvider()).getUnpushedOids(cwd);
 		} catch (error) {
 			emitRepoError(projectId, error);
 			return null;
@@ -390,15 +534,23 @@ export function registerRepoHandlers(): void {
 			projectId: string,
 			opts?: { limit?: number; branch?: string; offset?: number }
 		) => {
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) return [];
 			try {
-				const commits = await getGitProvider().getLog(cwd, opts);
+				const commits = await (await getGitProvider()).getLog(cwd, opts);
 				// Cache the result for instant loading on next open (only for default queries)
 				if (!opts?.branch && !opts?.offset) {
 					try {
 						const headOid = commits.length > 0 ? commits[0]!.oid : null;
-						setLogCache(projectId, JSON.stringify(commits), headOid);
+						const unpushed = await (await getGitProvider()).getUnpushedOids(cwd);
+						const unpushedJson =
+							unpushed && unpushed.length > 0 ? JSON.stringify(unpushed) : null;
+						await setLogCache(
+							projectId,
+							JSON.stringify(commits),
+							headOid,
+							unpushedJson
+						);
 					} catch {
 						// Cache write failure must never discard actual git data
 					}
@@ -413,7 +565,7 @@ export function registerRepoHandlers(): void {
 
 	ipcMain.handle("repo:getCachedLog", async (_, projectId: string) => {
 		try {
-			const cached = getLogCache(projectId);
+			const cached = await getLogCache(projectId);
 			if (!cached) return null;
 			return JSON.parse(cached.commits_json);
 		} catch {
@@ -422,10 +574,10 @@ export function registerRepoHandlers(): void {
 	});
 
 	ipcMain.handle("repo:getCommitDetail", async (_, projectId: string, oid: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return null;
 		try {
-			return await getGitProvider().getCommitDetail(cwd, oid);
+			return (await getGitProvider()).getCommitDetail(cwd, oid);
 		} catch (error) {
 			emitRepoError(projectId, error);
 			return null;
@@ -434,10 +586,10 @@ export function registerRepoHandlers(): void {
 
 	// Branches
 	ipcMain.handle("repo:listBranches", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];
 		try {
-			return await getGitProvider().listBranches(cwd);
+			return (await getGitProvider()).listBranches(cwd);
 		} catch (error) {
 			emitRepoError(projectId, error);
 			return [];
@@ -527,10 +679,10 @@ export function registerRepoHandlers(): void {
 	);
 
 	ipcMain.handle("repo:listRemotes", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];
 		try {
-			return await getGitProvider().listRemotes(cwd);
+			return (await getGitProvider()).listRemotes(cwd);
 		} catch (error) {
 			emitRepoError(projectId, error);
 			return [];
@@ -566,10 +718,10 @@ export function registerRepoHandlers(): void {
 	});
 
 	ipcMain.handle("repo:stashList", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];
 		try {
-			return await getGitProvider().stashList(cwd);
+			return (await getGitProvider()).stashList(cwd);
 		} catch (error) {
 			emitRepoError(projectId, error);
 			return [];
@@ -582,10 +734,10 @@ export function registerRepoHandlers(): void {
 
 	// Tags
 	ipcMain.handle("repo:listTags", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];
 		try {
-			return await getGitProvider().listTags(cwd);
+			return (await getGitProvider()).listTags(cwd);
 		} catch (error) {
 			emitRepoError(projectId, error);
 			return [];
@@ -650,10 +802,10 @@ export function registerRepoHandlers(): void {
 
 	// Conflicts
 	ipcMain.handle("repo:getConflictFiles", async (_, projectId: string) => {
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];
 		try {
-			const conflictFiles = await getGitProvider().getConflictFiles(cwd);
+			const conflictFiles = await (await getGitProvider()).getConflictFiles(cwd);
 			if (conflictFiles.length > 0) {
 				emitConflictDetected(projectId, {
 					type: "merge",
@@ -676,7 +828,7 @@ export function registerRepoHandlers(): void {
 	// Config
 	ipcMain.handle("repo:getEffectiveConfig", async (_, projectId: string) => {
 		const { getEffectiveConfig } = await import("../services/settings/git-config.js");
-		const cwd = getRepoPath(projectId);
+		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];
 		try {
 			return getEffectiveConfig(cwd);
@@ -690,11 +842,11 @@ export function registerRepoHandlers(): void {
 		"repo:setLocalConfig",
 		async (_, projectId: string, key: string, value: string): Promise<void> => {
 			const { setLocalConfig } = await import("../services/settings/git-config.js");
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) return;
 			try {
 				setLocalConfig(cwd, key, value);
-				invalidateAndEmit(projectId);
+				await invalidateAndEmit(projectId);
 			} catch (error) {
 				emitRepoError(projectId, error);
 				throw error;
@@ -706,7 +858,7 @@ export function registerRepoHandlers(): void {
 		"repo:testSigning",
 		async (_, projectId: string, key?: string): Promise<{ ok: boolean; message: string }> => {
 			const { testSigningConfig } = await import("../services/settings/git-config.js");
-			const cwd = getRepoPath(projectId);
+			const cwd = await getRepoPath(projectId);
 			if (!cwd) {
 				return { ok: false, message: "Project not found." };
 			}
@@ -724,10 +876,10 @@ export function registerRepoHandlers(): void {
 
 	// Worktrees
 	ipcMain.handle("repo:listWorktrees", async (_, projectId: string) => {
-		const project = getProject(projectId);
+		const project = await getProject(projectId);
 		if (!project) return [];
 		const cwd = project.path;
-		const provider = getGitProvider();
+		const provider = await getGitProvider();
 		try {
 			return await listWorktreesManager(cwd, provider);
 		} catch (error) {
@@ -744,10 +896,10 @@ export function registerRepoHandlers(): void {
 			branch: string,
 			options?: AddWorktreeOptions
 		): Promise<AddWorktreeResult> => {
-			const project = getProject(projectId);
+			const project = await getProject(projectId);
 			if (!project) throw new Error("Project not found");
 			try {
-				const sourceWorktreePath = getRepoPath(projectId) ?? project.path;
+				const sourceWorktreePath = (await getRepoPath(projectId)) ?? project.path;
 				const result = await addWorktreeManager(
 					project.path,
 					project.name,
@@ -757,7 +909,7 @@ export function registerRepoHandlers(): void {
 						copyGitIgnores: options?.copyGitIgnores,
 						sourceWorktreePath,
 					},
-					getGitProvider()
+					await getGitProvider()
 				);
 				emitRepoUpdated(projectId);
 				return {
@@ -775,10 +927,10 @@ export function registerRepoHandlers(): void {
 	ipcMain.handle(
 		"repo:removeWorktree",
 		async (_, projectId: string, worktreePath: string, force?: boolean) => {
-			const project = getProject(projectId);
+			const project = await getProject(projectId);
 			if (!project) return;
 			try {
-				const provider = getGitProvider();
+				const provider = await getGitProvider();
 				await removeWorktreeManager(project.path, worktreePath, provider, force);
 				emitRepoUpdated(projectId);
 			} catch (error) {
@@ -789,10 +941,10 @@ export function registerRepoHandlers(): void {
 	);
 
 	ipcMain.handle("repo:pruneWorktrees", async (_, projectId: string) => {
-		const project = getProject(projectId);
+		const project = await getProject(projectId);
 		if (!project) return;
 		try {
-			await pruneWorktreesManager(project.path, getGitProvider());
+			await pruneWorktreesManager(project.path, await getGitProvider());
 			emitRepoUpdated(projectId);
 		} catch (error) {
 			emitRepoError(projectId, error);

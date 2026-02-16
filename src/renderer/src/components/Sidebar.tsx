@@ -18,6 +18,7 @@ import type { Project } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 import { useSettings } from "../settings/provider";
 import { useToast } from "../toast/provider";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 interface SidebarProps {
 	projectId: string;
@@ -411,6 +412,7 @@ function FileTreeSection({
 									type="button"
 									onClick={() => onViewAll(viewAllSection)}
 									data-tooltip="View all"
+									data-tooltip-position="bottom"
 									className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 								>
 									<List size={16} strokeWidth={2} />
@@ -420,6 +422,7 @@ function FileTreeSection({
 								type="button"
 								onClick={handleStageAll}
 								data-tooltip={section === "staged" ? "Unstage all" : "Stage all"}
+								data-tooltip-position="bottom"
 								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 							>
 								{section === "staged" ? (
@@ -432,6 +435,7 @@ function FileTreeSection({
 								type="button"
 								onClick={expandAll}
 								data-tooltip="Expand all folders"
+								data-tooltip-position="bottom"
 								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 							>
 								<FolderOpen size={16} strokeWidth={2} />
@@ -440,6 +444,7 @@ function FileTreeSection({
 								type="button"
 								onClick={onFoldAll}
 								data-tooltip="Fold all folders"
+								data-tooltip-position="bottom"
 								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 							>
 								<Folder size={16} strokeWidth={2} />
@@ -533,62 +538,60 @@ export default function Sidebar({
 		<aside className="flex h-full min-w-0 flex-1 flex-col bg-(--bg-sidebar)">
 			{projects.length > 0 && activeProject && onProjectChange && (
 				<div className="relative shrink-0 border-b border-(--border-secondary) px-3 py-2">
-					<button
-						type="button"
-						onClick={() => setProjectSwitcherOpen(!projectSwitcherOpen)}
-						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-(--bg-hover)"
-					>
-						<span className="truncate font-medium text-(--text-primary)">
-							{activeProject.name}
-						</span>
-						<ChevronDown
-							size={14}
-							className={`ml-auto shrink-0 text-(--text-muted) transition-transform ${projectSwitcherOpen ? "rotate-180" : ""}`}
-						/>
-					</button>
-					{projectSwitcherOpen && (
-						<>
-							<div
-								className="fixed inset-0 z-40"
-								onClick={() => setProjectSwitcherOpen(false)}
-							/>
-							<div className="dropdown absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto animate-scale-in">
-								{projects.map((p) => (
-									<button
-										key={p.id}
-										type="button"
-										onClick={() => {
-											onProjectChange(p);
-											setProjectSwitcherOpen(false);
-										}}
-										className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm outline-none transition-colors hover:bg-(--bg-hover) ${
-											activeProject.id === p.id ? "bg-(--bg-active)" : ""
-										}`}
-									>
-										<span className="truncate font-medium text-(--text-primary)">
-											{p.name}
-										</span>
-										<span className="truncate font-mono text-[10px] text-(--text-muted)">
-											{p.path}
-										</span>
-									</button>
-								))}
-								{onAddProject && (
-									<button
-										type="button"
-										onClick={() => {
-											onAddProject();
-											setProjectSwitcherOpen(false);
-										}}
-										className="flex w-full items-center gap-2 border-t border-(--border-secondary) px-3 py-2.5 text-sm text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
-									>
-										<Plus size={14} />
-										Add repository
-									</button>
-								)}
-							</div>
-						</>
-					)}
+					<Popover open={projectSwitcherOpen} onOpenChange={setProjectSwitcherOpen}>
+						<PopoverTrigger asChild>
+							<button
+								type="button"
+								className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-(--bg-hover)"
+							>
+								<span className="truncate font-medium text-(--text-primary)">
+									{activeProject.name}
+								</span>
+								<ChevronDown
+									size={14}
+									className={`ml-auto shrink-0 text-(--text-muted) transition-transform ${projectSwitcherOpen ? "rotate-180" : ""}`}
+								/>
+							</button>
+						</PopoverTrigger>
+						<PopoverContent
+							align="start"
+							className="max-h-64 w-[var(--radix-popover-trigger-width)] overflow-auto"
+						>
+							{projects.map((p) => (
+								<button
+									key={p.id}
+									type="button"
+									onClick={() => {
+										onProjectChange(p);
+										setProjectSwitcherOpen(false);
+									}}
+									className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm outline-none transition-colors hover:bg-(--bg-hover) ${
+										activeProject.id === p.id ? "bg-(--bg-active)" : ""
+									}`}
+								>
+									<span className="truncate font-medium text-(--text-primary)">
+										{p.name}
+									</span>
+									<span className="truncate font-mono text-[10px] text-(--text-muted)">
+										{p.path}
+									</span>
+								</button>
+							))}
+							{onAddProject && (
+								<button
+									type="button"
+									onClick={() => {
+										onAddProject();
+										setProjectSwitcherOpen(false);
+									}}
+									className="flex w-full items-center gap-2 border-t border-(--border-secondary) px-3 py-2.5 text-sm text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+								>
+									<Plus size={14} />
+									Add repository
+								</button>
+							)}
+						</PopoverContent>
+					</Popover>
 				</div>
 			)}
 			<div className="flex items-center gap-2 border-b border-(--border-secondary) px-3 py-2.5">

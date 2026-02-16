@@ -151,6 +151,22 @@
 	background-color: var(--accent-primary);
 }
 
+/* Worktree panel drag handle */
+.worktree-drag-handle {
+	height: 3px;
+	cursor: ns-resize;
+	background-color: transparent;
+	transition: background-color var(--transition-fast);
+}
+
+.worktree-drag-handle:hover {
+	background-color: var(--border-primary);
+}
+
+.worktree-drag-handle.active {
+	background-color: var(--accent-primary);
+}
+
 /* ============================================================================
    BASE STYLES
    ============================================================================ */
@@ -408,6 +424,63 @@ select {
 		background-color: var(--bg-panel);
 	}
 
+	/* Shared overlay primitives */
+	.overlay-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 1000;
+		background: color-mix(in oklab, var(--bg-primary) 72%, transparent);
+		backdrop-filter: blur(2px);
+	}
+
+	.overlay-content {
+		position: fixed;
+		left: 50%;
+		top: 50%;
+		z-index: 1001;
+		width: min(640px, calc(100vw - 32px));
+		max-height: calc(100vh - 32px);
+		transform: translate(-50%, -50%);
+		overflow: hidden;
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-xl);
+		background-color: var(--bg-panel);
+		box-shadow:
+			0 18px 42px rgba(0, 0, 0, 0.16),
+			0 2px 6px rgba(0, 0, 0, 0.08);
+	}
+
+	.dark .overlay-content {
+		box-shadow:
+			0 20px 48px rgba(0, 0, 0, 0.35),
+			0 2px 6px rgba(0, 0, 0, 0.2);
+	}
+
+	.overlay-content-sm {
+		width: min(460px, calc(100vw - 32px));
+	}
+
+	.overlay-content-md {
+		width: min(640px, calc(100vw - 32px));
+	}
+
+	.overlay-content-lg {
+		width: min(820px, calc(100vw - 32px));
+	}
+
+	.overlay-content-xl {
+		width: min(1024px, calc(100vw - 32px));
+	}
+
+	.overlay-content-full {
+		width: calc(100vw - 24px);
+		max-height: calc(100vh - 24px);
+	}
+
+	.overlay-popover {
+		z-index: 1002;
+	}
+
 	/* Settings page layout */
 	.settings-page {
 		display: flex;
@@ -576,6 +649,10 @@ select {
 		opacity: 1;
 		visibility: visible;
 	}
+	[data-tooltip-position="bottom"]::after {
+		bottom: auto;
+		top: calc(100% + 6px);
+	}
 
 	/* Selected state - monochrome */
 	.selected {
@@ -596,82 +673,77 @@ select {
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
-		padding: clamp(46px, 9vh, 86px) 18px 24px;
+		padding: clamp(30px, 7vh, 78px) 14px 20px;
 		background:
-			radial-gradient(
-				900px 260px at 50% -12%,
-				color-mix(in oklab, var(--accent-primary) 10%, transparent),
-				transparent 68%
+			linear-gradient(
+				180deg,
+				color-mix(in oklab, var(--bg-primary) 62%, transparent) 0%,
+				color-mix(in oklab, var(--bg-primary) 72%, transparent) 100%
 			),
-			color-mix(in oklab, var(--bg-primary) 92%, black 8%);
-		backdrop-filter: blur(2px) saturate(102%);
+			radial-gradient(
+				1000px 320px at 50% -14%,
+				color-mix(in oklab, var(--bg-secondary) 44%, transparent),
+				transparent 72%
+			);
+		backdrop-filter: blur(2px);
 		animation: fadeIn 120ms cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.command-palette-content {
+		position: fixed;
+		left: 50%;
+		top: clamp(30px, 7vh, 78px);
+		transform: translateX(-50%);
+		z-index: 9001;
 	}
 
 	.dark .command-palette-backdrop {
 		background:
-			radial-gradient(
-				900px 260px at 50% -12%,
-				color-mix(in oklab, var(--accent-primary) 14%, transparent),
-				transparent 70%
+			linear-gradient(
+				180deg,
+				color-mix(in oklab, var(--bg-primary) 50%, transparent) 0%,
+				color-mix(in oklab, var(--bg-primary) 62%, transparent) 100%
 			),
-			color-mix(in oklab, var(--bg-primary) 84%, black 16%);
+			radial-gradient(
+				1000px 320px at 50% -14%,
+				color-mix(in oklab, var(--bg-secondary) 40%, transparent),
+				transparent 72%
+			);
 	}
 
 	.command-palette-panel {
-		position: relative;
 		display: flex;
 		flex-direction: column;
-		width: min(960px, calc(100vw - 36px));
-		max-height: min(82vh, 760px);
+		width: min(920px, calc(100vw - 28px));
+		max-height: min(84vh, 760px);
 		overflow: hidden;
-		border: 1px solid color-mix(in oklab, var(--border-primary) 82%, transparent);
-		border-radius: 16px;
-		background:
-			linear-gradient(
-				180deg,
-				color-mix(in oklab, var(--bg-secondary) 65%, transparent) 0%,
-				transparent 34%
-			),
-			var(--bg-panel);
+		border: 1px solid var(--border-primary);
+		border-radius: 12px;
+		background: var(--bg-panel);
 		box-shadow:
-			0 24px 58px rgba(0, 0, 0, 0.16),
-			0 2px 8px rgba(0, 0, 0, 0.06);
+			0 18px 42px rgba(0, 0, 0, 0.16),
+			0 2px 6px rgba(0, 0, 0, 0.08);
 		animation: scaleIn 120ms cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.dark .command-palette-panel {
 		box-shadow:
-			0 30px 68px rgba(0, 0, 0, 0.38),
-			0 2px 8px rgba(0, 0, 0, 0.3);
+			0 20px 48px rgba(0, 0, 0, 0.35),
+			0 2px 6px rgba(0, 0, 0, 0.2);
 	}
 
-	.command-palette-panel::before {
-		content: "";
-		position: absolute;
-		left: 0;
-		right: 0;
-		top: 0;
-		height: 2px;
-		background: linear-gradient(
-			90deg,
-			transparent 0%,
-			color-mix(in oklab, var(--accent-primary) 45%, transparent) 24%,
-			color-mix(in oklab, var(--accent-primary) 75%, transparent) 50%,
-			color-mix(in oklab, var(--accent-primary) 45%, transparent) 76%,
-			transparent 100%
-		);
-		opacity: 0.35;
-		pointer-events: none;
+	.command-palette-panel[data-step="input"],
+	.command-palette-panel[data-step="confirm"] {
+		width: min(640px, calc(100vw - 28px));
 	}
 
 	.command-palette-search-row {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 13px 14px;
+		gap: 10px;
+		padding: 12px 14px;
 		border-bottom: 1px solid var(--border-secondary);
-		background: color-mix(in oklab, var(--bg-panel) 76%, var(--bg-secondary) 24%);
+		background-color: var(--bg-secondary);
 	}
 
 	.command-palette-title {
@@ -679,11 +751,13 @@ select {
 		align-items: center;
 		gap: 7px;
 		padding: 6px 9px;
-		border-radius: 999px;
-		border: 1px solid color-mix(in oklab, var(--border-primary) 80%, transparent);
-		background: color-mix(in oklab, var(--bg-secondary) 70%, transparent);
-		font-size: 12px;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--border-primary);
+		background-color: var(--bg-panel);
+		font-size: 11px;
 		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
 		color: var(--text-muted);
 		white-space: nowrap;
 	}
@@ -692,20 +766,19 @@ select {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		padding: 6px 9px;
+		padding: 7px 10px;
 		border-radius: var(--radius-md);
-		border: 1px solid transparent;
+		border: 1px solid var(--border-primary);
 		font-size: 12px;
 		font-weight: 600;
 		color: var(--text-secondary);
-		background: transparent;
+		background-color: var(--bg-panel);
 		transition: var(--transition-fast);
 		transition-property: background-color, color, border-color;
 	}
 
 	.command-palette-back:hover {
-		border-color: color-mix(in oklab, var(--border-primary) 74%, transparent);
-		background: color-mix(in oklab, var(--bg-hover) 88%, transparent);
+		background-color: var(--bg-hover);
 		color: var(--text-primary);
 	}
 
@@ -713,10 +786,10 @@ select {
 		flex: 1;
 		width: 100%;
 		height: 40px;
-		padding: 9px 13px;
-		border: 1px solid color-mix(in oklab, var(--border-primary) 86%, transparent);
-		border-radius: 10px;
-		background: color-mix(in oklab, var(--bg-input) 90%, var(--bg-secondary) 10%);
+		padding: 9px 12px;
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-md);
+		background: var(--bg-input);
 		color: var(--text-primary);
 		font-size: 13px;
 		letter-spacing: 0.01em;
@@ -724,83 +797,73 @@ select {
 
 	.command-palette-search:focus {
 		outline: none;
-		border-color: var(--border-focus);
-		box-shadow:
-			0 0 0 3px color-mix(in oklab, var(--border-focus) 18%, transparent),
-			inset 0 1px 0 color-mix(in oklab, var(--bg-primary) 30%, transparent);
+		border-color: color-mix(in oklab, var(--border-focus) 45%, var(--border-primary));
+		box-shadow: 0 0 0 2px color-mix(in oklab, var(--border-focus) 8%, transparent);
+	}
+
+	.command-palette-meta {
+		display: inline-flex;
+		align-items: center;
+		white-space: nowrap;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		letter-spacing: 0.01em;
+		color: var(--text-muted);
+		padding-right: 2px;
 	}
 
 	.command-palette-results {
 		display: grid;
 		grid-template-columns: 1fr;
 		min-height: 300px;
-		background: color-mix(in oklab, var(--bg-primary) 90%, transparent);
+		background: var(--bg-panel);
 	}
 
 	@media (min-width: 768px) {
 		.command-palette-results {
-			grid-template-columns: minmax(0, 1fr) 240px;
+			grid-template-columns: minmax(0, 1fr) 250px;
 		}
 	}
 
 	.command-palette-list {
-		max-height: min(62vh, 640px);
+		max-height: min(62vh, 620px);
 		overflow: auto;
-		padding: 10px 12px 12px;
+		padding: 8px 10px 12px;
 	}
 
 	.command-palette-group + .command-palette-group {
-		margin-top: 12px;
+		margin-top: 10px;
 	}
 
 	.command-palette-group-title {
-		padding: 4px 7px 7px;
+		padding: 6px 7px 7px;
 	}
 
 	.command-palette-item {
-		position: relative;
 		display: flex;
 		width: 100%;
 		align-items: center;
 		gap: 9px;
-		padding: 9px 11px;
-		border-radius: 9px;
+		padding: 10px 10px;
+		border-radius: var(--radius-lg);
 		border: 1px solid transparent;
 		text-align: left;
 		transition: var(--transition-fast);
-		transition-property: background-color, color, opacity, border-color, transform;
+		transition-property: background-color, color, opacity, border-color;
 	}
 
-	.command-palette-item::before {
-		content: "";
-		position: absolute;
-		left: 6px;
-		top: 7px;
-		bottom: 7px;
-		width: 2px;
-		border-radius: 999px;
-		background: color-mix(in oklab, var(--accent-primary) 78%, transparent);
-		opacity: 0;
-		transform: scaleY(0.5);
-		transition: var(--transition-fast);
-		transition-property: opacity, transform;
+	.command-palette-item:hover {
+		background: var(--bg-hover);
+		border-color: var(--border-secondary);
 	}
 
-	.command-palette-item:hover,
 	.command-palette-item[data-active="true"] {
-		background: color-mix(in oklab, var(--bg-hover) 86%, transparent);
-		border-color: color-mix(in oklab, var(--border-primary) 70%, transparent);
-		transform: translateX(1px);
-	}
-
-	.command-palette-item[data-active="true"]::before {
-		opacity: 1;
-		transform: scaleY(1);
+		background: var(--bg-active);
+		border-color: var(--border-primary);
 	}
 
 	.command-palette-item[data-disabled="true"] {
-		opacity: 0.42;
-		transform: none;
+		opacity: 0.46;
 	}
 
 	.command-palette-item-main {
@@ -830,21 +893,21 @@ select {
 	}
 
 	.command-palette-badge {
-		border: 1px solid color-mix(in oklab, var(--border-primary) 84%, transparent);
+		border: 1px solid var(--border-primary);
 		border-radius: 999px;
 		padding: 2px 7px;
 		font-family: var(--font-mono);
 		font-size: 10px;
 		letter-spacing: 0.02em;
 		color: var(--text-muted);
-		background: color-mix(in oklab, var(--bg-secondary) 78%, transparent);
+		background: var(--bg-secondary);
 	}
 
 	.command-palette-description {
 		display: none;
 		border-left: 1px solid var(--border-secondary);
-		padding: 13px 13px 14px;
-		background: color-mix(in oklab, var(--bg-secondary) 82%, var(--bg-panel) 18%);
+		padding: 12px;
+		background: var(--bg-secondary);
 	}
 
 	@media (min-width: 768px) {
@@ -855,14 +918,15 @@ select {
 	}
 
 	.command-palette-description-text {
-		margin-top: 10px;
+		margin-top: 9px;
 		font-size: 12px;
 		line-height: 1.55;
 		color: var(--text-secondary);
+		word-break: break-word;
 	}
 
 	.command-palette-empty {
-		padding: 18px 11px;
+		padding: 18px 10px;
 		font-size: 12px;
 		color: var(--text-muted);
 		text-align: center;
@@ -871,6 +935,7 @@ select {
 	.command-palette-input-step,
 	.command-palette-confirm-step {
 		padding: 14px;
+		background: var(--bg-panel);
 	}
 
 	.command-palette-input-head {
@@ -913,11 +978,13 @@ select {
 		border-radius: 999px;
 		background: var(--warning-bg);
 		color: var(--warning);
+		border: 1px solid color-mix(in oklab, var(--warning) 30%, transparent);
 	}
 
 	.command-palette-confirm-icon[data-danger="true"] {
 		background: var(--danger-bg);
 		color: var(--danger);
+		border-color: color-mix(in oklab, var(--danger) 30%, transparent);
 	}
 
 	.command-palette-confirm-title {
@@ -936,7 +1003,7 @@ select {
 
 	.command-palette-highlight {
 		color: var(--text-primary);
-		background: color-mix(in oklab, var(--accent-primary) 22%, transparent);
+		background: color-mix(in oklab, var(--bg-active) 72%, transparent);
 		border-radius: 4px;
 		padding: 0 1px;
 	}
@@ -948,16 +1015,17 @@ select {
 		flex-wrap: wrap;
 		padding: 8px 12px 10px;
 		border-top: 1px solid var(--border-secondary);
-		background: color-mix(in oklab, var(--bg-panel) 78%, var(--bg-secondary) 22%);
+		background: var(--bg-secondary);
 	}
 
 	.command-palette-hint {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		padding: 2px 6px;
+		padding: 2px 7px;
 		border-radius: 999px;
-		background: color-mix(in oklab, var(--bg-secondary) 80%, transparent);
+		border: 1px solid var(--border-primary);
+		background: var(--bg-panel);
 		color: var(--text-muted);
 		font-size: 10px;
 		font-weight: 500;
@@ -971,12 +1039,58 @@ select {
 		height: 16px;
 		padding: 0 4px;
 		border-radius: 4px;
-		border: 1px solid color-mix(in oklab, var(--border-primary) 80%, transparent);
-		background: var(--bg-panel);
+		border: 1px solid var(--border-primary);
+		background: var(--bg-secondary);
 		font-family: var(--font-mono);
 		font-size: 10px;
 		line-height: 1;
 		color: var(--text-secondary);
+	}
+
+	@media (max-width: 900px) {
+		.command-palette-meta {
+			display: none;
+		}
+	}
+
+	@media (max-width: 767px) {
+		.command-palette-backdrop {
+			padding: 12px 8px;
+		}
+
+		.command-palette-content {
+			top: 12px;
+		}
+
+		.command-palette-panel {
+			width: calc(100vw - 16px);
+			max-height: calc(100vh - 24px);
+			border-radius: var(--radius-lg);
+		}
+
+		.command-palette-search-row {
+			flex-wrap: wrap;
+			padding: 10px;
+			gap: 10px;
+		}
+
+		.command-palette-title,
+		.command-palette-back {
+			flex: 0 0 auto;
+		}
+
+		.command-palette-search {
+			flex-basis: 100%;
+		}
+
+		.command-palette-list {
+			max-height: calc(100vh - 190px);
+			padding: 8px 8px 10px;
+		}
+
+		.command-palette-footer {
+			padding: 8px 9px 9px;
+		}
 	}
 }
 
@@ -1078,5 +1192,246 @@ select {
 
 	.commit-message-text {
 		font-size: var(--commit-message-font-size);
+	}
+
+	/* ── Auto-commit modal ─────────────────────────────────────── */
+
+	.ac-body {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding-top: 12px;
+		padding-bottom: 12px;
+	}
+
+	.ac-message {
+		display: flex;
+		gap: 10px;
+		padding: 0 4px;
+	}
+
+	.ac-message-user {
+		justify-content: flex-end;
+	}
+
+	.ac-message-user .ac-message-content {
+		background: var(--accent-primary);
+		color: white;
+		border-radius: 12px 12px 4px 12px;
+		padding: 8px 12px;
+		max-width: 80%;
+		font-size: 13px;
+	}
+
+	.ac-message-assistant .ac-message-content {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.ac-avatar {
+		flex-shrink: 0;
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		background: color-mix(in oklab, var(--accent-primary) 15%, transparent);
+		color: var(--accent-primary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.ac-text {
+		font-size: 13px;
+		line-height: 1.5;
+		color: var(--text-primary);
+		white-space: pre-wrap;
+		padding: 4px 0;
+	}
+
+	.ac-step-divider {
+		border: none;
+		border-top: 1px solid var(--border-secondary);
+		margin: 8px 0;
+	}
+
+	/* Tool steps */
+	.ac-tool-step {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 0;
+		font-size: 12px;
+		color: var(--text-secondary);
+	}
+
+	.ac-tool-icon {
+		flex-shrink: 0;
+	}
+
+	.ac-tool-label {
+		flex-shrink: 0;
+	}
+
+	.ac-tool-detail {
+		color: var(--text-muted);
+		font-size: 11px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+	}
+
+	/* Commit proposal */
+	.ac-proposal {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 8px 0;
+	}
+
+	.ac-proposal-loading,
+	.ac-proposal-resolved {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 12px;
+		color: var(--text-secondary);
+		padding: 4px 0;
+	}
+
+	.ac-proposal-summary {
+		font-size: 13px;
+		color: var(--text-primary);
+		margin: 0;
+	}
+
+	.ac-proposal-cards {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.ac-commit-card {
+		border: 1px solid var(--border-secondary);
+		border-radius: 8px;
+		padding: 10px 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		background: color-mix(in oklab, var(--bg-secondary) 50%, transparent);
+	}
+
+	.ac-commit-header {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+	}
+
+	.ac-commit-badge {
+		flex-shrink: 0;
+		font-size: 10px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		padding: 2px 6px;
+		border-radius: 4px;
+		background: color-mix(in oklab, var(--accent-primary) 15%, transparent);
+		color: var(--accent-primary);
+	}
+
+	.ac-commit-badge[data-type="fix"] {
+		background: color-mix(in oklab, var(--danger) 12%, transparent);
+		color: var(--danger);
+	}
+
+	.ac-commit-badge[data-type="chore"],
+	.ac-commit-badge[data-type="build"],
+	.ac-commit-badge[data-type="ci"] {
+		background: color-mix(in oklab, var(--text-muted) 12%, transparent);
+		color: var(--text-secondary);
+	}
+
+	.ac-commit-badge[data-type="docs"],
+	.ac-commit-badge[data-type="style"] {
+		background: color-mix(in oklab, var(--warning) 12%, transparent);
+		color: var(--warning);
+	}
+
+	.ac-commit-message {
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+
+	.ac-commit-files {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	.ac-file-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 11px;
+		padding: 2px 6px;
+		border-radius: 4px;
+		background: color-mix(in oklab, var(--bg-tertiary) 80%, transparent);
+		color: var(--text-secondary);
+	}
+
+	.ac-commit-reasoning {
+		font-size: 11px;
+		color: var(--text-muted);
+		margin: 0;
+		line-height: 1.4;
+	}
+
+	.ac-proposal-actions {
+		display: flex;
+		gap: 8px;
+		padding-top: 4px;
+	}
+
+	.ac-feedback {
+		display: flex;
+		gap: 6px;
+	}
+
+	.ac-feedback .input {
+		flex: 1;
+	}
+
+	/* Loading & error */
+	.ac-loading-initial {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		padding: 32px;
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
+
+	.ac-error {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 12px;
+		font-size: 13px;
+		color: var(--danger);
+		background: color-mix(in oklab, var(--danger) 8%, transparent);
+		border-radius: 8px;
+	}
+
+	/* Chat input row */
+	.ac-input-row {
+		display: flex;
+		gap: 6px;
+		width: 100%;
+	}
+
+	.ac-input-row .input {
+		flex: 1;
 	}
 }

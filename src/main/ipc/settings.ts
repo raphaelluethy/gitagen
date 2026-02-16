@@ -32,7 +32,7 @@ function prefsRowToPrefs(row: ProjectPrefsRow): ProjectPrefs {
 
 export function registerSettingsHandlers(): void {
 	ipcMain.handle("settings:getGlobal", async (): Promise<AppSettings> => {
-		return getAppSettings();
+		return await getAppSettings();
 	});
 
 	ipcMain.handle("settings:getGlobalWithKeys", async (): Promise<AppSettings> => {
@@ -49,7 +49,7 @@ export function registerSettingsHandlers(): void {
 	ipcMain.handle(
 		"settings:getProjectPrefs",
 		async (_, projectId: string): Promise<ProjectPrefs | null> => {
-			const row = getProjectPrefs(projectId);
+			const row = await getProjectPrefs(projectId);
 			return row ? prefsRowToPrefs(row) : null;
 		}
 	);
@@ -57,7 +57,7 @@ export function registerSettingsHandlers(): void {
 	ipcMain.handle(
 		"settings:setProjectPrefs",
 		async (_, projectId: string, prefs: Partial<ProjectPrefs>): Promise<void> => {
-			setProjectPrefs(projectId, prefs);
+			await setProjectPrefs(projectId, prefs);
 		}
 	);
 
@@ -90,7 +90,7 @@ export function registerSettingsHandlers(): void {
 		if (result.canceled || result.filePaths.length === 0) return null;
 		const path = result.filePaths[0];
 		if (validateGitBinary(path)) {
-			setAppSettings({ gitBinaryPath: path });
+			await setAppSettings({ gitBinaryPath: path });
 			return path;
 		}
 		return null;

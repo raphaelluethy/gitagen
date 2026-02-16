@@ -12,6 +12,10 @@ interface LogPanelProps {
 	projectId: string;
 	selectedOid?: string | null;
 	onSelectCommit?: (oid: string) => void;
+	/** Cached commits from openProject - shown instantly, no spinner */
+	initialCommits?: CommitInfo[] | null;
+	/** Cached unpushed OIDs for annotating initialCommits with pushed status */
+	initialUnpushedOids?: string[] | null;
 }
 
 function annotateWithPushedStatus(
@@ -81,7 +85,13 @@ function formatRelativeTime(date: Date): string {
 	return "just now";
 }
 
-export default function LogPanel({ projectId, selectedOid, onSelectCommit }: LogPanelProps) {
+export default function LogPanel({
+	projectId,
+	selectedOid,
+	onSelectCommit,
+	initialCommits,
+	initialUnpushedOids,
+}: LogPanelProps) {
 	const { toast } = useToast();
 	const [commits, setCommits] = useState<CommitInfo[]>([]);
 	const [unpushedOids, setUnpushedOids] = useState<Set<string> | null>(null);
@@ -180,29 +190,25 @@ export default function LogPanel({ projectId, selectedOid, onSelectCommit }: Log
 		}
 	}, [projectId, commits, toast]);
 
-	// On mount: show cached commits instantly, then fetch the first page in background
+	// On mount / initialCommits: show cached commits instantly (annotated with pushed status), then fetch first page in background
 	useEffect(() => {
-		let cancelled = false;
-		setLoading(true);
 		setHasMore(true);
-
-		window.gitagen.repo
-			.getCachedLog(projectId)
-			.catch(() => null)
-			.then((cached) => {
-				if (cancelled) return;
-				const hasCache = cached != null && cached.length > 0;
-				if (hasCache) {
-					setCommits(cached);
-					setLoading(false);
-				}
-				refreshFirstPage({ replace: !hasCache });
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [projectId, refreshFirstPage]);
+		const hasInitial = initialCommits != null && initialCommits.length > 0;
+		if (hasInitial) {
+			const oidSet =
+				initialUnpushedOids && initialUnpushedOids.length > 0
+					? new Set(initialUnpushedOids)
+					: null;
+			setUnpushedOids(oidSet);
+			setCommits(annotateWithPushedStatus(initialCommits, oidSet));
+			setLoading(false);
+		} else {
+			setCommits([]);
+			setUnpushedOids(null);
+			setLoading(true);
+		}
+		refreshFirstPage({ replace: !hasInitial });
+	}, [projectId, initialCommits, initialUnpushedOids, refreshFirstPage]);
 
 	// Refresh on repo events (push, commit, branch switch, etc.)
 	useEffect(() => {

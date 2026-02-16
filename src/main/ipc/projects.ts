@@ -80,14 +80,14 @@ async function getToplevelCached(
 
 export function registerProjectsHandlers(): void {
 	ipcMain.handle("projects:list", async (): Promise<Project[]> => {
-		const rows = dbListProjects();
+		const rows = await dbListProjects();
 		return rows.map(rowToProject);
 	});
 
 	ipcMain.handle("projects:listGrouped", async (): Promise<GroupedProject[]> => {
-		const rows = dbListProjects();
+		const rows = await dbListProjects();
 		const projects = rows.map(rowToProject);
-		const provider = createGitProvider(getAppSettings());
+		const provider = createGitProvider(await getAppSettings());
 		const projectsToProbe = projects.slice(0, GROUPING_GIT_PROBE_LIMIT);
 
 		const toplevelEntries = await mapWithConcurrency(
@@ -130,23 +130,23 @@ export function registerProjectsHandlers(): void {
 	});
 
 	ipcMain.handle("projects:add", async (_, name: string, path: string): Promise<Project> => {
-		const existing = getProjectByPath(path);
+		const existing = await getProjectByPath(path);
 		if (existing) return rowToProject(existing);
 		const id = randomUUID();
 		const now = Math.floor(Date.now() / 1000);
-		insertProject(id, name, path, now, now);
-		return rowToProject(getProject(id)!);
+		await insertProject(id, name, path, now, now);
+		return rowToProject((await getProject(id))!);
 	});
 
 	ipcMain.handle("projects:remove", async (_, projectId: string): Promise<void> => {
-		const project = getProject(projectId);
-		deleteProject(projectId);
+		const project = await getProject(projectId);
+		await deleteProject(projectId);
 		if (!project || !isManagedWorktreePath(project.path)) return;
 		try {
 			await removeWorktreeManager(
 				project.path,
 				project.path,
-				createGitProvider(getAppSettings()),
+				createGitProvider(await getAppSettings()),
 				true
 			);
 		} catch {
@@ -160,10 +160,10 @@ export function registerProjectsHandlers(): void {
 	});
 
 	ipcMain.handle("projects:switchTo", async (_, projectId: string): Promise<Project | null> => {
-		const project = getProject(projectId);
+		const project = await getProject(projectId);
 		if (!project) return null;
 		const now = Math.floor(Date.now() / 1000);
-		updateProjectLastOpened(projectId, now);
+		await updateProjectLastOpened(projectId, now);
 		return rowToProject({ ...project, last_opened_at: now });
 	});
 }

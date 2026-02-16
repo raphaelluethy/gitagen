@@ -1,14 +1,20 @@
 import { useState, useCallback } from "react";
-import { Send, GitCommit, Sparkles, Loader2 } from "lucide-react";
+import { Send, GitCommit, Sparkles, Loader2, Bot } from "lucide-react";
 import { useToast } from "../toast/provider";
 
 interface CommitPanelProps {
 	projectId: string;
 	onCommit: () => void;
+	onAutoCommit?: () => void;
 	disabled?: boolean;
 }
 
-export default function CommitPanel({ projectId, onCommit, disabled }: CommitPanelProps) {
+export default function CommitPanel({
+	projectId,
+	onCommit,
+	onAutoCommit,
+	disabled,
+}: CommitPanelProps) {
 	const [message, setMessage] = useState("");
 	const [amend, setAmend] = useState(false);
 	const [loading, setLoading] = useState(false);
@@ -67,19 +73,30 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 					<GitCommit size={13} className="text-(--text-muted)" />
 					<span className="section-title">Commit</span>
 				</div>
-				<button
-					type="button"
-					onClick={handleGenerate}
-					disabled={disabled || generating}
-					className="btn-icon rounded-md p-1"
-					title="Generate commit message with AI"
-				>
-					{generating ? (
-						<Loader2 size={13} className="animate-spin text-(--accent)" />
-					) : (
-						<Sparkles size={13} />
-					)}
-				</button>
+				<div className="flex items-center gap-1">
+					<button
+						type="button"
+						onClick={onAutoCommit}
+						disabled={disabled || !onAutoCommit}
+						className="btn-icon rounded-md p-1"
+						title="Auto-commit with AI agent"
+					>
+						<Bot size={13} />
+					</button>
+					<button
+						type="button"
+						onClick={handleGenerate}
+						disabled={disabled || generating}
+						className="btn-icon rounded-md p-1"
+						title="Generate commit message with AI"
+					>
+						{generating ? (
+							<Loader2 size={13} className="animate-spin text-(--accent)" />
+						) : (
+							<Sparkles size={13} />
+						)}
+					</button>
+				</div>
 			</div>
 			<textarea
 				value={message}

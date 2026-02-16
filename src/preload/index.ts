@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
 	GroupedProject,
 	Project,
+	ProjectOpenData,
 	AppSettings,
 	ProjectPrefs,
 	RepoStatus,
@@ -40,6 +41,8 @@ const projects = {
 };
 
 const repo = {
+	openProject: (projectId: string): Promise<ProjectOpenData | null> =>
+		ipcRenderer.invoke("repo:openProject", projectId),
 	getTree: (
 		projectId: string,
 		includeIgnored?: boolean,
@@ -53,6 +56,8 @@ const repo = {
 		filePath: string,
 		scope: "staged" | "unstaged" | "untracked"
 	): Promise<string | null> => ipcRenderer.invoke("repo:getPatch", projectId, filePath, scope),
+	getAllDiffs: (projectId: string): Promise<{ path: string; scope: string; diff: string }[]> =>
+		ipcRenderer.invoke("repo:getAllDiffs", projectId),
 	openInEditor: (projectId: string, filePath: string): Promise<void> =>
 		ipcRenderer.invoke("repo:openInEditor", projectId, filePath),
 	refresh: (projectId: string): Promise<void> => ipcRenderer.invoke("repo:refresh", projectId),

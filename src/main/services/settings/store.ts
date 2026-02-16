@@ -3,7 +3,7 @@ import type { AppSettings, AIProviderInstance, CommitStyle } from "../../../shar
 import { setAIApiKey, getAllAIApiKeys } from "./keychain.js";
 
 export async function getAppSettingsWithKeys(): Promise<AppSettings> {
-	const settings = getAppSettings();
+	const settings = await getAppSettings();
 	const apiKeys = await getAllAIApiKeys();
 
 	settings.ai.providers = settings.ai.providers.map((p) => ({
@@ -29,6 +29,7 @@ const KEYS = {
 	gpuAcceleration: "gpuAcceleration",
 	devMode: "devMode",
 	autoExpandSingleFolder: "sidebar.autoExpandSingleFolder",
+	showWorktreePanel: "sidebar.showWorktreePanel",
 } as const;
 
 const DEFAULTS: AppSettings = {
@@ -50,23 +51,53 @@ const DEFAULTS: AppSettings = {
 	gpuAcceleration: true,
 	devMode: false,
 	autoExpandSingleFolder: true,
+	showWorktreePanel: true,
 };
 
-export function getAppSettings(): AppSettings {
-	const gitBinaryPathRaw = getAppSetting(KEYS.gitBinaryPath);
+export async function getAppSettings(): Promise<AppSettings> {
+	const [
+		gitBinaryPathRaw,
+		themeRaw,
+		signingEnabledRaw,
+		signingKeyRaw,
+		aiProvidersRaw,
+		aiActiveProviderRaw,
+		aiCommitStyleRaw,
+		uiScaleRaw,
+		fontSizeRaw,
+		commitMessageFontSizeRaw,
+		fontFamilyRaw,
+		gpuAccelerationRaw,
+		devModeRaw,
+		autoExpandSingleFolderRaw,
+		showWorktreePanelRaw,
+	] = await Promise.all([
+		getAppSetting(KEYS.gitBinaryPath),
+		getAppSetting(KEYS.theme),
+		getAppSetting(KEYS.signingEnabled),
+		getAppSetting(KEYS.signingKey),
+		getAppSetting(KEYS.aiProviders),
+		getAppSetting(KEYS.aiActiveProvider),
+		getAppSetting(KEYS.aiCommitStyle),
+		getAppSetting(KEYS.uiScale),
+		getAppSetting(KEYS.fontSize),
+		getAppSetting(KEYS.commitMessageFontSize),
+		getAppSetting(KEYS.fontFamily),
+		getAppSetting(KEYS.gpuAcceleration),
+		getAppSetting(KEYS.devMode),
+		getAppSetting(KEYS.autoExpandSingleFolder),
+		getAppSetting(KEYS.showWorktreePanel),
+	]);
+
 	const gitBinaryPath =
 		gitBinaryPathRaw === "" || gitBinaryPathRaw === undefined ? null : gitBinaryPathRaw;
 
-	const themeRaw = getAppSetting(KEYS.theme);
 	const theme = (
 		themeRaw === "dark" || themeRaw === "light" || themeRaw === "system" ? themeRaw : "system"
 	) as AppSettings["theme"];
 
-	const signingEnabled = getAppSetting(KEYS.signingEnabled) === "true";
-	const signingKey = getAppSetting(KEYS.signingKey) ?? DEFAULTS.signing.key;
-
-	const aiProvidersRaw = getAppSetting(KEYS.aiProviders);
-	const aiActiveProvider = getAppSetting(KEYS.aiActiveProvider) ?? null;
+	const signingEnabled = signingEnabledRaw === "true";
+	const signingKey = signingKeyRaw ?? DEFAULTS.signing.key;
 
 	let aiProviders: AIProviderInstance[] = [];
 	if (aiProvidersRaw) {
@@ -77,7 +108,8 @@ export function getAppSettings(): AppSettings {
 		}
 	}
 
-	const aiCommitStyleRaw = getAppSetting(KEYS.aiCommitStyle);
+	const aiActiveProvider = aiActiveProviderRaw ?? null;
+
 	const commitStyle: CommitStyle =
 		aiCommitStyleRaw === "conventional" ||
 		aiCommitStyleRaw === "emoji" ||
@@ -86,18 +118,14 @@ export function getAppSettings(): AppSettings {
 			? aiCommitStyleRaw
 			: DEFAULTS.ai.commitStyle;
 
-	const uiScaleRaw = getAppSetting(KEYS.uiScale);
 	const uiScale = uiScaleRaw ? parseFloat(uiScaleRaw) : DEFAULTS.uiScale;
 
-	const fontSizeRaw = getAppSetting(KEYS.fontSize);
 	const fontSize = fontSizeRaw ? parseInt(fontSizeRaw, 10) : DEFAULTS.fontSize;
 
-	const commitMessageFontSizeRaw = getAppSetting(KEYS.commitMessageFontSize);
 	const commitMessageFontSize = commitMessageFontSizeRaw
 		? parseInt(commitMessageFontSizeRaw, 10)
 		: DEFAULTS.commitMessageFontSize;
 
-	const fontFamilyRaw = getAppSetting(KEYS.fontFamily);
 	const fontFamily = (
 		fontFamilyRaw === "geist" ||
 		fontFamilyRaw === "geist-pixel" ||
@@ -107,15 +135,14 @@ export function getAppSettings(): AppSettings {
 			: DEFAULTS.fontFamily
 	) as AppSettings["fontFamily"];
 
-	const gpuAccelerationRaw = getAppSetting(KEYS.gpuAcceleration);
 	const gpuAcceleration = gpuAccelerationRaw === "false" ? false : DEFAULTS.gpuAcceleration;
 
-	const devModeRaw = getAppSetting(KEYS.devMode);
 	const devMode = devModeRaw === "true" ? true : DEFAULTS.devMode;
 
-	const autoExpandSingleFolderRaw = getAppSetting(KEYS.autoExpandSingleFolder);
 	const autoExpandSingleFolder =
 		autoExpandSingleFolderRaw === "false" ? false : DEFAULTS.autoExpandSingleFolder;
+
+	const showWorktreePanel = showWorktreePanelRaw === "false" ? false : DEFAULTS.showWorktreePanel;
 
 	return {
 		gitBinaryPath,
@@ -136,27 +163,28 @@ export function getAppSettings(): AppSettings {
 		gpuAcceleration,
 		devMode,
 		autoExpandSingleFolder,
+		showWorktreePanel,
 	};
 }
 
 export async function setAppSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
 	if (partial.gitBinaryPath !== undefined) {
-		setAppSetting(KEYS.gitBinaryPath, partial.gitBinaryPath);
+		await setAppSetting(KEYS.gitBinaryPath, partial.gitBinaryPath);
 	}
 	if (partial.theme !== undefined) {
-		setAppSetting(KEYS.theme, partial.theme);
+		await setAppSetting(KEYS.theme, partial.theme);
 	}
 	if (partial.signing !== undefined) {
 		if (partial.signing.enabled !== undefined) {
-			setAppSetting(KEYS.signingEnabled, partial.signing.enabled ? "true" : "false");
+			await setAppSetting(KEYS.signingEnabled, partial.signing.enabled ? "true" : "false");
 		}
 		if (partial.signing.key !== undefined) {
-			setAppSetting(KEYS.signingKey, partial.signing.key);
+			await setAppSetting(KEYS.signingKey, partial.signing.key);
 		}
 	}
 	if (partial.ai !== undefined) {
 		if (partial.ai.activeProviderId !== undefined) {
-			setAppSetting(KEYS.aiActiveProvider, partial.ai.activeProviderId ?? "");
+			await setAppSetting(KEYS.aiActiveProvider, partial.ai.activeProviderId ?? "");
 		}
 		if (partial.ai.providers !== undefined) {
 			for (const provider of partial.ai.providers) {
@@ -168,35 +196,38 @@ export async function setAppSettings(partial: Partial<AppSettings>): Promise<App
 				...p,
 				apiKey: "",
 			}));
-			setAppSetting(KEYS.aiProviders, JSON.stringify(providersWithoutKeys));
+			await setAppSetting(KEYS.aiProviders, JSON.stringify(providersWithoutKeys));
 		}
 		if (partial.ai.commitStyle !== undefined) {
-			setAppSetting(KEYS.aiCommitStyle, partial.ai.commitStyle);
+			await setAppSetting(KEYS.aiCommitStyle, partial.ai.commitStyle);
 		}
 	}
 	if (partial.uiScale !== undefined) {
-		setAppSetting(KEYS.uiScale, String(partial.uiScale));
+		await setAppSetting(KEYS.uiScale, String(partial.uiScale));
 	}
 	if (partial.fontSize !== undefined) {
-		setAppSetting(KEYS.fontSize, String(partial.fontSize));
+		await setAppSetting(KEYS.fontSize, String(partial.fontSize));
 	}
 	if (partial.commitMessageFontSize !== undefined) {
-		setAppSetting(KEYS.commitMessageFontSize, String(partial.commitMessageFontSize));
+		await setAppSetting(KEYS.commitMessageFontSize, String(partial.commitMessageFontSize));
 	}
 	if (partial.fontFamily !== undefined) {
-		setAppSetting(KEYS.fontFamily, partial.fontFamily);
+		await setAppSetting(KEYS.fontFamily, partial.fontFamily);
 	}
 	if (partial.gpuAcceleration !== undefined) {
-		setAppSetting(KEYS.gpuAcceleration, partial.gpuAcceleration ? "true" : "false");
+		await setAppSetting(KEYS.gpuAcceleration, partial.gpuAcceleration ? "true" : "false");
 	}
 	if (partial.devMode !== undefined) {
-		setAppSetting(KEYS.devMode, partial.devMode ? "true" : "false");
+		await setAppSetting(KEYS.devMode, partial.devMode ? "true" : "false");
 	}
 	if (partial.autoExpandSingleFolder !== undefined) {
-		setAppSetting(
+		await setAppSetting(
 			KEYS.autoExpandSingleFolder,
 			partial.autoExpandSingleFolder ? "true" : "false"
 		);
+	}
+	if (partial.showWorktreePanel !== undefined) {
+		await setAppSetting(KEYS.showWorktreePanel, partial.showWorktreePanel ? "true" : "false");
 	}
 
 	return getAppSettings();

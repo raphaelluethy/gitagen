@@ -8,6 +8,7 @@ interface Settings {
 	fontFamily: FontFamily;
 	devMode: boolean;
 	autoExpandSingleFolder: boolean;
+	showWorktreePanel: boolean;
 }
 
 interface SettingsContextValue {
@@ -37,6 +38,7 @@ const defaultSettings: Settings = {
 	fontFamily: "system",
 	devMode: false,
 	autoExpandSingleFolder: true,
+	showWorktreePanel: true,
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);

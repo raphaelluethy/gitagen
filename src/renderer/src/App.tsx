@@ -24,6 +24,8 @@ import {
 	PanelLeft,
 	ArrowLeft,
 	GitBranch,
+	FolderTree,
+	ChevronRight,
 	Key,
 	Sparkles,
 	Palette,
@@ -43,8 +45,11 @@ import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
 import SyncButtons from "./components/SyncButtons";
 import ConflictBanner from "./components/ConflictBanner";
+import AutoCommitModal from "./components/AutoCommitModal";
 import StartPage from "./components/StartPage";
 import { FpsMonitor } from "./components/FpsMonitor";
+import { Dialog, DialogContent } from "./components/ui/dialog";
+import { ModalShell } from "./components/ui/modal-shell";
 import { ThemeProvider, useTheme } from "./theme/provider";
 import { SettingsProvider, useSettings } from "./settings/provider";
 import { ToastProvider, useToast } from "./toast/provider";
@@ -58,8 +63,8 @@ import {
 	type ViewMode,
 } from "./hooks/useCommandRegistry";
 import type {
+	CommitInfo,
 	Project,
-	ProjectPrefs,
 	RepoStatus,
 	GitStatus,
 	GitFileStatus,
@@ -78,6 +83,7 @@ import type {
 
 const MAIN_LAYOUT_FALLBACK = [20, 80];
 const CONTENT_LAYOUT_FALLBACK = [70, 30];
+const LAST_PROJECT_KEY = "gitagen:lastProjectId";
 
 type Layout = { [id: string]: number };
 
@@ -171,16 +177,23 @@ function getLatestConfigEntry(entries: ConfigEntry[], key: string): ConfigEntry 
 
 function AppContent() {
 	const { toast } = useToast();
+	const { settings: appSettings } = useSettings();
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [activeProject, setActiveProject] = useState<Project | null>(null);
 	const [status, setStatus] = useState<RepoStatus | null>(null);
 	const [currentBranchInfo, setCurrentBranchInfo] = useState<BranchInfo | null>(null);
 	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
 	const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
+	const [cachedLog, setCachedLog] = useState<{
+		projectId: string;
+		commits: CommitInfo[];
+		unpushedOids: string[] | null;
+	} | null>(null);
 	const [selectedFile, setSelectedFile] = useState<GitFileStatus | null>(null);
 	const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
 	const [viewMode, setViewMode] = useState<ViewMode>("single");
 	const [showSettings, setShowSettings] = useState(false);
+	const [showAutoCommit, setShowAutoCommit] = useState(false);
 	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
 	const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -188,6 +201,9 @@ function AppContent() {
 	const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
 	const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 	const [settingsTabOverride, setSettingsTabOverride] = useState<SettingsTab | null>(null);
+	const [isWorktreePanelCollapsed, setIsWorktreePanelCollapsed] = useState(
+		() => !appSettings.showWorktreePanel
+	);
 	const rightPanelRef = useRef<PanelImperativeHandle>(null);
 	const leftPanelRef = useRef<PanelImperativeHandle>(null);
 
@@ -225,7 +241,6 @@ function AppContent() {
 			}),
 		[contentLayout.defaultLayout]
 	);
-
 	const toggleRightPanel = useCallback(() => {
 		const panel = rightPanelRef.current;
 		if (panel?.isCollapsed()) {
@@ -248,23 +263,19 @@ function AppContent() {
 		}
 	}, []);
 
+	const toggleWorktreePanel = useCallback(() => {
+		setIsWorktreePanelCollapsed((prev) => !prev);
+	}, []);
+
 	const refreshStatus = useCallback(() => {
-		if (activeProject) {
-			window.gitagen.settings
-				.getProjectPrefs(activeProject.id)
-				.then((p: ProjectPrefs | null) => {
-					setActiveWorktreePath(p?.activeWorktreePath ?? null);
-				});
-			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
-			Promise.all([
-				window.gitagen.repo.listBranches(activeProject.id),
-				window.gitagen.repo.listRemotes(activeProject.id),
-			]).then(([branches, remotesList]) => {
-				const current = (branches as BranchInfo[]).find((b) => b.current);
-				setCurrentBranchInfo(current ?? null);
-				setRemotes(remotesList as RemoteInfo[]);
-			});
-		}
+		if (!activeProject) return;
+		window.gitagen.repo.openProject(activeProject.id).then((data) => {
+			if (!data) return;
+			setStatus(data.status);
+			setActiveWorktreePath(data.prefs?.activeWorktreePath ?? null);
+			setCurrentBranchInfo(data.branches.find((b) => b.current) ?? null);
+			setRemotes(data.remotes);
+		});
 	}, [activeProject?.id]);
 	const refreshStatusAndPrefs = refreshStatus;
 
@@ -272,8 +283,24 @@ function AppContent() {
 		window.gitagen.projects.list().then((list: Project[]) => {
 			setProjects(list);
 			setLoading(false);
+			const lastId =
+				typeof localStorage !== "undefined" ? localStorage.getItem(LAST_PROJECT_KEY) : null;
+			if (lastId && list.some((p) => p.id === lastId)) {
+				const project = list.find((p) => p.id === lastId) ?? null;
+				if (project) setActiveProject(project);
+			}
 		});
 	}, []);
+
+	useEffect(() => {
+		if (activeProject) {
+			try {
+				localStorage.setItem(LAST_PROJECT_KEY, activeProject.id);
+			} catch {
+				// ignore localStorage quota / privacy errors
+			}
+		}
+	}, [activeProject?.id]);
 
 	useEffect(() => {
 		if (!activeProject) {
@@ -281,25 +308,25 @@ function AppContent() {
 			setCurrentBranchInfo(null);
 			setRemotes([]);
 			setActiveWorktreePath(null);
+			setCachedLog(null);
 			setSelectedFile(null);
 			setSelectedCommitOid(null);
 			return;
 		}
-		window.gitagen.projects.switchTo(activeProject.id).then(() => {
-			window.gitagen.settings
-				.getProjectPrefs(activeProject.id)
-				.then((p: ProjectPrefs | null) => {
-					setActiveWorktreePath(p?.activeWorktreePath ?? null);
+		setCachedLog(null);
+		window.gitagen.repo.openProject(activeProject.id).then((data) => {
+			if (!data) return;
+			setStatus(data.status);
+			setActiveWorktreePath(data.prefs?.activeWorktreePath ?? null);
+			setCurrentBranchInfo(data.branches.find((b) => b.current) ?? null);
+			setRemotes(data.remotes);
+			if (data.cachedLog && data.cachedLog.length > 0) {
+				setCachedLog({
+					projectId: activeProject.id,
+					commits: data.cachedLog,
+					unpushedOids: data.cachedUnpushedOids,
 				});
-			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
-			Promise.all([
-				window.gitagen.repo.listBranches(activeProject.id),
-				window.gitagen.repo.listRemotes(activeProject.id),
-			]).then(([branches, remotesList]) => {
-				const current = (branches as BranchInfo[]).find((b) => b.current);
-				setCurrentBranchInfo(current ?? null);
-				setRemotes(remotesList as RemoteInfo[]);
-			});
+			}
 		});
 	}, [activeProject?.id]);
 
@@ -501,6 +528,16 @@ function AppContent() {
 					commands={commands}
 				/>
 			)}
+			{activeProject && (
+				<AutoCommitModal
+					open={showAutoCommit}
+					onClose={() => {
+						setShowAutoCommit(false);
+						refreshStatus();
+					}}
+					projectId={activeProject.id}
+				/>
+			)}
 		</>
 	);
 
@@ -613,7 +650,18 @@ function AppContent() {
 							}}
 						/>
 					</div>
-					<div className="shrink-0 border-t border-(--border-secondary)">
+					{isWorktreePanelCollapsed ? (
+						<button
+							type="button"
+							onClick={toggleWorktreePanel}
+							className="flex shrink-0 items-center gap-2 border-t border-(--border-secondary) px-3 py-2 text-left text-[11px] font-medium text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-secondary)"
+							title="Show worktrees"
+						>
+							<FolderTree size={13} />
+							<span>Worktrees</span>
+							<ChevronRight size={11} className="ml-auto" />
+						</button>
+					) : (
 						<WorktreePanel
 							projectId={activeProject.id}
 							projectName={activeProject.name}
@@ -621,8 +669,10 @@ function AppContent() {
 							currentBranch={status?.branch ?? ""}
 							activeWorktreePath={activeWorktreePath}
 							onRefresh={refreshStatus}
+							isCollapsed={isWorktreePanelCollapsed}
+							onToggle={toggleWorktreePanel}
 						/>
-					</div>
+					)}
 				</Panel>
 				<Separator className="panel-resize-handle" />
 				<Panel id="main" className="flex min-w-0 flex-1 flex-col" minSize="40%">
@@ -784,6 +834,7 @@ function AppContent() {
 										<CommitPanel
 											projectId={activeProject.id}
 											onCommit={refreshStatus}
+											onAutoCommit={() => setShowAutoCommit(true)}
 										/>
 									</Panel>
 								</Group>
@@ -841,6 +892,16 @@ function AppContent() {
 											projectId={activeProject.id}
 											selectedOid={selectedCommitOid}
 											onSelectCommit={setSelectedCommitOid}
+											initialCommits={
+												cachedLog?.projectId === activeProject.id
+													? cachedLog.commits
+													: null
+											}
+											initialUnpushedOids={
+												cachedLog?.projectId === activeProject.id
+													? (cachedLog.unpushedOids ?? null)
+													: null
+											}
 										/>
 									</div>
 									<div
@@ -1118,143 +1179,164 @@ function AISettingsSection() {
 				</select>
 			</div>
 
-			{showAddForm && (
-				<div className="mb-3 rounded-lg border border-(--border-primary) bg-(--bg-secondary) p-3 space-y-2">
-					<p className="text-xs font-medium text-(--text-secondary)">Add new provider</p>
-					{providerTypes.length === 0 ? (
-						<p className="text-xs text-(--danger)">No provider types are available.</p>
-					) : (
-						<>
-							<select
-								value={newProviderType}
-								onChange={(e) => {
-									setNewProviderType(
-										(e.target as HTMLSelectElement).value as AIProviderType
-									);
-									setNewProviderModels([]);
-									setNewProviderModelSearch("");
-									setNewProviderCustomModelInput("");
-									setNewProviderDefaultModel("");
-									setModelError(null);
-								}}
-								className="input w-full text-xs"
-							>
-								{providerTypes.map((providerType) => (
-									<option key={providerType.id} value={providerType.id}>
-										{providerType.displayName}
-									</option>
-								))}
-							</select>
-							<input
-								value={newProviderName}
-								onChange={(e) =>
-									setNewProviderName((e.target as HTMLInputElement).value)
-								}
-								placeholder="Provider name (optional)"
-								className="input w-full text-xs"
-							/>
-							{requiresBaseURL && (
+			<Dialog
+				open={showAddForm}
+				onOpenChange={(nextOpen) => {
+					setShowAddForm(nextOpen);
+					if (!nextOpen) resetAddForm();
+				}}
+			>
+				<DialogContent size="lg" className="p-0">
+					<ModalShell title="Add AI provider" bodyClassName="space-y-3">
+						{providerTypes.length === 0 ? (
+							<p className="text-sm text-(--danger)">
+								No provider types are available.
+							</p>
+						) : (
+							<>
+								<select
+									value={newProviderType}
+									onChange={(e) => {
+										setNewProviderType(
+											(e.target as HTMLSelectElement).value as AIProviderType
+										);
+										setNewProviderModels([]);
+										setNewProviderModelSearch("");
+										setNewProviderCustomModelInput("");
+										setNewProviderDefaultModel("");
+										setModelError(null);
+									}}
+									className="input w-full text-xs"
+								>
+									{providerTypes.map((providerType) => (
+										<option key={providerType.id} value={providerType.id}>
+											{providerType.displayName}
+										</option>
+									))}
+								</select>
 								<input
-									value={newProviderBaseURL}
+									value={newProviderName}
 									onChange={(e) =>
-										setNewProviderBaseURL((e.target as HTMLInputElement).value)
+										setNewProviderName((e.target as HTMLInputElement).value)
 									}
-									placeholder="Base URL (e.g. https://api.example.com/v1)"
+									placeholder="Provider name (optional)"
 									className="input w-full text-xs"
 								/>
-							)}
-							<div className="flex gap-2">
+								{requiresBaseURL && (
+									<input
+										value={newProviderBaseURL}
+										onChange={(e) =>
+											setNewProviderBaseURL(
+												(e.target as HTMLInputElement).value
+											)
+										}
+										placeholder="Base URL (e.g. https://api.example.com/v1)"
+										className="input w-full text-xs"
+									/>
+								)}
+								<div className="flex gap-2">
+									<input
+										value={newProviderApiKey}
+										onChange={(e) =>
+											setNewProviderApiKey(
+												(e.target as HTMLInputElement).value
+											)
+										}
+										placeholder="API Key"
+										type="password"
+										className="input flex-1 text-xs"
+									/>
+									<button
+										type="button"
+										onClick={() => void handleFetchNewProviderModels()}
+										disabled={loadingModels}
+										className="btn btn-secondary text-xs whitespace-nowrap"
+									>
+										{loadingModels ? "..." : "Fetch Models"}
+									</button>
+								</div>
+								{modelError && (
+									<p className="text-xs text-(--danger)">{modelError}</p>
+								)}
 								<input
-									value={newProviderApiKey}
+									value={newProviderModelSearch}
 									onChange={(e) =>
-										setNewProviderApiKey((e.target as HTMLInputElement).value)
-									}
-									placeholder="API Key"
-									type="password"
-									className="input flex-1 text-xs"
-								/>
-								<button
-									type="button"
-									onClick={() => void handleFetchNewProviderModels()}
-									disabled={loadingModels}
-									className="btn btn-secondary text-xs whitespace-nowrap"
-								>
-									{loadingModels ? "..." : "Fetch Models"}
-								</button>
-							</div>
-							{modelError && <p className="text-xs text-(--danger)">{modelError}</p>}
-							<input
-								value={newProviderModelSearch}
-								onChange={(e) =>
-									setNewProviderModelSearch((e.target as HTMLInputElement).value)
-								}
-								placeholder="Search models"
-								className="input w-full text-xs"
-							/>
-							<select
-								value={newProviderDefaultModel}
-								onChange={(e) =>
-									setNewProviderDefaultModel(
-										(e.target as HTMLSelectElement).value
-									)
-								}
-								className="input w-full text-xs"
-							>
-								<option value="">
-									{newProviderModels.length
-										? filteredNewProviderModels.length
-											? "Select model"
-											: "No models match search"
-										: "Fetch or add a model manually"}
-								</option>
-								{filteredNewProviderModels.map((model) => (
-									<option key={model} value={model}>
-										{model}
-									</option>
-								))}
-							</select>
-							<div className="flex gap-2">
-								<input
-									value={newProviderCustomModelInput}
-									onChange={(e) =>
-										setNewProviderCustomModelInput(
+										setNewProviderModelSearch(
 											(e.target as HTMLInputElement).value
 										)
 									}
-									onKeyDown={(e) => e.key === "Enter" && handleAddCustomModel()}
-									placeholder="Custom model ID"
-									className="input flex-1 text-xs"
+									placeholder="Search models"
+									className="input w-full text-xs"
 								/>
-								<button
-									type="button"
-									onClick={handleAddCustomModel}
-									disabled={!newProviderCustomModelInput.trim()}
-									className="btn btn-secondary text-xs"
+								<select
+									value={newProviderDefaultModel}
+									onChange={(e) =>
+										setNewProviderDefaultModel(
+											(e.target as HTMLSelectElement).value
+										)
+									}
+									className="input w-full text-xs"
 								>
-									Add Model
-								</button>
-							</div>
-							<div className="flex gap-2">
-								<button
-									onClick={handleAddProvider}
-									className="btn btn-primary text-xs"
-								>
-									Add
-								</button>
-								<button
-									onClick={() => {
-										setShowAddForm(false);
-										resetAddForm();
-									}}
-									className="btn btn-secondary text-xs"
-								>
-									Cancel
-								</button>
-							</div>
-						</>
-					)}
-				</div>
-			)}
+									<option value="">
+										{newProviderModels.length
+											? filteredNewProviderModels.length
+												? "Select model"
+												: "No models match search"
+											: "Fetch or add a model manually"}
+									</option>
+									{filteredNewProviderModels.map((model) => (
+										<option key={model} value={model}>
+											{model}
+										</option>
+									))}
+								</select>
+								<div className="flex gap-2">
+									<input
+										value={newProviderCustomModelInput}
+										onChange={(e) =>
+											setNewProviderCustomModelInput(
+												(e.target as HTMLInputElement).value
+											)
+										}
+										onKeyDown={(e) =>
+											e.key === "Enter" && handleAddCustomModel()
+										}
+										placeholder="Custom model ID"
+										className="input flex-1 text-xs"
+									/>
+									<button
+										type="button"
+										onClick={handleAddCustomModel}
+										disabled={!newProviderCustomModelInput.trim()}
+										className="btn btn-secondary text-xs"
+									>
+										Add Model
+									</button>
+								</div>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={() => void handleAddProvider()}
+										className="btn btn-primary text-xs"
+									>
+										Add
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											setShowAddForm(false);
+											resetAddForm();
+										}}
+										className="btn btn-secondary text-xs"
+									>
+										Cancel
+									</button>
+								</div>
+							</>
+						)}
+					</ModalShell>
+				</DialogContent>
+			</Dialog>
 
 			{providers.length === 0 ? (
 				<p className="text-xs text-(--text-muted)">No AI providers configured.</p>
@@ -1269,58 +1351,70 @@ function AISettingsSection() {
 									: "border-(--border-primary)"
 							}`}
 						>
-							{editingProvider?.id === provider.id ? (
-								<ProviderEditForm
-									provider={editingProvider}
-									requiresBaseURL={
-										providerById[editingProvider.type]?.requiresBaseURL ?? false
-									}
-									onSave={handleUpdateProvider}
-									onCancel={() => setEditingProvider(null)}
-								/>
-							) : (
-								<div className="flex items-center justify-between">
-									<div className="flex-1">
-										<p className="text-xs font-medium text-(--text-primary)">
-											{provider.name}
-										</p>
-										<p className="text-[10px] text-(--text-muted)">
-											{providerById[provider.type]?.displayName ??
-												provider.type}
-											{provider.baseURL && ` - ${provider.baseURL}`}
-										</p>
-									</div>
-									<div className="flex gap-1">
-										{activeProviderId !== provider.id && (
-											<button
-												type="button"
-												onClick={() => handleSetActive(provider.id)}
-												className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) hover:bg-(--bg-secondary)"
-											>
-												Set Active
-											</button>
-										)}
+							<div className="flex items-center justify-between">
+								<div className="flex-1">
+									<p className="text-xs font-medium text-(--text-primary)">
+										{provider.name}
+									</p>
+									<p className="text-[10px] text-(--text-muted)">
+										{providerById[provider.type]?.displayName ?? provider.type}
+										{provider.baseURL && ` - ${provider.baseURL}`}
+									</p>
+								</div>
+								<div className="flex gap-1">
+									{activeProviderId !== provider.id && (
 										<button
 											type="button"
-											onClick={() => setEditingProvider(provider)}
+											onClick={() => handleSetActive(provider.id)}
 											className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) hover:bg-(--bg-secondary)"
 										>
-											Edit
+											Set Active
 										</button>
-										<button
-											type="button"
-											onClick={() => handleDeleteProvider(provider.id)}
-											className="rounded px-1.5 py-0.5 text-[10px] text-(--danger) hover:bg-(--bg-secondary)"
-										>
-											Delete
-										</button>
-									</div>
+									)}
+									<button
+										type="button"
+										onClick={() => setEditingProvider(provider)}
+										className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) hover:bg-(--bg-secondary)"
+									>
+										Edit
+									</button>
+									<button
+										type="button"
+										onClick={() => handleDeleteProvider(provider.id)}
+										className="rounded px-1.5 py-0.5 text-[10px] text-(--danger) hover:bg-(--bg-secondary)"
+									>
+										Delete
+									</button>
 								</div>
-							)}
+							</div>
 						</div>
 					))}
 				</div>
 			)}
+			<Dialog
+				open={editingProvider !== null}
+				onOpenChange={(nextOpen) => {
+					if (!nextOpen) setEditingProvider(null);
+				}}
+			>
+				<DialogContent size="lg" className="p-0">
+					{editingProvider ? (
+						<ModalShell
+							title={`Edit ${editingProvider.name}`}
+							description="Update provider credentials, model list and defaults."
+						>
+							<ProviderEditForm
+								provider={editingProvider}
+								requiresBaseURL={
+									providerById[editingProvider.type]?.requiresBaseURL ?? false
+								}
+								onSave={handleUpdateProvider}
+								onCancel={() => setEditingProvider(null)}
+							/>
+						</ModalShell>
+					) : null}
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
@@ -1562,6 +1656,7 @@ function SettingsPanel({
 	const [gpuAcceleration, setGpuAcceleration] = useState(true);
 	const [devMode, setDevMode] = useState(false);
 	const [autoExpandSingleFolder, setAutoExpandSingleFolder] = useState(true);
+	const [showWorktreePanel, setShowWorktreePanel] = useState(true);
 	const signingConfigEntries = useMemo(() => {
 		return {
 			key: getLatestConfigEntry(effectiveConfig, "user.signingkey"),
@@ -1614,6 +1709,7 @@ function SettingsPanel({
 			setGpuAcceleration(s.gpuAcceleration ?? true);
 			setDevMode(s.devMode ?? false);
 			setAutoExpandSingleFolder(s.autoExpandSingleFolder ?? true);
+			setShowWorktreePanel(s.showWorktreePanel ?? true);
 		});
 		window.gitagen.settings.discoverGitBinaries().then(setGitBinaries);
 		window.gitagen.settings.getSshAgentInfo().then(setSshAgentInfo);
@@ -2187,6 +2283,31 @@ function SettingsPanel({
 										</span>
 									</label>
 								</div>
+								<div className="panel p-4">
+									<h3 className="mb-1 text-sm font-semibold text-(--text-primary)">
+										Show worktree panel
+									</h3>
+									<p className="mb-3 text-xs text-(--text-muted)">
+										Show the worktree panel at the bottom of the sidebar by
+										default. You can always toggle it using the chevron.
+									</p>
+									<label className="flex cursor-pointer items-center gap-2">
+										<input
+											type="checkbox"
+											checked={showWorktreePanel}
+											onChange={(e) => {
+												const v = (e.target as HTMLInputElement).checked;
+												setShowWorktreePanel(v);
+												void window.gitagen.settings.setGlobal({
+													showWorktreePanel: v,
+												});
+											}}
+										/>
+										<span className="text-sm text-(--text-secondary)">
+											Shown by default
+										</span>
+									</label>
+								</div>
 							</div>
 						)}
 						{activeTab === "dev" && (
@@ -2237,6 +2358,7 @@ function SettingsPanel({
 										gpuAcceleration,
 										devMode,
 										autoExpandSingleFolder,
+										showWorktreePanel,
 									});
 									await updateSettings({
 										uiScale,
@@ -2274,6 +2396,7 @@ export default function App() {
 		fontFamily: FontFamily;
 		devMode: boolean;
 		autoExpandSingleFolder: boolean;
+		showWorktreePanel: boolean;
 	}>({
 		uiScale: 1.0,
 		fontSize: 14,
@@ -2281,6 +2404,7 @@ export default function App() {
 		fontFamily: "system",
 		devMode: false,
 		autoExpandSingleFolder: true,
+		showWorktreePanel: true,
 	});
 
 	useEffect(() => {
@@ -2295,6 +2419,7 @@ export default function App() {
 					fontFamily: s?.fontFamily ?? "system",
 					devMode: s?.devMode ?? false,
 					autoExpandSingleFolder: s?.autoExpandSingleFolder ?? true,
+					showWorktreePanel: s?.showWorktreePanel ?? true,
 				});
 			})
 			.catch(() => {});

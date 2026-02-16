@@ -30,7 +30,7 @@ function parseOpenRepoArg(argv: string[]): string | null {
 
 async function handleOpenRepo(path: string, win: BrowserWindow): Promise<void> {
 	const resolvedPath = resolve(path);
-	const existing = getProjectByPath(resolvedPath);
+	const existing = await getProjectByPath(resolvedPath);
 	if (existing) {
 		win.webContents.send(EVENT_OPEN_REPO, {
 			projectId: existing.id,
@@ -40,13 +40,13 @@ async function handleOpenRepo(path: string, win: BrowserWindow): Promise<void> {
 		win.focus();
 		return;
 	}
-	const provider = createGitProvider(getAppSettings());
+	const provider = createGitProvider(await getAppSettings());
 	const worktrees = await provider.listWorktrees(resolvedPath);
 	const mainWorktree = worktrees.find((w) => w.isMainWorktree);
 	const mainPath = mainWorktree ? resolve(mainWorktree.path) : resolvedPath;
-	const parentProject = mainPath !== resolvedPath ? getProjectByPath(mainPath) : null;
+	const parentProject = mainPath !== resolvedPath ? await getProjectByPath(mainPath) : null;
 	if (parentProject) {
-		setProjectPrefs(parentProject.id, { activeWorktreePath: resolvedPath });
+		await setProjectPrefs(parentProject.id, { activeWorktreePath: resolvedPath });
 		win.webContents.send(EVENT_OPEN_REPO, {
 			projectId: parentProject.id,
 			worktreePath: resolvedPath,
@@ -55,7 +55,7 @@ async function handleOpenRepo(path: string, win: BrowserWindow): Promise<void> {
 		const id = randomUUID();
 		const now = Math.floor(Date.now() / 1000);
 		const name = resolvedPath.split("/").filter(Boolean).pop() || "repo";
-		insertProject(id, name, resolvedPath, now, now);
+		await insertProject(id, name, resolvedPath, now, now);
 		win.webContents.send(EVENT_OPEN_REPO, {
 			projectId: id,
 			worktreePath: undefined,
@@ -65,14 +65,13 @@ async function handleOpenRepo(path: string, win: BrowserWindow): Promise<void> {
 	win.focus();
 }
 
-// GPU acceleration must be configured before app is ready
-{
-	getDb();
-	const settings = getAppSettings();
-	if (!settings.gpuAcceleration) {
-		app.disableHardwareAcceleration();
-	}
-}
+// GPU acceleration must be configured before app is ready. Run async init immediately;
+// in practice it completes before app.ready fires.
+(async () => {
+	await getDb();
+	const s = await getAppSettings();
+	if (!s.gpuAcceleration) app.disableHardwareAcceleration();
+})();
 
 const RETENTION_INTERVAL_MS = 30 * 60 * 1000;
 const PRELOAD_PROJECT_COUNT = 5;
@@ -80,20 +79,23 @@ const PRELOAD_COMMIT_LIMIT = 10;
 let retentionInterval: NodeJS.Timeout | null = null;
 
 async function preloadRecentProjectLogs(): Promise<void> {
-	const projects = listProjects().slice(0, PRELOAD_PROJECT_COUNT);
+	const allProjects = await listProjects();
+	const projects = allProjects.slice(0, PRELOAD_PROJECT_COUNT);
 	if (projects.length === 0) return;
-	const provider = createGitProvider(getAppSettings());
-	for (const project of projects) {
-		try {
-			const prefs = getProjectPrefs(project.id);
+	const provider = createGitProvider(await getAppSettings());
+	await Promise.allSettled(
+		projects.map(async (project) => {
+			const prefs = await getProjectPrefs(project.id);
 			const cwd = prefs?.active_worktree_path?.trim() || project.path;
-			const commits = await provider.getLog(cwd, { limit: PRELOAD_COMMIT_LIMIT });
+			const [commits, unpushed] = await Promise.all([
+				provider.getLog(cwd, { limit: PRELOAD_COMMIT_LIMIT }),
+				provider.getUnpushedOids(cwd),
+			]);
 			const headOid = commits.length > 0 ? commits[0]!.oid : null;
-			setLogCache(project.id, JSON.stringify(commits), headOid);
-		} catch {
-			// Skip projects that fail (deleted repos, broken paths, etc.)
-		}
-	}
+			const unpushedJson = unpushed && unpushed.length > 0 ? JSON.stringify(unpushed) : null;
+			await setLogCache(project.id, JSON.stringify(commits), headOid, unpushedJson);
+		})
+	);
 }
 
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -197,18 +199,18 @@ function buildAppMenu(): void {
 	Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
 	ensureSshAuthSock();
-	getDb();
+	await getDb();
 
 	if (process.platform === "darwin" && app.dock) {
 		const dockIcon = nativeImage.createFromPath(getIconPath());
 		app.dock.setIcon(dockIcon);
 	}
 
-	const appSettings = getAppSettings();
+	const appSettings = await getAppSettings();
 	if (appSettings.gitBinaryPath && !validateGitBinary(appSettings.gitBinaryPath)) {
-		setAppSettings({ gitBinaryPath: null });
+		await setAppSettings({ gitBinaryPath: null });
 	}
 
 	registerProjectsHandlers();
@@ -228,8 +230,10 @@ app.whenReady().then(() => {
 	// Run cache retention and preload commit history after the window is created
 	// so startup stays responsive.
 	setTimeout(() => {
-		runRetention();
-		retentionInterval = setInterval(runRetention, RETENTION_INTERVAL_MS);
+		void runRetention();
+		retentionInterval = setInterval(() => {
+			void runRetention();
+		}, RETENTION_INTERVAL_MS);
 		retentionInterval.unref();
 		void preloadRecentProjectLogs();
 	}, 0);
@@ -248,5 +252,5 @@ app.on("quit", () => {
 		clearInterval(retentionInterval);
 		retentionInterval = null;
 	}
-	closeDb();
+	void closeDb();
 });

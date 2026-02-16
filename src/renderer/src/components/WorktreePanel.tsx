@@ -1,7 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
-import { GitBranchPlus, Trash2, Check } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { GitBranchPlus, Trash2, Check, ChevronDown } from "lucide-react";
 import type { AddWorktreeResult, BranchInfo, WorktreeInfo } from "../../../shared/types";
 import { useToast } from "../toast/provider";
+import { Dialog, DialogContent } from "./ui/dialog";
+import { ModalShell } from "./ui/modal-shell";
+
+const DRAG_HEIGHT_KEY = "gitagen:worktreePanel:height";
 
 interface WorktreePanelProps {
 	projectId: string;
@@ -10,6 +14,8 @@ interface WorktreePanelProps {
 	currentBranch: string;
 	activeWorktreePath: string | null;
 	onRefresh: () => void;
+	isCollapsed?: boolean;
+	onToggle?: () => void;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -19,6 +25,19 @@ function getErrorMessage(error: unknown, fallback: string): string {
 	return fallback;
 }
 
+function readStoredHeight(): number | null {
+	try {
+		const raw = localStorage.getItem(DRAG_HEIGHT_KEY);
+		if (raw) {
+			const v = parseInt(raw, 10);
+			if (Number.isFinite(v) && v > 0) return v;
+		}
+	} catch {
+		// ignore
+	}
+	return null;
+}
+
 export default function WorktreePanel({
 	projectId,
 	projectName: _projectName,
@@ -26,6 +45,8 @@ export default function WorktreePanel({
 	currentBranch,
 	activeWorktreePath,
 	onRefresh,
+	isCollapsed,
+	onToggle,
 }: WorktreePanelProps) {
 	const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -35,7 +56,53 @@ export default function WorktreePanel({
 	const [copyGitIgnores, setCopyGitIgnores] = useState(false);
 	const [pruning, setPruning] = useState(false);
 	const [removingPath, setRemovingPath] = useState<string | null>(null);
+	const [dragHeight, setDragHeight] = useState<number | null>(readStoredHeight);
+	const [isDragging, setIsDragging] = useState(false);
+	const containerRef = useRef<HTMLDivElement>(null);
 	const { toast } = useToast();
+
+	const handleDragStart = useCallback(
+		(e: React.MouseEvent) => {
+			e.preventDefault();
+			const startY = e.clientY;
+			const container = containerRef.current;
+			if (!container) return;
+			const startHeight = container.getBoundingClientRect().height;
+			setIsDragging(true);
+
+			const onMouseMove = (ev: MouseEvent) => {
+				const delta = startY - ev.clientY;
+				const next = Math.max(40, Math.round(startHeight + delta));
+				setDragHeight(next);
+			};
+			const onMouseUp = () => {
+				setIsDragging(false);
+				document.removeEventListener("mousemove", onMouseMove);
+				document.removeEventListener("mouseup", onMouseUp);
+				const container = containerRef.current;
+				if (container) {
+					const h = Math.round(container.getBoundingClientRect().height);
+					try {
+						localStorage.setItem(DRAG_HEIGHT_KEY, String(h));
+					} catch {
+						// ignore
+					}
+				}
+			};
+			document.addEventListener("mousemove", onMouseMove);
+			document.addEventListener("mouseup", onMouseUp);
+		},
+		[]
+	);
+
+	const handleDragReset = useCallback(() => {
+		setDragHeight(null);
+		try {
+			localStorage.removeItem(DRAG_HEIGHT_KEY);
+		} catch {
+			// ignore
+		}
+	}, []);
 
 	const isModifiedWorktreeError = (error: unknown): boolean => {
 		const message = getErrorMessage(error, "").toLowerCase();
@@ -253,14 +320,103 @@ export default function WorktreePanel({
 		}
 	};
 
-	if (loading) {
-		return <div className="p-3 text-xs text-(--text-muted)">Loading worktrees...</div>;
+	const addFormContent = (
+		<DialogContent size="sm" className="p-0">
+			<ModalShell
+				title="Create worktree"
+				description="Create a new worktree from an existing branch or create one from the current branch."
+				bodyClassName="space-y-3"
+				footer={
+					<>
+						<button
+							type="button"
+							onClick={() => setShowAddForm(false)}
+							disabled={adding}
+							className="btn btn-secondary"
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							onClick={() => void handleAdd()}
+							disabled={adding}
+							className="btn btn-primary"
+						>
+							{adding ? "Creating..." : "Create"}
+						</button>
+					</>
+				}
+			>
+				<div>
+					<label className="mb-1 block text-xs font-medium text-(--text-muted)">
+						Branch
+					</label>
+					<input
+						type="text"
+						value={addBranch}
+						onChange={(e) => setAddBranch(e.target.value)}
+						placeholder="feature/my-worktree"
+						className="input h-9 text-xs"
+						disabled={adding}
+					/>
+				</div>
+				<label className="flex cursor-pointer items-center gap-2 text-[12px] text-(--text-secondary)">
+					<input
+						type="checkbox"
+						checked={copyGitIgnores}
+						onChange={(e) => setCopyGitIgnores(e.target.checked)}
+						disabled={adding}
+					/>
+					Copy .gitignore files into the new worktree
+				</label>
+			</ModalShell>
+		</DialogContent>
+	);
+
+	if (isCollapsed) {
+		return (
+			<Dialog
+				open={showAddForm}
+				onOpenChange={(nextOpen) => {
+					if (!adding) setShowAddForm(nextOpen);
+				}}
+			>
+				{addFormContent}
+			</Dialog>
+		);
 	}
 
+	const containerStyle: React.CSSProperties | undefined =
+		dragHeight !== null ? { maxHeight: dragHeight } : undefined;
+
 	return (
-		<div className="px-2 py-2">
-			<div className="mb-1.5 flex items-center justify-between px-1">
-				<span className="section-title">Worktrees</span>
+		<div
+			ref={containerRef}
+			className="flex shrink-0 flex-col border-t border-(--border-secondary)"
+			style={containerStyle}
+		>
+			{/* Drag handle */}
+			<div
+				role="separator"
+				aria-orientation="horizontal"
+				onMouseDown={handleDragStart}
+				onDoubleClick={handleDragReset}
+				className={`worktree-drag-handle ${isDragging ? "active" : ""}`}
+			/>
+			{/* Header */}
+			<div className="flex shrink-0 items-center justify-between px-3 py-1.5">
+				<button
+					type="button"
+					onClick={onToggle}
+					className="flex items-center gap-1 text-left outline-none"
+					title="Hide worktrees"
+				>
+					<ChevronDown
+						size={12}
+						className="shrink-0 text-(--text-muted) transition-transform duration-150"
+					/>
+					<span className="section-title">Worktrees</span>
+				</button>
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
@@ -283,105 +439,85 @@ export default function WorktreePanel({
 					</button>
 				</div>
 			</div>
-			{showAddForm && (
-				<div className="mb-2 rounded-md border border-(--border-secondary) bg-(--bg-secondary) p-2">
-					<label className="mb-1 block text-[10px] font-medium text-(--text-muted)">
-						Branch
-					</label>
-					<input
-						type="text"
-						value={addBranch}
-						onChange={(e) => setAddBranch(e.target.value)}
-						placeholder="feature/my-worktree"
-						className="input mb-2 h-8 text-xs"
-						disabled={adding}
-					/>
-					<label className="mb-2 flex cursor-pointer items-center gap-2 text-[11px] text-(--text-secondary)">
-						<input
-							type="checkbox"
-							checked={copyGitIgnores}
-							onChange={(e) => setCopyGitIgnores(e.target.checked)}
-							disabled={adding}
-						/>
-						Copy .gitignore files into the new worktree
-					</label>
-					<div className="flex items-center justify-end gap-1.5">
-						<button
-							type="button"
-							onClick={() => setShowAddForm(false)}
-							disabled={adding}
-							className="btn btn-secondary h-7 px-2 text-[11px]"
-						>
-							Cancel
-						</button>
-						<button
-							type="button"
-							onClick={() => void handleAdd()}
-							disabled={adding}
-							className="btn btn-primary h-7 px-2 text-[11px]"
-						>
-							{adding ? "Creating..." : "Create"}
-						</button>
+			{/* Scrollable content area */}
+			<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+				{loading ? (
+					<div className="px-1 py-1 text-xs text-(--text-muted)">
+						Loading worktrees...
 					</div>
-				</div>
-			)}
-			<div className="space-y-0.5">
-				{worktrees.map((w) => {
-					const name = w.name ?? w.path.split("/").pop();
-					const isActive =
-						(activeWorktreePath && w.path === activeWorktreePath) ||
-						(!activeWorktreePath && w.isMainWorktree);
-					return (
-						<div
-							key={w.path}
-							className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 ${
-								isActive ? "bg-(--bg-active)" : "hover:bg-(--bg-hover)"
-							}`}
-						>
-							<span
-								className={`shrink-0 ${isActive ? "text-(--text-muted)" : "invisible"}`}
-							>
-								<Check size={11} />
-							</span>
-							<div className="min-w-0 flex-1">
-								<p className="truncate text-[11px] font-medium text-(--text-primary)">
-									{name}
-								</p>
-								<p className="truncate text-[10px] text-(--text-subtle)">
-									{w.branch}
-								</p>
-							</div>
-							<div className="flex shrink-0 gap-0.5">
-								{!isActive && (
-									<button
-										type="button"
-										onClick={() => {
-											window.gitagen.settings.setProjectPrefs(projectId, {
-												activeWorktreePath: w.path,
-											});
-											onRefresh();
-										}}
-										className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) outline-none hover:bg-(--bg-tertiary) hover:text-(--text-primary)"
+				) : (
+					<div className="space-y-0.5">
+						{worktrees.map((w) => {
+							const name = w.name ?? w.path.split("/").pop();
+							const isActive =
+								(activeWorktreePath && w.path === activeWorktreePath) ||
+								(!activeWorktreePath && w.isMainWorktree);
+							return (
+								<div
+									key={w.path}
+									className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 ${
+										isActive
+											? "bg-(--bg-active)"
+											: "hover:bg-(--bg-hover)"
+									}`}
+								>
+									<span
+										className={`shrink-0 ${isActive ? "text-(--text-muted)" : "invisible"}`}
 									>
-										Switch
-									</button>
-								)}
-								{!w.isMainWorktree && (
-									<button
-										type="button"
-										onClick={() => void handleRemove(w.path)}
-										disabled={removingPath === w.path}
-										className="rounded p-0.5 text-(--text-muted) outline-none hover:bg-(--danger-bg) hover:text-(--danger)"
-										title="Remove worktree"
-									>
-										<Trash2 size={11} />
-									</button>
-								)}
-							</div>
-						</div>
-					);
-				})}
+										<Check size={11} />
+									</span>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-[11px] font-medium text-(--text-primary)">
+											{name}
+										</p>
+										<p className="truncate text-[10px] text-(--text-subtle)">
+											{w.branch}
+										</p>
+									</div>
+									<div className="flex shrink-0 gap-0.5">
+										{!isActive && (
+											<button
+												type="button"
+												onClick={() => {
+													window.gitagen.settings.setProjectPrefs(
+														projectId,
+														{
+															activeWorktreePath: w.path,
+														}
+													);
+													onRefresh();
+												}}
+												className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) outline-none hover:bg-(--bg-tertiary) hover:text-(--text-primary)"
+											>
+												Switch
+											</button>
+										)}
+										{!w.isMainWorktree && (
+											<button
+												type="button"
+												onClick={() => void handleRemove(w.path)}
+												disabled={removingPath === w.path}
+												className="rounded p-0.5 text-(--text-muted) outline-none hover:bg-(--danger-bg) hover:text-(--danger)"
+												title="Remove worktree"
+											>
+												<Trash2 size={11} />
+											</button>
+										)}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				)}
 			</div>
+			<Dialog
+				open={showAddForm}
+				onOpenChange={(nextOpen) => {
+					if (!adding) setShowAddForm(nextOpen);
+				}}
+			>
+				{addFormContent}
+			</Dialog>
 		</div>
 	);
 }

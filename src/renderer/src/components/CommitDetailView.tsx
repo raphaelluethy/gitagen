@@ -136,10 +136,10 @@ export default function CommitDetailView({
 								<code
 									className="mt-1 inline-block cursor-pointer font-mono text-[11px] text-(--text-muted) transition-colors hover:text-(--text-primary)"
 									title="Copy commit hash"
-								onClick={() => {
-									navigator.clipboard.writeText(detail.oid);
-									toast.success("Copied", detail.oid.slice(0, 7));
-								}}
+									onClick={() => {
+										navigator.clipboard.writeText(detail.oid);
+										toast.success("Copied", detail.oid.slice(0, 7));
+									}}
 								>
 									{detail.oid}
 								</code>

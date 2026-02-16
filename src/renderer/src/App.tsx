@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer, Component, type ReactNode, type ErrorInfo } from "react";
 import {
 	Group,
 	Panel,
@@ -86,6 +86,59 @@ const CONTENT_LAYOUT_FALLBACK = [70, 30];
 const LAST_PROJECT_KEY = "gitagen:lastProjectId";
 
 type Layout = { [id: string]: number };
+
+interface RepoState {
+	status: RepoStatus | null;
+	currentBranchInfo: BranchInfo | null;
+	remotes: RemoteInfo[];
+	activeWorktreePath: string | null;
+	cachedLog: {
+		projectId: string;
+		commits: CommitInfo[];
+		unpushedOids: string[] | null;
+	} | null;
+}
+
+type RepoAction =
+	| { type: "SET_STATUS"; payload: RepoStatus | null }
+	| { type: "SET_BRANCH_INFO"; payload: BranchInfo | null }
+	| { type: "SET_REMOTES"; payload: RemoteInfo[] }
+	| { type: "SET_WORKTREE_PATH"; payload: string | null }
+	| { type: "SET_CACHED_LOG"; payload: RepoState["cachedLog"] }
+	| { type: "CLEAR_REPO_STATE" };
+
+function repoReducer(state: RepoState, action: RepoAction): RepoState {
+	switch (action.type) {
+		case "SET_STATUS":
+			return { ...state, status: action.payload };
+		case "SET_BRANCH_INFO":
+			return { ...state, currentBranchInfo: action.payload };
+		case "SET_REMOTES":
+			return { ...state, remotes: action.payload };
+		case "SET_WORKTREE_PATH":
+			return { ...state, activeWorktreePath: action.payload };
+		case "SET_CACHED_LOG":
+			return { ...state, cachedLog: action.payload };
+		case "CLEAR_REPO_STATE":
+			return {
+				status: null,
+				currentBranchInfo: null,
+				remotes: [],
+				activeWorktreePath: null,
+				cachedLog: null,
+			};
+		default:
+			return state;
+	}
+}
+
+const initialRepoState: RepoState = {
+	status: null,
+	currentBranchInfo: null,
+	remotes: [],
+	activeWorktreePath: null,
+	cachedLog: null,
+};
 
 function sanitizeTwoPanelLayout(
 	layout: unknown,
@@ -175,20 +228,66 @@ function getLatestConfigEntry(entries: ConfigEntry[], key: string): ConfigEntry 
 	return null;
 }
 
+interface ErrorBoundaryProps {
+	children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+	hasError: boolean;
+	error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+	constructor(props: ErrorBoundaryProps) {
+		super(props);
+		this.state = { hasError: false, error: null };
+	}
+
+	static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+		return { hasError: true, error };
+	}
+
+	componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+		console.error("[ErrorBoundary] Uncaught error:", error, errorInfo);
+	}
+
+	render(): ReactNode {
+		if (this.state.hasError) {
+			return (
+				<div className="flex h-screen flex-col items-center justify-center gap-4 bg-(--bg-primary) p-8">
+					<h1 className="text-lg font-semibold text-(--text-primary)">Something went wrong</h1>
+					<p className="max-w-md text-center text-sm text-(--text-muted)">
+						An unexpected error occurred. Please restart the application.
+					</p>
+					<details className="w-full max-w-md">
+						<summary className="cursor-pointer text-xs text-(--text-muted)">Error details</summary>
+						<pre className="mt-2 overflow-auto rounded bg-(--bg-secondary) p-2 text-xs text-(--danger)">
+							{this.state.error?.message}
+							{"\n"}
+							{this.state.error?.stack}
+						</pre>
+					</details>
+					<button
+						type="button"
+						onClick={() => window.location.reload()}
+						className="btn btn-primary"
+					>
+						Restart App
+					</button>
+				</div>
+			);
+		}
+
+		return this.props.children;
+	}
+}
+
 function AppContent() {
 	const { toast } = useToast();
 	const { settings: appSettings } = useSettings();
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [activeProject, setActiveProject] = useState<Project | null>(null);
-	const [status, setStatus] = useState<RepoStatus | null>(null);
-	const [currentBranchInfo, setCurrentBranchInfo] = useState<BranchInfo | null>(null);
-	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
-	const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
-	const [cachedLog, setCachedLog] = useState<{
-		projectId: string;
-		commits: CommitInfo[];
-		unpushedOids: string[] | null;
-	} | null>(null);
+	const [repoState, dispatch] = useReducer(repoReducer, initialRepoState);
 	const [selectedFile, setSelectedFile] = useState<GitFileStatus | null>(null);
 	const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
 	const [viewMode, setViewMode] = useState<ViewMode>("single");
@@ -206,6 +305,8 @@ function AppContent() {
 	);
 	const rightPanelRef = useRef<PanelImperativeHandle>(null);
 	const leftPanelRef = useRef<PanelImperativeHandle>(null);
+
+	const { status, currentBranchInfo, remotes, activeWorktreePath, cachedLog } = repoState;
 
 	const mainLayout = useDefaultLayout({
 		id: "gitagen-main-layout-v4",
@@ -267,14 +368,18 @@ function AppContent() {
 		setIsWorktreePanelCollapsed((prev) => !prev);
 	}, []);
 
+	const handleViewAll = useCallback(() => {
+		setViewMode("all");
+	}, []);
+
 	const refreshStatus = useCallback(() => {
 		if (!activeProject) return;
 		window.gitagen.repo.openProject(activeProject.id).then((data) => {
 			if (!data) return;
-			setStatus(data.status);
-			setActiveWorktreePath(data.prefs?.activeWorktreePath ?? null);
-			setCurrentBranchInfo(data.branches.find((b) => b.current) ?? null);
-			setRemotes(data.remotes);
+			dispatch({ type: "SET_STATUS", payload: data.status });
+			dispatch({ type: "SET_WORKTREE_PATH", payload: data.prefs?.activeWorktreePath ?? null });
+			dispatch({ type: "SET_BRANCH_INFO", payload: data.branches.find((b) => b.current) ?? null });
+			dispatch({ type: "SET_REMOTES", payload: data.remotes });
 		});
 	}, [activeProject?.id]);
 	const refreshStatusAndPrefs = refreshStatus;
@@ -304,27 +409,26 @@ function AppContent() {
 
 	useEffect(() => {
 		if (!activeProject) {
-			setStatus(null);
-			setCurrentBranchInfo(null);
-			setRemotes([]);
-			setActiveWorktreePath(null);
-			setCachedLog(null);
+			dispatch({ type: "CLEAR_REPO_STATE" });
 			setSelectedFile(null);
 			setSelectedCommitOid(null);
 			return;
 		}
-		setCachedLog(null);
+		dispatch({ type: "SET_CACHED_LOG", payload: null });
 		window.gitagen.repo.openProject(activeProject.id).then((data) => {
 			if (!data) return;
-			setStatus(data.status);
-			setActiveWorktreePath(data.prefs?.activeWorktreePath ?? null);
-			setCurrentBranchInfo(data.branches.find((b) => b.current) ?? null);
-			setRemotes(data.remotes);
+			dispatch({ type: "SET_STATUS", payload: data.status });
+			dispatch({ type: "SET_WORKTREE_PATH", payload: data.prefs?.activeWorktreePath ?? null });
+			dispatch({ type: "SET_BRANCH_INFO", payload: data.branches.find((b) => b.current) ?? null });
+			dispatch({ type: "SET_REMOTES", payload: data.remotes });
 			if (data.cachedLog && data.cachedLog.length > 0) {
-				setCachedLog({
-					projectId: activeProject.id,
-					commits: data.cachedLog,
-					unpushedOids: data.cachedUnpushedOids,
+				dispatch({
+					type: "SET_CACHED_LOG",
+					payload: {
+						projectId: activeProject.id,
+						commits: data.cachedLog,
+						unpushedOids: data.cachedUnpushedOids,
+					},
 				});
 			}
 		});
@@ -579,6 +683,21 @@ function AppContent() {
 		);
 	}
 
+	if (showSettings) {
+		return withPalette(
+			<div className="flex h-screen flex-col bg-(--bg-primary) animate-fade-in">
+				<SettingsPanel
+					projectId={activeProject.id}
+					activeTabOverride={settingsTabOverride}
+					onClose={() => {
+						setShowSettings(false);
+						setSettingsTabOverride(null);
+					}}
+				/>
+			</div>
+		);
+	}
+
 	if (!gitStatus) {
 		return withPalette(
 			<div className="flex h-screen flex-col items-center justify-center gap-4 bg-(--bg-primary)">
@@ -592,21 +711,6 @@ function AppContent() {
 				>
 					Back to projects
 				</button>
-			</div>
-		);
-	}
-
-	if (showSettings) {
-		return withPalette(
-			<div className="flex h-screen flex-col bg-(--bg-primary) animate-fade-in">
-				<SettingsPanel
-					projectId={activeProject.id}
-					activeTabOverride={settingsTabOverride}
-					onClose={() => {
-						setShowSettings(false);
-						setSettingsTabOverride(null);
-					}}
-				/>
 			</div>
 		);
 	}
@@ -645,9 +749,7 @@ function AppContent() {
 							activeProject={activeProject}
 							onProjectChange={setActiveProject}
 							onAddProject={handleAddProject}
-							onViewAll={() => {
-								setViewMode("all");
-							}}
+							onViewAll={handleViewAll}
 						/>
 					</div>
 					{isWorktreePanelCollapsed ? (
@@ -683,6 +785,7 @@ function AppContent() {
 								onClick={toggleLeftPanel}
 								className="btn-icon rounded-md p-1.5"
 								title={isLeftPanelCollapsed ? "Show panel" : "Hide panel"}
+								aria-label={isLeftPanelCollapsed ? "Show sidebar panel" : "Hide sidebar panel"}
 							>
 								{isLeftPanelCollapsed ? (
 									<PanelLeft size={15} />
@@ -705,13 +808,14 @@ function AppContent() {
 							/>
 						</div>
 						<div className="mx-1 hidden h-4 w-px bg-(--border-secondary) sm:block" />
-						<div className="hidden items-center tab-bar sm:flex">
+						<div className="hidden items-center tab-bar sm:flex" role="tablist" aria-label="View mode">
 							<button
 								type="button"
 								onClick={() => setViewMode("single")}
 								title="Single file view"
 								className="tab-item"
-								data-active={viewMode === "single"}
+								role="tab"
+								aria-selected={viewMode === "single"}
 							>
 								<FileText size={14} />
 							</button>
@@ -720,18 +824,20 @@ function AppContent() {
 								onClick={() => setViewMode("all")}
 								title="All changes view"
 								className="tab-item"
-								data-active={viewMode === "all"}
+								role="tab"
+								aria-selected={viewMode === "all"}
 							>
 								<FileStack size={14} />
 							</button>
 						</div>
-						<div className="hidden items-center tab-bar md:flex">
+						<div className="hidden items-center tab-bar md:flex" role="tablist" aria-label="Diff style">
 							<button
 								type="button"
 								onClick={() => setDiffStyle("unified")}
 								title="Unified diff"
 								className="tab-item"
-								data-active={diffStyle === "unified"}
+								role="tab"
+								aria-selected={diffStyle === "unified"}
 							>
 								<Rows3 size={14} />
 							</button>
@@ -740,7 +846,8 @@ function AppContent() {
 								onClick={() => setDiffStyle("split")}
 								title="Split diff"
 								className="tab-item"
-								data-active={diffStyle === "split"}
+								role="tab"
+								aria-selected={diffStyle === "split"}
 							>
 								<Columns size={14} />
 							</button>
@@ -759,6 +866,7 @@ function AppContent() {
 								onClick={toggleRightPanel}
 								className="btn-icon rounded-md p-1.5"
 								title={isRightPanelCollapsed ? "Show panel" : "Hide panel"}
+								aria-label={isRightPanelCollapsed ? "Show right panel" : "Hide right panel"}
 							>
 								{isRightPanelCollapsed ? (
 									<PanelRight size={15} />
@@ -774,6 +882,7 @@ function AppContent() {
 								}}
 								className="btn-icon rounded-md p-1.5"
 								title="Settings"
+								aria-label="Open settings"
 							>
 								<Settings size={15} />
 							</button>
@@ -854,12 +963,13 @@ function AppContent() {
 							}}
 						>
 							<div className="flex min-h-0 flex-1 flex-col">
-								<div className="flex shrink-0 tab-bar border-b border-(--border-secondary) mx-2 mt-2">
+								<div className="flex shrink-0 tab-bar border-b border-(--border-secondary) mx-2 mt-2" role="tablist" aria-label="Right panel tabs">
 									<button
 										type="button"
 										onClick={() => setRightTab("log")}
 										className="tab-item flex-1"
-										data-active={rightTab === "log"}
+										role="tab"
+										aria-selected={rightTab === "log"}
 									>
 										<History size={13} />
 										<span className="hidden lg:inline text-[11px]">Log</span>
@@ -868,7 +978,8 @@ function AppContent() {
 										type="button"
 										onClick={() => setRightTab("stash")}
 										className="tab-item flex-1"
-										data-active={rightTab === "stash"}
+										role="tab"
+										aria-selected={rightTab === "stash"}
 									>
 										<Archive size={13} />
 										<span className="hidden lg:inline text-[11px]">Stash</span>
@@ -877,7 +988,8 @@ function AppContent() {
 										type="button"
 										onClick={() => setRightTab("remote")}
 										className="tab-item flex-1"
-										data-active={rightTab === "remote"}
+										role="tab"
+										aria-selected={rightTab === "remote"}
 									>
 										<Cloud size={13} />
 										<span className="hidden lg:inline text-[11px]">Remote</span>
@@ -976,10 +1088,15 @@ function AISettingsSection() {
 	const loadProviderTypes = useCallback(async () => {
 		const list = await window.gitagen.settings.listAIProviders();
 		setProviderTypes(list);
-		if (list.length > 0 && !list.some((provider) => provider.id === newProviderType)) {
-			setNewProviderType(list[0].id);
+		if (list.length > 0) {
+			setNewProviderType((current) => {
+				if (list.some((provider) => provider.id === current)) {
+					return current;
+				}
+				return list[0]!.id;
+			});
 		}
-	}, [newProviderType]);
+	}, []);
 
 	const loadProviders = useCallback(async () => {
 		const settings = await window.gitagen.settings.getGlobalWithKeys();
@@ -1031,24 +1148,6 @@ function AISettingsSection() {
 		},
 		[newProviderApiKey, newProviderBaseURL, newProviderType, requiresBaseURL]
 	);
-
-	useEffect(() => {
-		if (!showAddForm) return;
-		if (!newProviderApiKey.trim()) return;
-		if (requiresBaseURL && !newProviderBaseURL.trim()) return;
-
-		const timer = window.setTimeout(() => {
-			void handleFetchNewProviderModels({ silent: true });
-		}, 400);
-
-		return () => window.clearTimeout(timer);
-	}, [
-		handleFetchNewProviderModels,
-		newProviderApiKey,
-		newProviderBaseURL,
-		requiresBaseURL,
-		showAddForm,
-	]);
 
 	const handleAddCustomModel = () => {
 		const custom = newProviderCustomModelInput.trim();
@@ -1183,7 +1282,9 @@ function AISettingsSection() {
 				open={showAddForm}
 				onOpenChange={(nextOpen) => {
 					setShowAddForm(nextOpen);
-					if (!nextOpen) resetAddForm();
+					if (!nextOpen) {
+						setModelError(null);
+					}
 				}}
 			>
 				<DialogContent size="lg" className="p-0">
@@ -1484,18 +1585,6 @@ function ProviderEditForm({
 		},
 		[apiKey, baseURL, provider.type, requiresBaseURL]
 	);
-
-	useEffect(() => {
-		if (!apiKey.trim()) return;
-		if (requiresBaseURL && !baseURL.trim()) return;
-		if (models.length > 0) return;
-
-		const timer = window.setTimeout(() => {
-			void handleFetchModels({ silent: true });
-		}, 400);
-
-		return () => window.clearTimeout(timer);
-	}, [apiKey, baseURL, handleFetchModels, models.length, requiresBaseURL]);
 
 	const handleAddCustomModel = () => {
 		const custom = customModelInput.trim();
@@ -2429,7 +2518,9 @@ export default function App() {
 		<ThemeProvider initialTheme={initialTheme}>
 			<SettingsProvider initialSettings={initialSettings}>
 				<ToastProvider>
-					<AppContent />
+					<ErrorBoundary>
+						<AppContent />
+					</ErrorBoundary>
 					<FpsMonitor enabled={initialSettings.devMode} />
 				</ToastProvider>
 			</SettingsProvider>

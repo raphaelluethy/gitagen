@@ -19,8 +19,15 @@
 		"postinstall": "electron-rebuild -f -w better-sqlite3"
 	},
 	"dependencies": {
+		"@ai-sdk/anthropic": "^3.0.44",
+		"@ai-sdk/cerebras": "^2.0.33",
+		"@ai-sdk/fireworks": "^2.0.34",
+		"@ai-sdk/openai": "^3.0.29",
+		"@ai-sdk/openai-compatible": "^2.0.30",
 		"@pierre/diffs": "^1.0.11",
+		"ai": "^6.0.86",
 		"better-sqlite3": "^12.6.2",
+		"keytar": "^7.9.0",
 		"lucide-react": "^0.564.0",
 		"react": "^19.2.4",
 		"react-dom": "^19.2.4",

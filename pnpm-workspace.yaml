@@ -1,3 +1,5 @@
 onlyBuiltDependencies:
     - electron
     - esbuild
+    - better-sqlite3
+    - keytar

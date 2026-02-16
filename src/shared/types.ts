@@ -40,10 +40,12 @@ export interface AppSettings {
 	theme: "dark" | "light" | "system";
 	signing: {
 		enabled: boolean;
-		format: "ssh" | "gpg";
 		key: string;
-		use1PasswordAgent: boolean;
 	};
+	ai: AISettings;
+	uiScale: number;
+	fontSize: number;
+	commitMessageFontSize: number;
 }
 
 export interface Project {
@@ -143,4 +145,30 @@ export interface ConfigEntry {
 	value: string;
 	origin: string;
 	scope: "system" | "global" | "local" | "worktree";
+}
+
+// --- AI Provider Types ---
+
+export type AIProviderType = string;
+
+export interface AIProviderDescriptor {
+	id: AIProviderType;
+	displayName: string;
+	requiresBaseURL: boolean;
+}
+
+export interface AIProviderInstance {
+	id: string;
+	name: string;
+	type: AIProviderType;
+	enabled: boolean;
+	apiKey: string;
+	baseURL?: string;
+	defaultModel: string;
+	models: string[];
+}
+
+export interface AISettings {
+	activeProviderId: string | null;
+	providers: AIProviderInstance[];
 }

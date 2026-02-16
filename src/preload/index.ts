@@ -13,6 +13,7 @@ import type {
 	ConflictState,
 	WorktreeInfo,
 	ConfigEntry,
+	AIProviderDescriptor,
 } from "../shared/types.js";
 
 const EVENT_REPO_UPDATED = "events:repoUpdated";
@@ -144,12 +145,8 @@ const repo = {
 		ipcRenderer.invoke("repo:getEffectiveConfig", projectId),
 	setLocalConfig: (projectId: string, key: string, value: string): Promise<void> =>
 		ipcRenderer.invoke("repo:setLocalConfig", projectId, key, value),
-	testSigning: (
-		projectId: string,
-		format: "ssh" | "gpg",
-		key: string
-	): Promise<{ ok: boolean; message: string }> =>
-		ipcRenderer.invoke("repo:testSigning", projectId, format, key),
+	testSigning: (projectId: string, key: string): Promise<{ ok: boolean; message: string }> =>
+		ipcRenderer.invoke("repo:testSigning", projectId, key),
 	listWorktrees: (projectId: string): Promise<WorktreeInfo[]> =>
 		ipcRenderer.invoke("repo:listWorktrees", projectId),
 	addWorktree: (projectId: string, branch: string, newBranch?: string): Promise<string> =>
@@ -162,6 +159,7 @@ const repo = {
 
 const settings = {
 	getGlobal: (): Promise<AppSettings> => ipcRenderer.invoke("settings:getGlobal"),
+	getGlobalWithKeys: (): Promise<AppSettings> => ipcRenderer.invoke("settings:getGlobalWithKeys"),
 	setGlobal: (partial: Partial<AppSettings>): Promise<AppSettings> =>
 		ipcRenderer.invoke("settings:setGlobal", partial),
 	getProjectPrefs: (projectId: string): Promise<ProjectPrefs | null> =>
@@ -174,6 +172,14 @@ const settings = {
 		ipcRenderer.invoke("settings:getSshAgentInfo"),
 	selectGitBinary: (): Promise<string | null> => ipcRenderer.invoke("settings:selectGitBinary"),
 	selectFolder: (): Promise<string | null> => ipcRenderer.invoke("settings:selectFolder"),
+	fetchModels: (
+		type: string,
+		apiKey: string,
+		baseURL?: string
+	): Promise<{ success: boolean; models: string[]; error?: string }> =>
+		ipcRenderer.invoke("settings:fetchModels", type, apiKey, baseURL),
+	listAIProviders: (): Promise<AIProviderDescriptor[]> =>
+		ipcRenderer.invoke("settings:listAIProviders"),
 };
 
 const events = {

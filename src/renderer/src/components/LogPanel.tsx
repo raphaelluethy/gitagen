@@ -101,7 +101,6 @@ export default function LogPanel({
 	const [hasMore, setHasMore] = useState(true);
 	const [undoing, setUndoing] = useState(false);
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const loadingMoreRef = useRef(false);
 
 	// Delay the spinner so cached data has time to arrive before any flash
 	useEffect(() => {
@@ -131,7 +130,9 @@ export default function LogPanel({
 					}
 					setHasMore(logData.length >= PAGE_SIZE);
 				})
-				.catch(() => {})
+				.catch((error) => {
+					console.error("[LogPanel] Failed to refresh first page:", error);
+				})
 				.finally(() => setLoading(false));
 		},
 		[projectId]
@@ -139,33 +140,30 @@ export default function LogPanel({
 
 	// Load the next page of commits (appended to the end)
 	const loadNextPage = useCallback(() => {
-		if (loadingMoreRef.current || !hasMore) return;
-		loadingMoreRef.current = true;
+		if (loadingMore || !hasMore) return;
 		setLoadingMore(true);
 
-		setCommits((prev) => {
-			const offset = prev.length;
-			window.gitagen.repo
-				.getLog(projectId, { limit: PAGE_SIZE, offset })
-				.then((page) => {
-					if (page.length > 0) {
-						const annotated = annotateWithPushedStatus(page, unpushedOids);
-						setCommits((current) => {
-							const existingOids = new Set(current.map((c) => c.oid));
-							const newItems = annotated.filter((c) => !existingOids.has(c.oid));
-							return [...current, ...newItems];
-						});
-					}
-					setHasMore(page.length >= PAGE_SIZE);
-				})
-				.catch(() => {})
-				.finally(() => {
-					loadingMoreRef.current = false;
-					setLoadingMore(false);
-				});
-			return prev;
-		});
-	}, [projectId, hasMore, unpushedOids]);
+		const offset = commits.length;
+		window.gitagen.repo
+			.getLog(projectId, { limit: PAGE_SIZE, offset })
+			.then((page) => {
+				if (page.length > 0) {
+					const annotated = annotateWithPushedStatus(page, unpushedOids);
+					setCommits((current) => {
+						const existingOids = new Set(current.map((c) => c.oid));
+						const newItems = annotated.filter((c) => !existingOids.has(c.oid));
+						return [...current, ...newItems];
+					});
+				}
+				setHasMore(page.length >= PAGE_SIZE);
+			})
+			.catch((error) => {
+				console.error("[LogPanel] Failed to load next page:", error);
+			})
+			.finally(() => {
+				setLoadingMore(false);
+			});
+	}, [projectId, hasMore, unpushedOids, loadingMore, commits.length]);
 
 	const handleUndoLastCommit = useCallback(async () => {
 		const first = commits[0];
@@ -235,10 +233,10 @@ export default function LogPanel({
 	useEffect(() => {
 		if (!lastItem) return;
 		// Trigger when within 5 items of the end
-		if (lastItem.index >= commits.length - 5 && hasMore && !loadingMoreRef.current) {
+		if (lastItem.index >= commits.length - 5 && hasMore && !loadingMore) {
 			loadNextPage();
 		}
-	}, [lastItem?.index, commits.length, hasMore, loadNextPage]);
+	}, [lastItem?.index, commits.length, hasMore, loadingMore, loadNextPage]);
 
 	if (showSpinner && commits.length === 0) {
 		return (

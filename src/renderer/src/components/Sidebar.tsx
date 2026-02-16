@@ -1,8 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
 	ChevronRight,
 	ChevronDown,
-	ChevronsDownUp,
 	ChevronLeft,
 	File,
 	Folder,
@@ -17,6 +16,7 @@ import {
 import type { GitStatus, GitFileStatus } from "../../../shared/types";
 import type { Project } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
+import { useSettings } from "../settings/provider";
 
 interface SidebarProps {
 	projectId: string;
@@ -319,6 +319,7 @@ function FileTreeSection({
 	expandedFolders,
 	onToggleFolder,
 	onExpandAll,
+	onFoldAll,
 	onViewAll,
 }: {
 	projectId: string;
@@ -332,9 +333,28 @@ function FileTreeSection({
 	expandedFolders: Set<string>;
 	onToggleFolder: (path: string) => void;
 	onExpandAll: (paths: Set<string>) => void;
+	onFoldAll: () => void;
 	onViewAll?: (section: "staged" | "unstaged" | "untracked") => void;
 }) {
+	const { settings } = useSettings();
 	const tree = useMemo(() => buildFileTree(files), [files]);
+
+	function getAutoExpandPaths(nodes: FileTreeNode[]): string[] {
+		const folders = nodes.filter((n) => n.type === "folder");
+		if (folders.length === 1) {
+			return [folders[0].path, ...getAutoExpandPaths(folders[0].children ?? [])];
+		}
+		return [];
+	}
+
+	useEffect(() => {
+		if (settings.autoExpandSingleFolder && tree.length > 0) {
+			const paths = getAutoExpandPaths(tree);
+			if (paths.length > 0) {
+				onExpandAll(new Set(paths));
+			}
+		}
+	}, [settings.autoExpandSingleFolder, tree, onExpandAll]);
 
 	if (tree.length === 0) return null;
 
@@ -408,7 +428,15 @@ function FileTreeSection({
 								data-tooltip="Expand all folders"
 								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 							>
-								<ChevronsDownUp size={16} strokeWidth={2} />
+								<FolderOpen size={16} strokeWidth={2} />
+							</button>
+							<button
+								type="button"
+								onClick={onFoldAll}
+								data-tooltip="Fold all folders"
+								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+							>
+								<Folder size={16} strokeWidth={2} />
 							</button>
 						</div>
 					)}
@@ -447,21 +475,51 @@ export default function Sidebar({
 	onAddProject,
 	onViewAll,
 }: SidebarProps) {
-	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
+	type SectionKey = "staged" | "unstaged" | "untracked";
+	const [expandedFoldersBySection, setExpandedFoldersBySection] = useState<
+		Record<SectionKey, Set<string>>
+	>(() => ({
+		staged: new Set(),
+		unstaged: new Set(),
+		untracked: new Set(),
+	}));
 	const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
 
-	const toggleFolder = (path: string) => {
-		setExpandedFolders((prev) => {
-			const next = new Set(prev);
+	const toggleFolder = useCallback((section: SectionKey, path: string) => {
+		setExpandedFoldersBySection((prev) => {
+			const next = new Set(prev[section]);
 			if (next.has(path)) next.delete(path);
 			else next.add(path);
-			return next;
+			return { ...prev, [section]: next };
 		});
-	};
+	}, []);
 
-	const expandAllFolders = (paths: Set<string>) => {
-		setExpandedFolders((prev) => new Set([...prev, ...paths]));
-	};
+	const expandAllFolders = useCallback((section: SectionKey, paths: Set<string>) => {
+		setExpandedFoldersBySection((prev) => ({
+			...prev,
+			[section]: new Set([...prev[section], ...paths]),
+		}));
+	}, []);
+
+	const foldAllFolders = useCallback((section: SectionKey) => {
+		setExpandedFoldersBySection((prev) => ({ ...prev, [section]: new Set() }));
+	}, []);
+
+	const onExpandAllStaged = useCallback(
+		(paths: Set<string>) => expandAllFolders("staged", paths),
+		[expandAllFolders]
+	);
+	const onExpandAllUnstaged = useCallback(
+		(paths: Set<string>) => expandAllFolders("unstaged", paths),
+		[expandAllFolders]
+	);
+	const onExpandAllUntracked = useCallback(
+		(paths: Set<string>) => expandAllFolders("untracked", paths),
+		[expandAllFolders]
+	);
+	const onFoldAllStaged = useCallback(() => foldAllFolders("staged"), [foldAllFolders]);
+	const onFoldAllUnstaged = useCallback(() => foldAllFolders("unstaged"), [foldAllFolders]);
+	const onFoldAllUntracked = useCallback(() => foldAllFolders("untracked"), [foldAllFolders]);
 
 	const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
@@ -566,9 +624,10 @@ export default function Sidebar({
 					selectedFile={selectedFile}
 					onSelect={onSelectFile}
 					onRefresh={onRefresh}
-					expandedFolders={expandedFolders}
-					onToggleFolder={toggleFolder}
-					onExpandAll={expandAllFolders}
+					expandedFolders={expandedFoldersBySection.staged}
+					onToggleFolder={(path) => toggleFolder("staged", path)}
+					onExpandAll={onExpandAllStaged}
+					onFoldAll={onFoldAllStaged}
 					onViewAll={onViewAll}
 				/>
 				<FileTreeSection
@@ -580,9 +639,10 @@ export default function Sidebar({
 					selectedFile={selectedFile}
 					onSelect={onSelectFile}
 					onRefresh={onRefresh}
-					expandedFolders={expandedFolders}
-					onToggleFolder={toggleFolder}
-					onExpandAll={expandAllFolders}
+					expandedFolders={expandedFoldersBySection.unstaged}
+					onToggleFolder={(path) => toggleFolder("unstaged", path)}
+					onExpandAll={onExpandAllUnstaged}
+					onFoldAll={onFoldAllUnstaged}
 					onViewAll={onViewAll}
 				/>
 				<FileTreeSection
@@ -594,9 +654,10 @@ export default function Sidebar({
 					selectedFile={selectedFile}
 					onSelect={onSelectFile}
 					onRefresh={onRefresh}
-					expandedFolders={expandedFolders}
-					onToggleFolder={toggleFolder}
-					onExpandAll={expandAllFolders}
+					expandedFolders={expandedFoldersBySection.untracked}
+					onToggleFolder={(path) => toggleFolder("untracked", path)}
+					onExpandAll={onExpandAllUntracked}
+					onFoldAll={onFoldAllUntracked}
 					onViewAll={onViewAll}
 				/>
 				{status.staged.length === 0 &&

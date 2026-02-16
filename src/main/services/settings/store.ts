@@ -27,6 +27,7 @@ const KEYS = {
 	commitMessageFontSize: "commitMessageFontSize",
 	fontFamily: "fontFamily",
 	gpuAcceleration: "gpuAcceleration",
+	devMode: "devMode",
 } as const;
 
 const DEFAULTS: AppSettings = {
@@ -46,6 +47,7 @@ const DEFAULTS: AppSettings = {
 	commitMessageFontSize: 14,
 	fontFamily: "system",
 	gpuAcceleration: true,
+	devMode: false,
 };
 
 export function getAppSettings(): AppSettings {
@@ -95,13 +97,19 @@ export function getAppSettings(): AppSettings {
 
 	const fontFamilyRaw = getAppSetting(KEYS.fontFamily);
 	const fontFamily = (
-		fontFamilyRaw === "geist" || fontFamilyRaw === "geist-pixel" || fontFamilyRaw === "system"
+		fontFamilyRaw === "geist" ||
+		fontFamilyRaw === "geist-pixel" ||
+		fontFamilyRaw === "system" ||
+		(typeof fontFamilyRaw === "string" && fontFamilyRaw.length > 0)
 			? fontFamilyRaw
 			: DEFAULTS.fontFamily
 	) as AppSettings["fontFamily"];
 
 	const gpuAccelerationRaw = getAppSetting(KEYS.gpuAcceleration);
 	const gpuAcceleration = gpuAccelerationRaw === "false" ? false : DEFAULTS.gpuAcceleration;
+
+	const devModeRaw = getAppSetting(KEYS.devMode);
+	const devMode = devModeRaw === "true" ? true : DEFAULTS.devMode;
 
 	return {
 		gitBinaryPath,
@@ -120,6 +128,7 @@ export function getAppSettings(): AppSettings {
 		commitMessageFontSize,
 		fontFamily,
 		gpuAcceleration,
+		devMode,
 	};
 }
 
@@ -172,6 +181,9 @@ export async function setAppSettings(partial: Partial<AppSettings>): Promise<App
 	}
 	if (partial.gpuAcceleration !== undefined) {
 		setAppSetting(KEYS.gpuAcceleration, partial.gpuAcceleration ? "true" : "false");
+	}
+	if (partial.devMode !== undefined) {
+		setAppSetting(KEYS.devMode, partial.devMode ? "true" : "false");
 	}
 
 	return getAppSettings();

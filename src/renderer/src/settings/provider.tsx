@@ -6,6 +6,7 @@ interface Settings {
 	fontSize: number;
 	commitMessageFontSize: number;
 	fontFamily: FontFamily;
+	devMode: boolean;
 }
 
 interface SettingsContextValue {
@@ -13,7 +14,7 @@ interface SettingsContextValue {
 	updateSettings: (partial: Partial<Settings>) => void;
 }
 
-const FONT_STACKS: Record<FontFamily, { sans: string; mono: string }> = {
+const FONT_STACKS: Record<string, { sans: string; mono: string }> = {
 	geist: {
 		sans: '"Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
 		mono: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -33,6 +34,7 @@ const defaultSettings: Settings = {
 	fontSize: 14,
 	commitMessageFontSize: 14,
 	fontFamily: "system",
+	devMode: false,
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -63,7 +65,10 @@ export function SettingsProvider({
 			"--commit-message-font-size",
 			`${settings.commitMessageFontSize}px`
 		);
-		const fonts = FONT_STACKS[settings.fontFamily];
+		const fonts = FONT_STACKS[settings.fontFamily] ?? {
+			sans: `"${settings.fontFamily}", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`,
+			mono: `"${settings.fontFamily}", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`,
+		};
 		document.documentElement.style.setProperty("--font-sans", fonts.sans);
 		document.documentElement.style.setProperty("--font-mono", fonts.mono);
 	}, [settings]);

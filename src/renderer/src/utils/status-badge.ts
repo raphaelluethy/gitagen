@@ -1,16 +1,33 @@
 export function changeTypeColorClass(changeType: string): string {
 	switch (changeType) {
 		case "M":
-			return "bg-amber-500/80 text-white";
+			return "badge-modified";
 		case "A":
-			return "bg-emerald-600/80 text-white";
+			return "badge-added";
 		case "D":
-			return "bg-red-600/80 text-white";
+			return "badge-deleted";
 		case "R":
-			return "bg-blue-600/80 text-white";
+			return "badge-renamed";
 		case "?":
-			return "bg-zinc-500/80 text-white";
+			return "badge-untracked";
 		default:
-			return "bg-zinc-500/80 text-white";
+			return "badge-untracked";
+	}
+}
+
+export function changeTypeLabel(changeType: string): string {
+	switch (changeType) {
+		case "M":
+			return "modified";
+		case "A":
+			return "added";
+		case "D":
+			return "deleted";
+		case "R":
+			return "renamed";
+		case "?":
+			return "untracked";
+		default:
+			return "unknown";
 	}
 }

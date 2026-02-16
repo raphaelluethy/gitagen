@@ -604,11 +604,7 @@ export function registerRepoHandlers(): void {
 
 	ipcMain.handle(
 		"repo:testSigning",
-		async (
-			_,
-			projectId: string,
-			key: string
-		): Promise<{ ok: boolean; message: string }> => {
+		async (_, projectId: string, key: string): Promise<{ ok: boolean; message: string }> => {
 			const { testSigningConfig } = await import("../services/settings/git-config.js");
 			const cwd = getRepoPath(projectId);
 			if (!cwd) {

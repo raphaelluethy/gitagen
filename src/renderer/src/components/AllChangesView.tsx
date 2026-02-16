@@ -1,12 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import {
-	ChevronDown,
-	ChevronRight,
-	Square,
-	CheckSquare,
-	ExternalLink,
-	FileCode,
-} from "lucide-react";
+import { ChevronRight, Square, CheckSquare, ExternalLink, FileCode } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
@@ -87,10 +80,13 @@ function FileChangeCard({
 				<button
 					type="button"
 					onClick={onToggleExpand}
-					className="btn-icon rounded-md p-1.5"
+					className="btn-icon rounded-md p-1.5 transition-transform"
 					title={isExpanded ? "Collapse" : "Expand"}
 				>
-					{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+					<ChevronRight
+						size={16}
+						className={`transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}
+					/>
 				</button>
 				<button
 					type="button"
@@ -99,7 +95,7 @@ function FileChangeCard({
 					title={isStaged ? "Unstage file" : "Stage file"}
 				>
 					{isStaged ? (
-						<CheckSquare size={18} className="text-[var(--success)]" />
+						<CheckSquare size={18} className="text-[var(--text-primary)]" />
 					) : (
 						<Square size={18} className="text-[var(--text-muted)]" />
 					)}
@@ -123,7 +119,7 @@ function FileChangeCard({
 					{file.path}
 				</span>
 				{isStaged && (
-					<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--success)]">
+					<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
 						Staged
 					</span>
 				)}
@@ -132,7 +128,7 @@ function FileChangeCard({
 				<div className="border-t border-[var(--border-secondary)] bg-[var(--bg-primary)] [&_pre]:!bg-transparent [&_pre]:!font-mono [&_pre]:!text-[13px]">
 					{loading ? (
 						<div className="flex items-center gap-3 p-6">
-							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
 							<span className="text-sm text-[var(--text-muted)]">
 								Loading diff...
 							</span>

@@ -84,7 +84,7 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 					{remotes.map((r) => (
 						<div
 							key={r.name}
-							className="rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-3"
+							className="rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-3 transition-colors hover:bg-[var(--bg-hover)]"
 						>
 							<div className="flex items-center gap-2">
 								<Link size={12} className="text-[var(--text-muted)]" />

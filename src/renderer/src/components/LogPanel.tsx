@@ -44,7 +44,7 @@ export default function LogPanel({ projectId }: LogPanelProps) {
 	if (loading) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 p-8">
-				<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+				<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
 				<p className="text-sm text-[var(--text-muted)]">Loading history...</p>
 			</div>
 		);
@@ -70,14 +70,16 @@ export default function LogPanel({ projectId }: LogPanelProps) {
 				<div
 					key={c.oid}
 					className={`group border-b border-[var(--border-secondary)] px-4 py-3 transition-colors ${
-						idx === 0 ? "bg-[var(--bg-hover)]" : "hover:bg-[var(--bg-hover)]"
+						idx === 0
+							? "border-l-2 border-l-[var(--text-muted)] bg-[var(--bg-hover)]"
+							: "hover:bg-[var(--bg-hover)]"
 					}`}
 				>
 					<p className="truncate text-[13px] font-medium leading-snug text-[var(--text-primary)]">
 						{c.message.split("\n")[0]}
 					</p>
 					<div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-muted)]">
-						<code className="rounded bg-[var(--bg-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">
+						<code className="rounded bg-[var(--bg-tertiary)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-muted)]">
 							{c.oid.slice(0, 7)}
 						</code>
 						<span className="text-[var(--border-primary)]">·</span>
@@ -87,7 +89,7 @@ export default function LogPanel({ projectId }: LogPanelProps) {
 						{c.signed && (
 							<>
 								<span className="text-[var(--border-primary)]">·</span>
-								<span className="flex items-center gap-1 text-[var(--success)]">
+								<span className="flex items-center gap-1 text-[var(--text-muted)]">
 									<Shield size={10} />
 									<span>signed</span>
 								</span>

@@ -37,9 +37,9 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 	};
 
 	return (
-		<div className="shrink-0 border-t border-[var(--border-secondary)] bg-[var(--bg-panel)] px-4 py-4">
+		<div className="shrink-0 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)] px-4 py-4">
 			<div className="mb-3 flex items-center gap-2">
-				<GitCommit size={16} className="text-[var(--accent-primary)]" />
+				<GitCommit size={16} className="text-[var(--text-primary)]" />
 				<span className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
 					Commit
 				</span>
@@ -50,7 +50,7 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 				onKeyDown={handleKeyDown}
 				placeholder="Enter commit message... (⌘+Enter to commit)"
 				rows={3}
-				className="input commit-message-text mb-3 resize-none"
+				className="input commit-message-text mb-3 resize-none rounded-[var(--radius-md)]"
 				disabled={disabled}
 				style={{ fontSize: "var(--commit-message-font-size)" }}
 			/>
@@ -73,7 +73,7 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 						type="button"
 						onClick={handleCommit}
 						disabled={disabled || loading || !message.trim()}
-						className="btn btn-primary"
+						className="btn btn-primary rounded-full px-4"
 					>
 						<Send size={14} />
 						{loading ? "Committing..." : "Commit"}

@@ -87,14 +87,14 @@ export default function WorktreePanel({
 					return (
 						<div
 							key={w.path}
-							className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
+							className={`flex items-center gap-2 rounded-lg border border-[var(--border-primary)] px-2.5 py-2 ${
 								isActive
-									? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/5"
-									: "border-[var(--border-primary)] hover:border-[var(--border-focus)]"
+									? "border-l-[var(--text-muted)] border-l-2 bg-[var(--bg-active)]"
+									: "hover:bg-[var(--bg-hover)]"
 							}`}
 						>
 							<span
-								className={`shrink-0 ${isActive ? "text-[var(--accent-primary)]" : "invisible"}`}
+								className={`shrink-0 ${isActive ? "text-[var(--text-primary)]" : "invisible"}`}
 							>
 								<Check size={12} />
 							</span>

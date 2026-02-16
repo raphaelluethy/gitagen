@@ -49,7 +49,7 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 	if (loading) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 p-8">
-				<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+				<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
 				<p className="text-sm text-[var(--text-muted)]">Loading stash...</p>
 			</div>
 		);
@@ -74,7 +74,7 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 			{entries.map((e) => (
 				<div
 					key={e.index}
-					className="mb-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-3 transition-colors hover:border-[var(--border-primary)]"
+					className="mb-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-3 transition-colors hover:bg-[var(--bg-hover)]"
 				>
 					<p className="truncate text-sm font-medium text-[var(--text-primary)]">
 						{e.message}

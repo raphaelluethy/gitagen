@@ -69,7 +69,7 @@ export default function DiffViewer({
 	if (loading) {
 		return (
 			<div className="flex flex-1 flex-col items-center justify-center gap-3">
-				<div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+				<div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
 				<p className="text-sm text-[var(--text-muted)]">Loading diff...</p>
 			</div>
 		);
@@ -105,7 +105,7 @@ export default function DiffViewer({
 				title={isStaged ? "Unstage file" : "Stage file"}
 			>
 				{isStaged ? (
-					<CheckSquare size={18} className="text-[var(--success)]" />
+					<CheckSquare size={18} className="text-[var(--text-primary)]" />
 				) : (
 					<Square size={18} className="text-[var(--text-muted)]" />
 				)}
@@ -129,7 +129,7 @@ export default function DiffViewer({
 				{selectedFile.path}
 			</span>
 			{isStaged && (
-				<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--success)]">
+				<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
 					Staged
 				</span>
 			)}

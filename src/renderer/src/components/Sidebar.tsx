@@ -8,8 +8,10 @@ import {
 	Folder,
 	FolderOpen,
 	GitBranch,
+	Plus,
 } from "lucide-react";
 import type { GitStatus, GitFileStatus } from "../../../shared/types";
+import type { Project } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 
 interface SidebarProps {
@@ -17,6 +19,11 @@ interface SidebarProps {
 	selectedFile: GitFileStatus | null;
 	onSelectFile: (file: GitFileStatus) => void;
 	onBack?: () => void;
+	projects?: Project[];
+	activeProject?: Project | null;
+	onProjectChange?: (project: Project) => void;
+	onAddProject?: () => void;
+	onViewAll?: (section: "staged" | "unstaged" | "untracked") => void;
 }
 
 export interface FileTreeNode {
@@ -89,6 +96,17 @@ function buildFileTree(files: GitFileStatus[]): FileTreeNode[] {
 	return toFileTreeNode(root);
 }
 
+function statusBarColor(changeType: string): string {
+	switch (changeType) {
+		case "A":
+			return "var(--change-added)";
+		case "D":
+			return "var(--change-deleted)";
+		default:
+			return "var(--change-modified)";
+	}
+}
+
 function TreeItem({
 	node,
 	depth,
@@ -110,6 +128,7 @@ function TreeItem({
 		const isSelected =
 			selectedFile?.path === node.file.path && selectedFile?.status === node.file.status;
 		const letter = node.file.changeType ?? "M";
+		const barColor = statusBarColor(letter);
 
 		return (
 			<button
@@ -117,15 +136,18 @@ function TreeItem({
 				onClick={() => onSelect(node.file!)}
 				className={`group flex w-full items-center gap-2 py-1.5 text-left text-[13px] outline-none transition-all ${
 					isSelected
-						? "bg-[var(--accent-primary)] text-white"
+						? "bg-[var(--bg-active)] text-[var(--text-primary)]"
 						: "text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
 				}`}
-				style={{ paddingLeft }}
+				style={{
+					paddingLeft,
+					borderLeft: `2px solid ${isSelected ? "var(--text-muted)" : barColor}`,
+				}}
 				title={node.path}
 			>
 				<File
 					size={14}
-					className={`shrink-0 ${isSelected ? "text-white/80" : "text-[var(--text-muted)]"}`}
+					className={`shrink-0 ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
 					strokeWidth={2}
 				/>
 				<span
@@ -153,23 +175,15 @@ function TreeItem({
 					className="group flex w-full items-center gap-2 py-1.5 text-left text-[13px] text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
 					style={{ paddingLeft }}
 				>
-					{isExpanded ? (
-						<ChevronDown
-							size={14}
-							className="shrink-0 text-[var(--text-muted)]"
-							strokeWidth={2}
-						/>
-					) : (
-						<ChevronRight
-							size={14}
-							className="shrink-0 text-[var(--text-muted)]"
-							strokeWidth={2}
-						/>
-					)}
+					<ChevronRight
+						size={14}
+						className={`shrink-0 text-[var(--text-muted)] transition-transform ${isExpanded ? "rotate-90" : ""}`}
+						strokeWidth={2}
+					/>
 					{isExpanded ? (
 						<FolderOpen
 							size={14}
-							className="shrink-0 text-[var(--accent-primary)]"
+							className="shrink-0 text-[var(--text-primary)]"
 							strokeWidth={2}
 						/>
 					) : (
@@ -212,6 +226,7 @@ function FileTreeSection({
 	expandedFolders,
 	onToggleFolder,
 	onExpandAll,
+	onViewAll,
 }: {
 	title: string;
 	count: number;
@@ -221,6 +236,7 @@ function FileTreeSection({
 	expandedFolders: Set<string>;
 	onToggleFolder: (path: string) => void;
 	onExpandAll: (paths: Set<string>) => void;
+	onViewAll?: (section: "staged" | "unstaged" | "untracked") => void;
 }) {
 	const tree = useMemo(() => buildFileTree(files), [files]);
 
@@ -238,12 +254,25 @@ function FileTreeSection({
 		onExpandAll(paths);
 	};
 
+	const sectionKey = title.toLowerCase().replace(/\s/g, "-");
+	const viewAllSection: "staged" | "unstaged" | "untracked" =
+		sectionKey === "staged" ? "staged" : sectionKey === "unstaged" ? "unstaged" : "untracked";
+
 	return (
 		<div className="mb-4">
 			<div className="mb-2 flex items-center justify-between px-3 py-2">
 				<div className="flex items-center gap-2">
 					<h3 className="section-title">{title}</h3>
 					<span className="font-mono text-[10px] text-[var(--text-muted)]">{count}</span>
+					{count > 0 && onViewAll && (
+						<button
+							type="button"
+							onClick={() => onViewAll(viewAllSection)}
+							className="text-[10px] text-[var(--text-muted)] outline-none hover:text-[var(--text-primary)]"
+						>
+							View all
+						</button>
+					)}
 				</div>
 				<button
 					type="button"
@@ -272,8 +301,19 @@ function FileTreeSection({
 	);
 }
 
-export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: SidebarProps) {
+export default function Sidebar({
+	status,
+	selectedFile,
+	onSelectFile,
+	onBack,
+	projects = [],
+	activeProject,
+	onProjectChange,
+	onAddProject,
+	onViewAll,
+}: SidebarProps) {
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
+	const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
 
 	const toggleFolder = (path: string) => {
 		setExpandedFolders((prev) => {
@@ -292,12 +332,72 @@ export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: 
 
 	return (
 		<aside className="flex h-full flex-col bg-[var(--bg-sidebar)]">
+			{projects.length > 0 && activeProject && onProjectChange && (
+				<div className="relative shrink-0 border-b border-[var(--border-secondary)] px-3 py-2">
+					<button
+						type="button"
+						onClick={() => setProjectSwitcherOpen(!projectSwitcherOpen)}
+						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-[var(--bg-hover)]"
+					>
+						<span className="truncate font-medium text-[var(--text-primary)]">
+							{activeProject.name}
+						</span>
+						<ChevronDown
+							size={14}
+							className={`ml-auto shrink-0 text-[var(--text-muted)] transition-transform ${projectSwitcherOpen ? "rotate-180" : ""}`}
+						/>
+					</button>
+					{projectSwitcherOpen && (
+						<>
+							<div
+								className="fixed inset-0 z-40"
+								onClick={() => setProjectSwitcherOpen(false)}
+							/>
+							<div className="dropdown absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto animate-scale-in">
+								{projects.map((p) => (
+									<button
+										key={p.id}
+										type="button"
+										onClick={() => {
+											onProjectChange(p);
+											setProjectSwitcherOpen(false);
+										}}
+										className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm outline-none transition-colors hover:bg-[var(--bg-hover)] ${
+											activeProject.id === p.id ? "bg-[var(--bg-active)]" : ""
+										}`}
+									>
+										<span className="truncate font-medium text-[var(--text-primary)]">
+											{p.name}
+										</span>
+										<span className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+											{p.path}
+										</span>
+									</button>
+								))}
+								{onAddProject && (
+									<button
+										type="button"
+										onClick={() => {
+											onAddProject();
+											setProjectSwitcherOpen(false);
+										}}
+										className="flex w-full items-center gap-2 border-t border-[var(--border-secondary)] px-3 py-2.5 text-sm text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+									>
+										<Plus size={14} />
+										Add repository
+									</button>
+								)}
+							</div>
+						</>
+					)}
+				</div>
+			)}
 			<div className="flex items-center gap-3 border-b border-[var(--border-secondary)] px-4 py-3">
 				{onBack && (
 					<button
 						type="button"
 						onClick={onBack}
-						className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+						className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
 						title="Back to projects"
 					>
 						<ChevronLeft size={18} />
@@ -305,7 +405,7 @@ export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: 
 				)}
 				<div className="min-w-0 flex-1">
 					<div className="flex items-center gap-2">
-						<GitBranch size={14} className="text-[var(--accent-primary)]" />
+						<GitBranch size={14} className="text-[var(--text-primary)]" />
 						<h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
 							Changes
 						</h2>
@@ -333,6 +433,7 @@ export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: 
 					expandedFolders={expandedFolders}
 					onToggleFolder={toggleFolder}
 					onExpandAll={expandAllFolders}
+					onViewAll={onViewAll}
 				/>
 				<FileTreeSection
 					title="Unstaged"
@@ -343,6 +444,7 @@ export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: 
 					expandedFolders={expandedFolders}
 					onToggleFolder={toggleFolder}
 					onExpandAll={expandAllFolders}
+					onViewAll={onViewAll}
 				/>
 				<FileTreeSection
 					title="Untracked"
@@ -353,6 +455,7 @@ export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: 
 					expandedFolders={expandedFolders}
 					onToggleFolder={toggleFolder}
 					onExpandAll={expandAllFolders}
+					onViewAll={onViewAll}
 				/>
 				{status.staged.length === 0 &&
 					status.unstaged.length === 0 &&

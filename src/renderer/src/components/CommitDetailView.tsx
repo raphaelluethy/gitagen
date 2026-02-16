@@ -181,9 +181,9 @@ export default function CommitDetailView({
 								<span className="text-[11px] font-medium uppercase tracking-wider text-(--text-muted)">
 									Links
 								</span>
-								{links.map((link: ParsedLink, i: number) => (
+								{links.map((link: ParsedLink) => (
 									<button
-										key={i}
+										key={link.href}
 										type="button"
 										onClick={() => handleOpenLink(link.href)}
 										className="rounded border border-(--border-secondary) bg-(--bg-tertiary) px-2.5 py-1 text-[12px] font-medium text-(--accent-primary) transition-colors hover:bg-(--bg-hover) hover:border-(--border-primary)"

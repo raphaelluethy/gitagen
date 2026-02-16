@@ -5,7 +5,21 @@ import simpleGit, { SimpleGit, StatusResult } from "simple-git";
 
 const MAX_NEW_FILE_BYTES = 1024 * 1024;
 const STATUS_CACHE_TTL_MS = 1000;
+const STATUS_CACHE_MAX_SIZE = 50;
 const statusCache = new Map<string, { status: StatusResult; fetchedAt: number }>();
+
+function evictLruStatusCache(): void {
+	if (statusCache.size <= STATUS_CACHE_MAX_SIZE) return;
+	let oldestKey: string | null = null;
+	let oldestTime = Infinity;
+	for (const [key, entry] of statusCache) {
+		if (entry.fetchedAt < oldestTime) {
+			oldestTime = entry.fetchedAt;
+			oldestKey = key;
+		}
+	}
+	if (oldestKey) statusCache.delete(oldestKey);
+}
 
 async function getStatusCached(git: SimpleGit, cwd: string): Promise<StatusResult | null> {
 	const cached = statusCache.get(cwd);
@@ -15,6 +29,7 @@ async function getStatusCached(git: SimpleGit, cwd: string): Promise<StatusResul
 	}
 	const status = await git.status().catch(() => null);
 	if (status) {
+		evictLruStatusCache();
 		statusCache.set(cwd, { status, fetchedAt: now });
 	}
 	return status;
@@ -87,7 +102,7 @@ ${diffLines}${eof}`;
 		return null;
 	}
 }
-import type { GetPatchOptions, GitProvider, RepoFingerprint, WorktreeInfo } from "./types.js";
+import type { GetPatchOptions, GitProvider, RepoFingerprint } from "./types.js";
 import type {
 	BranchInfo,
 	CommitDetail,
@@ -99,6 +114,7 @@ import type {
 	RemoteInfo,
 	StashEntry,
 	TreeNode,
+	WorktreeInfo,
 } from "../../../shared/types.js";
 
 function createGit(cwd: string, binary?: string | null): SimpleGit {

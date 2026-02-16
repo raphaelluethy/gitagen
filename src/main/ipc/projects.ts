@@ -21,7 +21,21 @@ const GITAGEN_DIR = resolve(homedir(), ".gitagen");
 const TOPLEVEL_CACHE_TTL_MS = 5 * 60 * 1000;
 const TOPLEVEL_CONCURRENCY = 8;
 const GROUPING_GIT_PROBE_LIMIT = 5;
+const TOPLEVEL_CACHE_MAX_SIZE = 100;
 const toplevelCache = new Map<string, { value: string | null; fetchedAt: number }>();
+
+function evictLruToplevelCache(): void {
+	if (toplevelCache.size <= TOPLEVEL_CACHE_MAX_SIZE) return;
+	let oldestKey: string | null = null;
+	let oldestTime = Infinity;
+	for (const [key, entry] of toplevelCache) {
+		if (entry.fetchedAt < oldestTime) {
+			oldestTime = entry.fetchedAt;
+			oldestKey = key;
+		}
+	}
+	if (oldestKey) toplevelCache.delete(oldestKey);
+}
 
 function rowToProject(row: ProjectRow): Project {
 	return {
@@ -74,6 +88,7 @@ async function getToplevelCached(
 	}
 	const toplevel = await provider.getToplevel(projectPath);
 	const normalized = toplevel ? normalizePath(toplevel) : null;
+	evictLruToplevelCache();
 	toplevelCache.set(cacheKey, { value: normalized, fetchedAt: now });
 	return normalized;
 }

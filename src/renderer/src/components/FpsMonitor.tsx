@@ -10,7 +10,7 @@ export function FpsMonitor({ enabled }: FpsMonitorProps) {
 	if (!enabled) return null;
 
 	const maxFps = Math.max(...history, 60);
-	const barWidth = 3;
+	const barWidth = 2;
 	const barGap = 1;
 
 	return (
@@ -22,13 +22,10 @@ export function FpsMonitor({ enabled }: FpsMonitorProps) {
 				backgroundColor: "var(--bg-panel)",
 				border: "1px solid var(--border-secondary)",
 				borderRadius: "var(--radius-lg)",
-				padding: "8px 12px",
-				boxShadow: "var(--shadow-md)",
-				zIndex: 9999,
-				display: "flex",
-				flexDirection: "column",
-				gap: "6px",
-				minWidth: "120px",
+			padding: "4px 8px",
+				gap: "3px",
+				minWidth: "80px",
+				fontSize: "10px",
 			}}
 		>
 			{/* FPS Number Display */}
@@ -42,7 +39,7 @@ export function FpsMonitor({ enabled }: FpsMonitorProps) {
 			>
 				<span
 					style={{
-						fontSize: "18px",
+						fontSize: "14px",
 						fontWeight: 600,
 						color:
 							current >= 55
@@ -71,11 +68,11 @@ export function FpsMonitor({ enabled }: FpsMonitorProps) {
 					display: "flex",
 					alignItems: "flex-end",
 					gap: `${barGap}px`,
-					height: "32px",
+					height: "24px",
 				}}
 			>
 				{history.map((fps, index) => {
-					const height = maxFps > 0 ? (fps / maxFps) * 32 : 0;
+					const height = maxFps > 0 ? (fps / maxFps) * 24 : 0;
 					const color =
 						fps >= 55
 							? "var(--success)"

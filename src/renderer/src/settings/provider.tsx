@@ -7,6 +7,7 @@ interface Settings {
 	commitMessageFontSize: number;
 	fontFamily: FontFamily;
 	devMode: boolean;
+	autoExpandSingleFolder: boolean;
 }
 
 interface SettingsContextValue {
@@ -35,6 +36,7 @@ const defaultSettings: Settings = {
 	commitMessageFontSize: 14,
 	fontFamily: "system",
 	devMode: false,
+	autoExpandSingleFolder: true,
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);

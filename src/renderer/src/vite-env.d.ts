@@ -35,6 +35,12 @@ declare global {
 				selectFolder: () => Promise<string | null>;
 			};
 			events: Record<string, unknown>;
+			app: {
+				openExternal: (url: string) => Promise<void>;
+				confirm: (
+					options: import("../../shared/types").ConfirmDialogOptions
+				) => Promise<boolean>;
+			};
 		};
 	}
 }

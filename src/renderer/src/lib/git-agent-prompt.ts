@@ -4,8 +4,7 @@ import type { CommitStyle } from "../../../shared/types";
 const COMMIT_STYLE_GUIDANCE: Record<CommitStyle, string> = {
 	conventional:
 		"Use Conventional Commits format: type(scope): description. Types: feat, fix, docs, style, refactor, test, chore.",
-	emoji:
-		"Use Gitmoji style: start with relevant emoji. ✨ (feat), 🐛 (fix), ♻️ (refactor), 📝 (docs), 💄 (style), 🔧 (config), ✅ (tests), 🔥 (remove).",
+	emoji: "Use Gitmoji style: start with relevant emoji. ✨ (feat), 🐛 (fix), ♻️ (refactor), 📝 (docs), 💄 (style), 🔧 (config), ✅ (tests), 🔥 (remove).",
 	descriptive: "Use plain English, clear and descriptive. Concisely summarize the change.",
 	imperative: 'Use short imperative mood: "Add X", "Fix Y", "Remove Z".',
 };

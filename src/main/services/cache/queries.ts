@@ -203,7 +203,7 @@ export async function getRepoCache(
 				eq(repoCache.includeIgnored, inc)
 			)
 		);
-		const row = rows[0];
+	const row = rows[0];
 	if (!row) return null;
 	return row as RepoCacheRow;
 }

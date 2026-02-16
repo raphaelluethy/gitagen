@@ -61,39 +61,36 @@ export default function WorktreePanel({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const { toast } = useToast();
 
-	const handleDragStart = useCallback(
-		(e: React.MouseEvent) => {
-			e.preventDefault();
-			const startY = e.clientY;
-			const container = containerRef.current;
-			if (!container) return;
-			const startHeight = container.getBoundingClientRect().height;
-			setIsDragging(true);
+	const handleDragStart = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		const startY = e.clientY;
+		const container = containerRef.current;
+		if (!container) return;
+		const startHeight = container.getBoundingClientRect().height;
+		setIsDragging(true);
 
-			const onMouseMove = (ev: MouseEvent) => {
-				const delta = startY - ev.clientY;
-				const next = Math.max(40, Math.round(startHeight + delta));
-				setDragHeight(next);
-			};
-			const onMouseUp = () => {
-				setIsDragging(false);
-				document.removeEventListener("mousemove", onMouseMove);
-				document.removeEventListener("mouseup", onMouseUp);
-				const container = containerRef.current;
-				if (container) {
-					const h = Math.round(container.getBoundingClientRect().height);
-					try {
-						localStorage.setItem(DRAG_HEIGHT_KEY, String(h));
-					} catch {
-						// ignore
-					}
+		const onMouseMove = (ev: MouseEvent) => {
+			const delta = startY - ev.clientY;
+			const next = Math.max(40, Math.round(startHeight + delta));
+			setDragHeight(next);
+		};
+		const onMouseUp = () => {
+			setIsDragging(false);
+			document.removeEventListener("mousemove", onMouseMove);
+			document.removeEventListener("mouseup", onMouseUp);
+			const container = containerRef.current;
+			if (container) {
+				const h = Math.round(container.getBoundingClientRect().height);
+				try {
+					localStorage.setItem(DRAG_HEIGHT_KEY, String(h));
+				} catch {
+					// ignore
 				}
-			};
-			document.addEventListener("mousemove", onMouseMove);
-			document.addEventListener("mouseup", onMouseUp);
-		},
-		[]
-	);
+			}
+		};
+		document.addEventListener("mousemove", onMouseMove);
+		document.addEventListener("mouseup", onMouseUp);
+	}, []);
 
 	const handleDragReset = useCallback(() => {
 		setDragHeight(null);
@@ -456,9 +453,7 @@ export default function WorktreePanel({
 								<div
 									key={w.path}
 									className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 ${
-										isActive
-											? "bg-(--bg-active)"
-											: "hover:bg-(--bg-hover)"
+										isActive ? "bg-(--bg-active)" : "hover:bg-(--bg-hover)"
 									}`}
 								>
 									<span

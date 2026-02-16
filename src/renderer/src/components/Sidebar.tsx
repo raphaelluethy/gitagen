@@ -148,7 +148,9 @@ function TreeItem({
 	const isFile = node.type === "file" && node.file;
 	const isFolder = node.type === "folder" && node.children;
 	const isSelected =
-		isFile && selectedFile?.path === node.file!.path && selectedFile?.status === node.file!.status;
+		isFile &&
+		selectedFile?.path === node.file!.path &&
+		selectedFile?.status === node.file!.status;
 	const letter = isFile ? (node.file!.changeType ?? "M") : "M";
 	const barColor = statusBarColor(letter);
 	const canStage = section === "unstaged" || section === "untracked";
@@ -195,7 +197,6 @@ function TreeItem({
 	);
 
 	if (isFile) {
-
 		return (
 			<div
 				className={`group flex w-full items-center py-1.5 text-left text-[13px] outline-none transition-all ${

@@ -24,6 +24,7 @@ import {
 	pruneWorktrees as pruneWorktreesManager,
 } from "../services/worktree/manager.js";
 import { emitConflictDetected, emitRepoError, emitRepoUpdated } from "./events.js";
+import { watchProject, unwatchProject } from "../services/watcher/index.js";
 import type {
 	AddWorktreeOptions,
 	AddWorktreeResult,
@@ -224,8 +225,7 @@ export function registerRepoHandlers(): void {
 			}
 
 			const activePath = prefsRow?.active_worktree_path;
-			const cwd =
-				activePath && activePath.trim() !== "" ? activePath : project.path;
+			const cwd = activePath && activePath.trim() !== "" ? activePath : project.path;
 			if (!cwd) {
 				return {
 					status: null,
@@ -530,8 +530,7 @@ export function registerRepoHandlers(): void {
 		}
 		const allowedDomains = ["github.com", "gitlab.com", "bitbucket.org", "dev.azure.com"];
 		const isAllowed = allowedDomains.some(
-			(domain) =>
-				parsedUrl.hostname === domain || parsedUrl.hostname.endsWith(`.${domain}`)
+			(domain) => parsedUrl.hostname === domain || parsedUrl.hostname.endsWith(`.${domain}`)
 		);
 		if (!isAllowed) {
 			const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
@@ -1064,5 +1063,16 @@ export function registerRepoHandlers(): void {
 			emitRepoError(projectId, error);
 			throw error;
 		}
+	});
+
+	// File watcher
+	ipcMain.handle("repo:watchProject", async (_, projectId: string) => {
+		const cwd = await getRepoPath(projectId);
+		if (!cwd) return;
+		watchProject(projectId, cwd);
+	});
+
+	ipcMain.handle("repo:unwatchProject", async (_, projectId: string) => {
+		unwatchProject(projectId);
 	});
 }

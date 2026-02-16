@@ -30,24 +30,27 @@ export default function BranchSelector({
 		};
 	}, [projectId, currentBranch]);
 
-	const handleSwitch = useCallback(async (name: string) => {
-		if (name === currentBranch) {
-			setOpen(false);
-			return;
-		}
-		setLoading(true);
-		try {
-			await window.gitagen.repo.switchBranch(projectId, name);
-			onBranchChange();
-			setOpen(false);
-			toast.success("Switched to branch", name);
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : "Unknown error";
-			toast.error("Branch switch failed", msg);
-		} finally {
-			setLoading(false);
-		}
-	}, [projectId, currentBranch, onBranchChange, toast]);
+	const handleSwitch = useCallback(
+		async (name: string) => {
+			if (name === currentBranch) {
+				setOpen(false);
+				return;
+			}
+			setLoading(true);
+			try {
+				await window.gitagen.repo.switchBranch(projectId, name);
+				onBranchChange();
+				setOpen(false);
+				toast.success("Switched to branch", name);
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : "Unknown error";
+				toast.error("Branch switch failed", msg);
+			} finally {
+				setLoading(false);
+			}
+		},
+		[projectId, currentBranch, onBranchChange, toast]
+	);
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>

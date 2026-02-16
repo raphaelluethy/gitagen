@@ -11,6 +11,7 @@
 		"build": "electron-vite build",
 		"pack:mac": "electron-builder --mac dmg --publish never",
 		"dist:mac": "pnpm build && pnpm pack:mac",
+		"release": "pnpm build && electron-builder --mac dmg --publish always",
 		"preview": "electron-vite preview",
 		"typecheck": "tsgo --noEmit -p tsconfig.typecheck.json",
 		"lint": "oxlint src",
@@ -48,6 +49,7 @@
 		"simple-git": "^3.31.1",
 		"sonner": "^2.0.7",
 		"tailwind-merge": "^3.4.1",
+		"update-electron-app": "^3.1.2",
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {

@@ -471,6 +471,40 @@ function AppContent() {
 	}, [activeProject?.id]);
 
 	useEffect(() => {
+		if (!activeProject) return;
+
+		const startWatching = () => {
+			window.gitagen.repo.watchProject(activeProject.id);
+		};
+
+		const stopWatching = () => {
+			window.gitagen.repo.unwatchProject(activeProject.id);
+		};
+
+		const handleFocus = () => {
+			refreshStatus();
+			startWatching();
+		};
+
+		const handleBlur = () => {
+			stopWatching();
+		};
+
+		if (document.hasFocus()) {
+			startWatching();
+		}
+
+		window.addEventListener("focus", handleFocus);
+		window.addEventListener("blur", handleBlur);
+
+		return () => {
+			stopWatching();
+			window.removeEventListener("focus", handleFocus);
+			window.removeEventListener("blur", handleBlur);
+		};
+	}, [activeProject?.id, refreshStatus]);
+
+	useEffect(() => {
 		if (!selectedFile || !status) return;
 		const lookup = (
 			items: RepoStatus["staged"] | RepoStatus["unstaged"] | RepoStatus["untracked"],

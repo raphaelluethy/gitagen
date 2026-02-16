@@ -291,7 +291,13 @@ export interface ConfigEntry {
 
 // --- AI Provider Types ---
 
-export type AIProviderType = "openai" | "anthropic" | "openrouter" | "cerebras" | "fireworks" | (string & {});
+export type AIProviderType =
+	| "openai"
+	| "anthropic"
+	| "openrouter"
+	| "cerebras"
+	| "fireworks"
+	| (string & {});
 
 export interface AIProviderDescriptor {
 	id: AIProviderType;

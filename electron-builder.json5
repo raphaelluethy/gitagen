@@ -1,14 +1,15 @@
 {
 	appId: "com.gitagen",
 	productName: "Gitagen",
+	publish: {
+		provider: "github",
+		owner: "ltygg",
+		repo: "gitagen",
+	},
 	directories: {
 		output: "release",
 	},
-	files: [
-		"out/**/*",
-		"node_modules/keytar/**/*",
-		"node_modules/@libsql/**/*",
-	],
+	files: ["out/**/*", "node_modules/keytar/**/*", "node_modules/@libsql/**/*"],
 	extraResources: [
 		{
 			from: "resources/cli",
@@ -29,7 +30,6 @@
 		icon: "resources/icon.icns",
 		category: "public.app-category.developer-tools",
 		target: [{ target: "dmg", arch: ["arm64"] }],
-		identity: null,
 	},
 	linux: {
 		icon: "resources/icon.png",

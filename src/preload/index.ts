@@ -369,6 +369,14 @@ const repo = {
 		validateProjectId(projectId);
 		return ipcRenderer.invoke("repo:pruneWorktrees", projectId);
 	},
+	watchProject: (projectId: string): Promise<void> => {
+		validateProjectId(projectId);
+		return ipcRenderer.invoke("repo:watchProject", projectId);
+	},
+	unwatchProject: (projectId: string): Promise<void> => {
+		validateProjectId(projectId);
+		return ipcRenderer.invoke("repo:unwatchProject", projectId);
+	},
 };
 
 const settings = {
@@ -439,9 +447,7 @@ const events = {
 		ipcRenderer.on(EVENT_CONFLICT_DETECTED, handler);
 		return () => ipcRenderer.removeListener(EVENT_CONFLICT_DETECTED, handler);
 	},
-	onOpenRepo: (
-		callback: (payload: { projectId: string; worktreePath?: string }) => void
-	) => {
+	onOpenRepo: (callback: (payload: { projectId: string; worktreePath?: string }) => void) => {
 		const handler = (
 			_: Electron.IpcRendererEvent,
 			payload: { projectId: string; worktreePath?: string }

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, Menu, nativeImage, session } from "electron";
 import { randomUUID } from "crypto";
 import { join, resolve } from "path";
+import { updateElectronApp } from "update-electron-app";
 import { closeDb, getDb } from "./services/cache/sqlite.js";
 import { runRetention } from "./services/cache/retention.js";
 import {
@@ -142,7 +143,7 @@ function createWindow(): BrowserWindow {
 	win.webContents.on("will-navigate", (event, url) => {
 		const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 		const allowedPrefix = isDev
-			? process.env.ELECTRON_RENDERER_URL ?? "http://localhost:5173"
+			? (process.env.ELECTRON_RENDERER_URL ?? "http://localhost:5173")
 			: `file://${join(__dirname, "../renderer")}`;
 		if (!url.startsWith(allowedPrefix)) {
 			event.preventDefault();
@@ -258,6 +259,10 @@ app.whenReady().then(async () => {
 	registerCliHandlers();
 
 	buildAppMenu();
+
+	if (app.isPackaged) {
+		updateElectronApp();
+	}
 
 	const win = createWindow();
 	const openPath = parseOpenRepoArg(process.argv);

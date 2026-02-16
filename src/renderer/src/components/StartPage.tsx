@@ -3,9 +3,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderOpen, Plus, GitBranch, Check, GitFork, ChevronRight } from "lucide-react";
 import type { GroupedProject, Project, RepoStatus } from "../../../shared/types";
 
-const CARD_MIN_WIDTH = 280;
+const CARD_MIN_WIDTH = 250;
 const CARD_ROW_HEIGHT = 120;
 const OVERSCAN = 2;
+const WIDE_SPLIT_MIN_WIDTH = 1180;
 
 function formatRelativeTime(lastOpenedAt: number): string {
 	const sec = Math.floor(Date.now() / 1000) - lastOpenedAt;
@@ -210,8 +211,18 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 		return () => ro.disconnect();
 	}, []);
 
-	const colCount = Math.max(1, Math.min(3, Math.floor(containerWidth / CARD_MIN_WIDTH)));
-	const rowCount = Math.ceil(other.length / colCount);
+	const isWideSplit = containerWidth >= WIDE_SPLIT_MIN_WIDTH;
+	const splitGap = isWideSplit ? 20 : 0;
+	const recentPaneWidth = isWideSplit
+		? Math.max(320, Math.floor((containerWidth - splitGap) * 0.38))
+		: containerWidth;
+	const otherPaneWidth = isWideSplit
+		? Math.max(340, containerWidth - recentPaneWidth - splitGap)
+		: containerWidth;
+
+	const recentColCount = Math.max(1, Math.min(3, Math.floor(recentPaneWidth / CARD_MIN_WIDTH)));
+	const otherColCount = Math.max(1, Math.min(3, Math.floor(otherPaneWidth / CARD_MIN_WIDTH)));
+	const rowCount = Math.ceil(other.length / otherColCount);
 
 	const rowVirtualizer = useVirtualizer({
 		count: rowCount,
@@ -238,8 +249,8 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 				}}
 			/>
 
-			<header className="relative z-10 flex shrink-0 items-center justify-between border-b border-(--border-secondary) bg-(--bg-primary)/80 px-8 py-5 backdrop-blur-sm">
-				<div className="flex items-baseline gap-3">
+			<header className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-(--border-secondary) bg-(--bg-primary)/80 px-4 py-4 backdrop-blur-sm sm:px-6 sm:py-5 lg:px-8">
+				<div className="flex min-w-0 items-baseline gap-3">
 					<h1 className="text-lg font-semibold tracking-tight text-(--text-primary)">
 						Projects
 					</h1>
@@ -248,7 +259,7 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 				<button
 					type="button"
 					onClick={onAddProject}
-					className="btn btn-primary flex items-center gap-2"
+					className="btn btn-primary flex shrink-0 items-center gap-2 whitespace-nowrap"
 				>
 					<Plus size={16} strokeWidth={2} />
 					Add repository
@@ -257,112 +268,158 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 
 			<div
 				ref={containerRef}
-				className="relative z-10 flex flex-1 min-h-0 flex-col overflow-hidden px-8"
+				className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-6 sm:px-6 lg:px-8"
 			>
-				{recent.length > 0 && (
-					<section className="shrink-0 py-10">
-						<h2 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--text-muted)">
-							Recent
-						</h2>
-						<div
-							className="grid gap-5"
-							style={{
-								gridTemplateColumns: `repeat(${colCount}, minmax(${CARD_MIN_WIDTH}px, 1fr))`,
-							}}
+				<div
+					className={
+						isWideSplit
+							? "grid min-h-0 flex-1 grid-cols-[minmax(320px,0.95fr)_minmax(0,1.45fr)] gap-5 py-6 lg:gap-6"
+							: "flex min-h-0 flex-1 flex-col py-6 sm:py-8"
+					}
+				>
+					{recent.length > 0 && (
+						<section
+							className={
+								isWideSplit
+									? "flex min-h-0 flex-col rounded-2xl border border-(--border-secondary) bg-(--bg-secondary)/35 p-4"
+									: "shrink-0 pb-8"
+							}
 						>
-							{recent.map((p, i) => (
-								<ProjectCard
-									key={p.id}
-									project={p}
-									status={statusMap[p.id]}
-									isRecent
-									onOpen={() => handleOpen(p)}
-									worktreeCount={p.worktreeChildren?.length}
-									worktreeChildren={p.worktreeChildren}
-									onOpenWorktree={handleOpen}
-									animationDelay={i * 50}
-								/>
-							))}
-						</div>
-					</section>
-				)}
-				{other.length > 0 ? (
-					<section className="flex min-h-0 flex-1 flex-col pt-6">
-						<h2 className="mb-4 shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--text-muted)">
-							All projects
-						</h2>
-						<div ref={scrollRef} className="min-h-0 flex-1 overflow-auto -mx-1 px-1">
-							<div
-								style={{
-									height: `${rowVirtualizer.getTotalSize()}px`,
-									width: "100%",
-									position: "relative",
-								}}
-							>
-								{rowVirtualizer.getVirtualItems().map((virtualRow) => {
-									const start = virtualRow.index * colCount;
-									const rowProjects = other.slice(start, start + colCount);
-									return (
-										<div
-											key={virtualRow.key}
-											className="grid gap-4 py-1"
-											style={{
-												position: "absolute",
-												top: 0,
-												left: 0,
-												width: "100%",
-												transform: `translateY(${virtualRow.start}px)`,
-												gridTemplateColumns: `repeat(${colCount}, minmax(${CARD_MIN_WIDTH}px, 1fr))`,
-											}}
-										>
-											{rowProjects.map((p) => (
-												<ProjectCard
-													key={p.id}
-													project={p}
-													isRecent={false}
-													onOpen={() => handleOpen(p)}
-													worktreeCount={p.worktreeChildren?.length}
-													worktreeChildren={p.worktreeChildren}
-													onOpenWorktree={handleOpen}
-												/>
-											))}
-										</div>
-									);
-								})}
+							<div className="mb-4 flex items-center justify-between gap-2 sm:mb-5">
+								<h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--text-muted)">
+									Recent
+								</h2>
+								<span className="text-xs text-(--text-muted)">{recent.length}</span>
 							</div>
-						</div>
-						<button
-							type="button"
-							onClick={onAddProject}
-							className="group mt-6 flex shrink-0 items-center justify-center gap-2 self-center rounded-xl border border-dashed border-(--border-primary) bg-transparent px-8 py-3.5 text-sm font-medium text-(--text-muted) transition-all duration-200 hover:border-(--accent-primary) hover:text-(--accent-primary) hover:bg-(--bg-secondary)"
+							<div className={isWideSplit ? "min-h-0 flex-1 overflow-auto pr-1" : ""}>
+								<div
+									className="grid gap-4"
+									style={{
+										gridTemplateColumns: `repeat(${recentColCount}, minmax(0, 1fr))`,
+									}}
+								>
+									{recent.map((p, i) => (
+										<ProjectCard
+											key={p.id}
+											project={p}
+											status={statusMap[p.id]}
+											isRecent
+											onOpen={() => handleOpen(p)}
+											worktreeCount={p.worktreeChildren?.length}
+											worktreeChildren={p.worktreeChildren}
+											onOpenWorktree={handleOpen}
+											animationDelay={i * 50}
+										/>
+									))}
+								</div>
+							</div>
+						</section>
+					)}
+					{other.length > 0 ? (
+						<section
+							className={
+								isWideSplit
+									? "flex min-h-0 flex-1 flex-col rounded-2xl border border-(--border-secondary) bg-(--bg-secondary)/35 p-4"
+									: "flex min-h-0 flex-1 flex-col pt-2"
+							}
 						>
-							<Plus
-								size={18}
-								className="transition-transform duration-200 group-hover:rotate-90"
-							/>
-							Add another repository
-						</button>
-					</section>
-				) : (
-					<div className="flex flex-1 flex-col items-center justify-center gap-6 pt-12">
-						<div className="rounded-2xl border border-dashed border-(--border-secondary) bg-(--bg-secondary) p-12 text-center">
-							<p className="text-sm text-(--text-muted)">
-								You’ve opened all your recent projects.
-							</p>
-							<p className="mt-1 text-xs text-(--text-muted)/80">
-								Add more to keep working.
-							</p>
+							<div className="mb-4 flex shrink-0 items-center justify-between gap-2">
+								<h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--text-muted)">
+									All projects
+								</h2>
+								<span className="text-xs text-(--text-muted)">{other.length}</span>
+							</div>
+							<div
+								ref={scrollRef}
+								className="min-h-0 flex-1 overflow-auto -mx-1 px-1"
+							>
+								<div
+									style={{
+										height: `${rowVirtualizer.getTotalSize()}px`,
+										width: "100%",
+										position: "relative",
+									}}
+								>
+									{rowVirtualizer.getVirtualItems().map((virtualRow) => {
+										const start = virtualRow.index * otherColCount;
+										const rowProjects = other.slice(
+											start,
+											start + otherColCount
+										);
+										return (
+											<div
+												key={virtualRow.key}
+												className="grid gap-4 py-1"
+												style={{
+													position: "absolute",
+													top: 0,
+													left: 0,
+													width: "100%",
+													transform: `translateY(${virtualRow.start}px)`,
+													gridTemplateColumns: `repeat(${otherColCount}, minmax(0, 1fr))`,
+												}}
+											>
+												{rowProjects.map((p) => (
+													<ProjectCard
+														key={p.id}
+														project={p}
+														isRecent={false}
+														onOpen={() => handleOpen(p)}
+														worktreeCount={p.worktreeChildren?.length}
+														worktreeChildren={p.worktreeChildren}
+														onOpenWorktree={handleOpen}
+													/>
+												))}
+											</div>
+										);
+									})}
+								</div>
+							</div>
 							<button
 								type="button"
 								onClick={onAddProject}
-								className="btn btn-secondary mt-6"
+								className="group mt-6 flex shrink-0 items-center justify-center gap-2 self-center rounded-xl border border-dashed border-(--border-primary) bg-transparent px-8 py-3.5 text-sm font-medium text-(--text-muted) transition-all duration-200 hover:border-(--accent-primary) hover:bg-(--bg-secondary) hover:text-(--accent-primary)"
 							>
-								<Plus size={16} />
-								Add repository
+								<Plus
+									size={18}
+									className="transition-transform duration-200 group-hover:rotate-90"
+								/>
+								Add another repository
 							</button>
+						</section>
+					) : (
+						<div
+							className={
+								isWideSplit
+									? "flex min-h-0 flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-(--border-secondary) bg-(--bg-secondary)/35 p-10 text-center"
+									: "flex flex-1 flex-col items-center justify-center gap-6 pt-12"
+							}
+						>
+							<div
+								className={
+									isWideSplit
+										? ""
+										: "rounded-2xl border border-dashed border-(--border-secondary) bg-(--bg-secondary) p-12 text-center"
+								}
+							>
+								<p className="text-sm text-(--text-muted)">
+									You’ve opened all your recent projects.
+								</p>
+								<p className="mt-1 text-xs text-(--text-muted)/80">
+									Add more to keep working.
+								</p>
+								<button
+									type="button"
+									onClick={onAddProject}
+									className="btn btn-secondary mt-6"
+								>
+									<Plus size={16} />
+									Add repository
+								</button>
+							</div>
 						</div>
-					</div>
-				)}
+					)}
+				</div>
 			</div>
 		</div>
 	);

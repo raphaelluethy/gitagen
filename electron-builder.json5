@@ -11,9 +11,17 @@
 			to: "cli",
 			filter: ["**/*"],
 		},
+		{
+			from: "resources/icon.png",
+			to: "icon.png",
+		},
 	],
 	mac: {
+		icon: "resources/icon.icns",
 		category: "public.app-category.developer-tools",
 		target: ["dmg", "zip"],
+	},
+	linux: {
+		icon: "resources/icon.png",
 	},
 }

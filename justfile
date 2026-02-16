@@ -22,8 +22,11 @@ db-dev: db-generate db-migrate
 dev:
 	pnpm dev
 
+# Start Electron app with verbose agent debug logs (renderer + main)
+dev-debug:
+	ELECTRON_ENABLE_LOGGING=1 GITAGEN_AGENT_DEBUG=1 VITE_AGENT_DEBUG=1 pnpm dev
+
 # Start Electron app using local dev DB (.gitagen-dev.db)
 # Run `just db-migrate` first to create/migrate the DB
 dev-local-db:
 	DATABASE_URL="file:$(pwd)/.gitagen-dev.db" pnpm dev
-

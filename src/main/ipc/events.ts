@@ -14,6 +14,7 @@ interface RepoErrorPayload {
 	projectId: string | null;
 	message: string;
 	name: string;
+	stack?: string;
 }
 
 interface ConflictDetectedPayload {
@@ -37,13 +38,15 @@ export function emitRepoUpdated(projectId: string): void {
 export function emitRepoError(projectId: string | null, error: unknown): void {
 	let message = "Unknown error";
 	let name = "Error";
+	let stack: string | undefined;
 	if (error instanceof Error) {
 		message = error.message;
 		name = error.name;
+		stack = error.stack;
 	} else if (typeof error === "string") {
 		message = error;
 	}
-	const payload: RepoErrorPayload = { projectId, message, name };
+	const payload: RepoErrorPayload = { projectId, message, name, stack };
 	broadcast(EVENT_REPO_ERROR, payload);
 }
 

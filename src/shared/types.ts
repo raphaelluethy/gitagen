@@ -35,6 +35,8 @@ export type DiffStyle = "unified" | "split";
 
 // --- Plan v1 types ---
 
+export type FontFamily = "geist" | "geist-pixel" | "system";
+
 export interface AppSettings {
 	gitBinaryPath: string | null;
 	theme: "dark" | "light" | "system";
@@ -46,6 +48,8 @@ export interface AppSettings {
 	uiScale: number;
 	fontSize: number;
 	commitMessageFontSize: number;
+	fontFamily: FontFamily;
+	gpuAcceleration: boolean;
 }
 
 export interface Project {

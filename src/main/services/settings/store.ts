@@ -24,6 +24,8 @@ const KEYS = {
 	uiScale: "uiScale",
 	fontSize: "fontSize",
 	commitMessageFontSize: "commitMessageFontSize",
+	fontFamily: "fontFamily",
+	gpuAcceleration: "gpuAcceleration",
 } as const;
 
 const DEFAULTS: AppSettings = {
@@ -40,6 +42,8 @@ const DEFAULTS: AppSettings = {
 	uiScale: 1.0,
 	fontSize: 14,
 	commitMessageFontSize: 14,
+	fontFamily: "system",
+	gpuAcceleration: true,
 };
 
 export function getAppSettings(): AppSettings {
@@ -78,6 +82,16 @@ export function getAppSettings(): AppSettings {
 		? parseInt(commitMessageFontSizeRaw, 10)
 		: DEFAULTS.commitMessageFontSize;
 
+	const fontFamilyRaw = getAppSetting(KEYS.fontFamily);
+	const fontFamily = (
+		fontFamilyRaw === "geist" || fontFamilyRaw === "geist-pixel" || fontFamilyRaw === "system"
+			? fontFamilyRaw
+			: DEFAULTS.fontFamily
+	) as AppSettings["fontFamily"];
+
+	const gpuAccelerationRaw = getAppSetting(KEYS.gpuAcceleration);
+	const gpuAcceleration = gpuAccelerationRaw === "false" ? false : DEFAULTS.gpuAcceleration;
+
 	return {
 		gitBinaryPath,
 		theme,
@@ -92,6 +106,8 @@ export function getAppSettings(): AppSettings {
 		uiScale,
 		fontSize,
 		commitMessageFontSize,
+		fontFamily,
+		gpuAcceleration,
 	};
 }
 
@@ -135,6 +151,12 @@ export async function setAppSettings(partial: Partial<AppSettings>): Promise<App
 	}
 	if (partial.commitMessageFontSize !== undefined) {
 		setAppSetting(KEYS.commitMessageFontSize, String(partial.commitMessageFontSize));
+	}
+	if (partial.fontFamily !== undefined) {
+		setAppSetting(KEYS.fontFamily, partial.fontFamily);
+	}
+	if (partial.gpuAcceleration !== undefined) {
+		setAppSetting(KEYS.gpuAcceleration, partial.gpuAcceleration ? "true" : "false");
 	}
 
 	return getAppSettings();

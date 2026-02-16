@@ -9,6 +9,15 @@ import { registerSettingsHandlers } from "./ipc/settings.js";
 import { registerRepoHandlers } from "./ipc/repo.js";
 import { registerEventsHandlers } from "./ipc/events.js";
 
+// GPU acceleration must be configured before app is ready
+{
+	getDb();
+	const settings = getAppSettings();
+	if (!settings.gpuAcceleration) {
+		app.disableHardwareAcceleration();
+	}
+}
+
 const RETENTION_INTERVAL_MS = 30 * 60 * 1000;
 let retentionInterval: NodeJS.Timeout | null = null;
 

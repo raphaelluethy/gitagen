@@ -15,6 +15,11 @@
 			from: "resources/icon.png",
 			to: "icon.png",
 		},
+		{
+			from: "drizzle",
+			to: "drizzle",
+			filter: ["**/*"],
+		},
 	],
 	mac: {
 		icon: "resources/icon.icns",

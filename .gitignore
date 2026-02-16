@@ -44,3 +44,6 @@ Thumbs.db
 .cache/
 .turbo/
 .eslintcache
+
+# Local dev database (migrated via `just db:dev`)
+.gitagen-dev.db

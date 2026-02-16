@@ -1,16 +1,22 @@
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./sqlite.js";
+import { appSettings, logCache, patchCache, projectPrefs, projects, repoCache } from "./schema.js";
 
-export function getAppSetting(key: string): string | null {
-	const row = getDb().prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as
-		| { value: string }
-		| undefined;
-	return row?.value ?? null;
+export async function getAppSetting(key: string): Promise<string | null> {
+	const db = await getDb();
+	const rows = await db
+		.select({ value: appSettings.value })
+		.from(appSettings)
+		.where(eq(appSettings.key, key));
+	return rows[0]?.value ?? null;
 }
 
-export function setAppSetting(key: string, value: string | null): void {
-	getDb()
-		.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)")
-		.run(key, value);
+export async function setAppSetting(key: string, value: string | null): Promise<void> {
+	const db = await getDb();
+	await db.insert(appSettings).values({ key, value }).onConflictDoUpdate({
+		target: appSettings.key,
+		set: { value },
+	});
 }
 
 export interface ProjectRow {
@@ -21,52 +27,80 @@ export interface ProjectRow {
 	created_at: number;
 }
 
-export function listProjects(): ProjectRow[] {
-	return getDb()
-		.prepare(
-			"SELECT id, name, path, last_opened_at, created_at FROM projects ORDER BY last_opened_at DESC"
-		)
-		.all() as ProjectRow[];
+export async function listProjects(): Promise<ProjectRow[]> {
+	const db = await getDb();
+	const rows = await db
+		.select({
+			id: projects.id,
+			name: projects.name,
+			path: projects.path,
+			last_opened_at: projects.lastOpenedAt,
+			created_at: projects.createdAt,
+		})
+		.from(projects)
+		.orderBy(desc(projects.lastOpenedAt));
+	return rows as ProjectRow[];
 }
 
-export function getProject(id: string): ProjectRow | null {
-	const row = getDb()
-		.prepare("SELECT id, name, path, last_opened_at, created_at FROM projects WHERE id = ?")
-		.get(id) as ProjectRow | undefined;
-	return row ?? null;
+export async function getProject(id: string): Promise<ProjectRow | null> {
+	const db = await getDb();
+	const rows = await db
+		.select({
+			id: projects.id,
+			name: projects.name,
+			path: projects.path,
+			last_opened_at: projects.lastOpenedAt,
+			created_at: projects.createdAt,
+		})
+		.from(projects)
+		.where(eq(projects.id, id));
+	return rows[0] ? (rows[0] as ProjectRow) : null;
 }
 
-export function getProjectByPath(path: string): ProjectRow | null {
-	const row = getDb()
-		.prepare("SELECT id, name, path, last_opened_at, created_at FROM projects WHERE path = ?")
-		.get(path) as ProjectRow | undefined;
-	return row ?? null;
+export async function getProjectByPath(path: string): Promise<ProjectRow | null> {
+	const db = await getDb();
+	const rows = await db
+		.select({
+			id: projects.id,
+			name: projects.name,
+			path: projects.path,
+			last_opened_at: projects.lastOpenedAt,
+			created_at: projects.createdAt,
+		})
+		.from(projects)
+		.where(eq(projects.path, path));
+	return rows[0] ? (rows[0] as ProjectRow) : null;
 }
 
-export function insertProject(
+export async function insertProject(
 	id: string,
 	name: string,
 	path: string,
 	lastOpenedAt: number,
 	createdAt: number
-): void {
-	getDb()
-		.prepare(
-			"INSERT INTO projects (id, name, path, last_opened_at, created_at) VALUES (?, ?, ?, ?, ?)"
-		)
-		.run(id, name, path, lastOpenedAt, createdAt);
+): Promise<void> {
+	const db = await getDb();
+	await db.insert(projects).values({
+		id,
+		name,
+		path,
+		lastOpenedAt,
+		createdAt,
+	});
 }
 
-export function updateProjectLastOpened(id: string, lastOpenedAt: number): void {
-	getDb().prepare("UPDATE projects SET last_opened_at = ? WHERE id = ?").run(lastOpenedAt, id);
+export async function updateProjectLastOpened(id: string, lastOpenedAt: number): Promise<void> {
+	const db = await getDb();
+	await db.update(projects).set({ lastOpenedAt }).where(eq(projects.id, id));
 }
 
-export function deleteProject(id: string): void {
-	getDb().prepare("DELETE FROM project_prefs WHERE project_id = ?").run(id);
-	getDb().prepare("DELETE FROM repo_cache WHERE project_id = ?").run(id);
-	getDb().prepare("DELETE FROM patch_cache WHERE project_id = ?").run(id);
-	getDb().prepare("DELETE FROM log_cache WHERE project_id = ?").run(id);
-	getDb().prepare("DELETE FROM projects WHERE id = ?").run(id);
+export async function deleteProject(id: string): Promise<void> {
+	const db = await getDb();
+	await db.delete(projectPrefs).where(eq(projectPrefs.projectId, id));
+	await db.delete(repoCache).where(eq(repoCache.projectId, id));
+	await db.delete(patchCache).where(eq(patchCache.projectId, id));
+	await db.delete(logCache).where(eq(logCache.projectId, id));
+	await db.delete(projects).where(eq(projects.id, id));
 }
 
 export interface ProjectPrefsRow {
@@ -78,16 +112,23 @@ export interface ProjectPrefsRow {
 	active_worktree_path: string | null;
 }
 
-export function getProjectPrefs(projectId: string): ProjectPrefsRow | null {
-	const row = getDb()
-		.prepare(
-			"SELECT include_ignored, changed_only, expanded_dirs, selected_file_path, sidebar_scroll_top, active_worktree_path FROM project_prefs WHERE project_id = ?"
-		)
-		.get(projectId) as ProjectPrefsRow | undefined;
-	return row ?? null;
+export async function getProjectPrefs(projectId: string): Promise<ProjectPrefsRow | null> {
+	const db = await getDb();
+	const rows = await db
+		.select({
+			include_ignored: projectPrefs.includeIgnored,
+			changed_only: projectPrefs.changedOnly,
+			expanded_dirs: projectPrefs.expandedDirs,
+			selected_file_path: projectPrefs.selectedFilePath,
+			sidebar_scroll_top: projectPrefs.sidebarScrollTop,
+			active_worktree_path: projectPrefs.activeWorktreePath,
+		})
+		.from(projectPrefs)
+		.where(eq(projectPrefs.projectId, projectId));
+	return rows[0] ? (rows[0] as ProjectPrefsRow) : null;
 }
 
-export function setProjectPrefs(
+export async function setProjectPrefs(
 	projectId: string,
 	prefs: {
 		includeIgnored?: boolean;
@@ -97,8 +138,8 @@ export function setProjectPrefs(
 		sidebarScrollTop?: number;
 		activeWorktreePath?: string | null;
 	}
-): void {
-	const existing = getProjectPrefs(projectId);
+): Promise<void> {
+	const existing = await getProjectPrefs(projectId);
 	const includeIgnored =
 		prefs.includeIgnored ?? (existing ? Boolean(existing.include_ignored) : false);
 	const changedOnly = prefs.changedOnly ?? (existing ? Boolean(existing.changed_only) : false);
@@ -110,27 +151,29 @@ export function setProjectPrefs(
 			? prefs.activeWorktreePath
 			: (existing?.active_worktree_path ?? null);
 
-	getDb()
-		.prepare(
-			`INSERT INTO project_prefs (project_id, include_ignored, changed_only, expanded_dirs, selected_file_path, sidebar_scroll_top, active_worktree_path)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(project_id) DO UPDATE SET
-			   include_ignored = excluded.include_ignored,
-			   changed_only = excluded.changed_only,
-			   expanded_dirs = excluded.expanded_dirs,
-			   selected_file_path = excluded.selected_file_path,
-			   sidebar_scroll_top = excluded.sidebar_scroll_top,
-			   active_worktree_path = excluded.active_worktree_path`
-		)
-		.run(
+	const db = await getDb();
+	await db
+		.insert(projectPrefs)
+		.values({
 			projectId,
-			includeIgnored ? 1 : 0,
-			changedOnly ? 1 : 0,
-			JSON.stringify(expandedDirs),
+			includeIgnored: includeIgnored ? 1 : 0,
+			changedOnly: changedOnly ? 1 : 0,
+			expandedDirs: JSON.stringify(expandedDirs),
 			selectedFilePath,
 			sidebarScrollTop,
-			activeWorktreePath
-		);
+			activeWorktreePath,
+		})
+		.onConflictDoUpdate({
+			target: projectPrefs.projectId,
+			set: {
+				includeIgnored: includeIgnored ? 1 : 0,
+				changedOnly: changedOnly ? 1 : 0,
+				expandedDirs: JSON.stringify(expandedDirs),
+				selectedFilePath,
+				sidebarScrollTop,
+				activeWorktreePath,
+			},
+		});
 }
 
 export interface RepoCacheRow {
@@ -139,101 +182,151 @@ export interface RepoCacheRow {
 	size_bytes: number | null;
 }
 
-export function getRepoCache(
+export async function getRepoCache(
 	projectId: string,
 	fingerprint: string,
 	includeIgnored: boolean
-): RepoCacheRow | null {
-	const row = getDb()
-		.prepare(
-			"SELECT tree_data, status_data, size_bytes FROM repo_cache WHERE project_id = ? AND fingerprint = ? AND include_ignored = ?"
-		)
-		.get(projectId, fingerprint, includeIgnored ? 1 : 0) as RepoCacheRow | undefined;
+): Promise<RepoCacheRow | null> {
+	const inc = includeIgnored ? 1 : 0;
+	const db = await getDb();
+	const rows = await db
+		.select({
+			tree_data: repoCache.treeData,
+			status_data: repoCache.statusData,
+			size_bytes: repoCache.sizeBytes,
+		})
+		.from(repoCache)
+		.where(
+			and(
+				eq(repoCache.projectId, projectId),
+				eq(repoCache.fingerprint, fingerprint),
+				eq(repoCache.includeIgnored, inc)
+			)
+		);
+	const row = rows[0];
 	if (!row) return null;
 	// Touch accessed_at
-	getDb()
-		.prepare(
-			"UPDATE repo_cache SET accessed_at = unixepoch() WHERE project_id = ? AND fingerprint = ? AND include_ignored = ?"
-		)
-		.run(projectId, fingerprint, includeIgnored ? 1 : 0);
-	return row;
+	await db
+		.update(repoCache)
+		.set({ accessedAt: sql`unixepoch()` })
+		.where(
+			and(
+				eq(repoCache.projectId, projectId),
+				eq(repoCache.fingerprint, fingerprint),
+				eq(repoCache.includeIgnored, inc)
+			)
+		);
+	return row as RepoCacheRow;
 }
 
-export function setRepoCache(
+export async function setRepoCache(
 	projectId: string,
 	fingerprint: string,
 	includeIgnored: boolean,
 	treeData: string | null,
 	statusData: string | null
-): void {
+): Promise<void> {
 	const sizeBytes = (treeData?.length ?? 0) + (statusData?.length ?? 0);
 	const now = Math.floor(Date.now() / 1000);
-	getDb()
-		.prepare(
-			`INSERT INTO repo_cache (project_id, fingerprint, include_ignored, tree_data, status_data, size_bytes, accessed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(project_id, fingerprint, include_ignored) DO UPDATE SET
-			   tree_data = excluded.tree_data,
-			   status_data = excluded.status_data,
-			   size_bytes = excluded.size_bytes,
-			   accessed_at = excluded.accessed_at`
-		)
-		.run(
+	const db = await getDb();
+	await db
+		.insert(repoCache)
+		.values({
 			projectId,
 			fingerprint,
-			includeIgnored ? 1 : 0,
+			includeIgnored: includeIgnored ? 1 : 0,
 			treeData,
 			statusData,
 			sizeBytes,
-			now,
-			now
-		);
+			accessedAt: now,
+			createdAt: now,
+		})
+		.onConflictDoUpdate({
+			target: [repoCache.projectId, repoCache.fingerprint, repoCache.includeIgnored],
+			set: {
+				treeData,
+				statusData,
+				sizeBytes,
+				accessedAt: now,
+			},
+		});
 }
 
-export function getPatchCache(
+export async function getPatchCache(
 	projectId: string,
 	filePath: string,
 	scope: string,
 	fingerprint: string
-): string | null {
-	const row = getDb()
-		.prepare(
-			"SELECT patch_text FROM patch_cache WHERE project_id = ? AND file_path = ? AND scope = ? AND fingerprint = ?"
-		)
-		.get(projectId, filePath, scope, fingerprint) as { patch_text: string } | undefined;
+): Promise<string | null> {
+	const db = await getDb();
+	const rows = await db
+		.select({ patch_text: patchCache.patchText })
+		.from(patchCache)
+		.where(
+			and(
+				eq(patchCache.projectId, projectId),
+				eq(patchCache.filePath, filePath),
+				eq(patchCache.scope, scope),
+				eq(patchCache.fingerprint, fingerprint)
+			)
+		);
+	const row = rows[0];
 	if (!row) return null;
-	getDb()
-		.prepare(
-			"UPDATE patch_cache SET accessed_at = unixepoch() WHERE project_id = ? AND file_path = ? AND scope = ? AND fingerprint = ?"
-		)
-		.run(projectId, filePath, scope, fingerprint);
+	await db
+		.update(patchCache)
+		.set({ accessedAt: sql`unixepoch()` })
+		.where(
+			and(
+				eq(patchCache.projectId, projectId),
+				eq(patchCache.filePath, filePath),
+				eq(patchCache.scope, scope),
+				eq(patchCache.fingerprint, fingerprint)
+			)
+		);
 	return row.patch_text;
 }
 
-export function setPatchCache(
+export async function setPatchCache(
 	projectId: string,
 	filePath: string,
 	scope: string,
 	fingerprint: string,
 	patchText: string
-): void {
+): Promise<void> {
 	const sizeBytes = patchText.length;
 	const now = Math.floor(Date.now() / 1000);
-	getDb()
-		.prepare(
-			`INSERT INTO patch_cache (project_id, file_path, scope, fingerprint, patch_text, size_bytes, accessed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(project_id, file_path, scope, fingerprint) DO UPDATE SET
-			   patch_text = excluded.patch_text,
-			   size_bytes = excluded.size_bytes,
-			   accessed_at = excluded.accessed_at`
-		)
-		.run(projectId, filePath, scope, fingerprint, patchText, sizeBytes, now, now);
+	const db = await getDb();
+	await db
+		.insert(patchCache)
+		.values({
+			projectId,
+			filePath,
+			scope,
+			fingerprint,
+			patchText,
+			sizeBytes,
+			accessedAt: now,
+			createdAt: now,
+		})
+		.onConflictDoUpdate({
+			target: [
+				patchCache.projectId,
+				patchCache.filePath,
+				patchCache.scope,
+				patchCache.fingerprint,
+			],
+			set: {
+				patchText,
+				sizeBytes,
+				accessedAt: now,
+			},
+		});
 }
 
-export function invalidateProjectCache(projectId: string): void {
-	getDb().prepare("DELETE FROM repo_cache WHERE project_id = ?").run(projectId);
-	getDb().prepare("DELETE FROM patch_cache WHERE project_id = ?").run(projectId);
+export async function invalidateProjectCache(projectId: string): Promise<void> {
+	const db = await getDb();
+	await db.delete(repoCache).where(eq(repoCache.projectId, projectId));
+	await db.delete(patchCache).where(eq(patchCache.projectId, projectId));
 }
 
 // --- Log cache ---
@@ -241,30 +334,53 @@ export function invalidateProjectCache(projectId: string): void {
 export interface LogCacheRow {
 	commits_json: string;
 	head_oid: string | null;
+	unpushed_oids_json: string | null;
 	updated_at: number;
 }
 
-export function getLogCache(projectId: string): LogCacheRow | null {
-	const row = getDb()
-		.prepare("SELECT commits_json, head_oid, updated_at FROM log_cache WHERE project_id = ?")
-		.get(projectId) as LogCacheRow | undefined;
-	return row ?? null;
+export async function getLogCache(projectId: string): Promise<LogCacheRow | null> {
+	const db = await getDb();
+	const rows = await db
+		.select({
+			commits_json: logCache.commitsJson,
+			head_oid: logCache.headOid,
+			unpushed_oids_json: logCache.unpushedOidsJson,
+			updated_at: logCache.updatedAt,
+		})
+		.from(logCache)
+		.where(eq(logCache.projectId, projectId));
+	return rows[0] ? (rows[0] as LogCacheRow) : null;
 }
 
-export function setLogCache(projectId: string, commitsJson: string, headOid: string | null): void {
+export async function setLogCache(
+	projectId: string,
+	commitsJson: string,
+	headOid: string | null,
+	unpushedOidsJson: string | null = null
+): Promise<void> {
 	const now = Math.floor(Date.now() / 1000);
-	getDb()
-		.prepare(
-			`INSERT INTO log_cache (project_id, commits_json, head_oid, updated_at)
-			 VALUES (?, ?, ?, ?)
-			 ON CONFLICT(project_id) DO UPDATE SET
-			   commits_json = excluded.commits_json,
-			   head_oid = excluded.head_oid,
-			   updated_at = excluded.updated_at`
-		)
-		.run(projectId, commitsJson, headOid, now);
+	const db = await getDb();
+	await db
+		.insert(logCache)
+		.values({
+			projectId,
+			commitsJson,
+			headOid,
+			unpushedOidsJson,
+			updatedAt: now,
+		})
+		.onConflictDoUpdate({
+			target: logCache.projectId,
+			set: {
+				commitsJson,
+				headOid,
+				unpushedOidsJson,
+				updatedAt: now,
+			},
+		});
 }
 
-export function deleteLogCache(projectId: string): void {
-	getDb().prepare("DELETE FROM log_cache WHERE project_id = ?").run(projectId);
+export async function deleteLogCache(projectId: string): Promise<void> {
+	const db = await getDb();
+	await db.delete(logCache).where(eq(logCache.projectId, projectId));
 }

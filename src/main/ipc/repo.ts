@@ -70,12 +70,14 @@ function buildFingerprintKeyValue(fingerprint: {
 	repoPath: string;
 	headOid: string;
 	indexMtimeMs: number;
+	headMtimeMs: number;
 	statusHash: string;
 }): string {
 	return [
 		fingerprint.repoPath,
 		fingerprint.headOid,
 		String(fingerprint.indexMtimeMs),
+		String(fingerprint.headMtimeMs),
 		fingerprint.statusHash,
 	].join("|");
 }
@@ -609,7 +611,7 @@ export function registerRepoHandlers(): void {
 
 	ipcMain.handle(
 		"repo:testSigning",
-		async (_, projectId: string, key: string): Promise<{ ok: boolean; message: string }> => {
+		async (_, projectId: string, key?: string): Promise<{ ok: boolean; message: string }> => {
 			const { testSigningConfig } = await import("../services/settings/git-config.js");
 			const cwd = getRepoPath(projectId);
 			if (!cwd) {
@@ -663,17 +665,20 @@ export function registerRepoHandlers(): void {
 		}
 	);
 
-	ipcMain.handle("repo:removeWorktree", async (_, projectId: string, worktreePath: string) => {
-		const project = getProject(projectId);
-		if (!project) return;
-		try {
-			await removeWorktreeManager(project.path, worktreePath, getGitProvider());
-			emitRepoUpdated(projectId);
-		} catch (error) {
-			emitRepoError(projectId, error);
-			throw error;
+	ipcMain.handle(
+		"repo:removeWorktree",
+		async (_, projectId: string, worktreePath: string, force?: boolean) => {
+			const project = getProject(projectId);
+			if (!project) return;
+			try {
+				await removeWorktreeManager(project.path, worktreePath, getGitProvider(), force);
+				emitRepoUpdated(projectId);
+			} catch (error) {
+				emitRepoError(projectId, error);
+				throw error;
+			}
 		}
-	});
+	);
 
 	ipcMain.handle("repo:pruneWorktrees", async (_, projectId: string) => {
 		const project = getProject(projectId);

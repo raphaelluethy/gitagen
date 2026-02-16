@@ -52,8 +52,12 @@ export interface SshAgentInfo {
 
 export function getSshAgentInfo(): SshAgentInfo {
 	const sock = process.env.SSH_AUTH_SOCK;
-	if (sock) return { name: "System SSH Agent", path: sock };
-	return { name: "None", path: null };
+	if (!sock) return { name: "None", path: null };
+	const name =
+		sock.includes("1password") || sock.includes("2BUA8C4S2C.com.1password")
+			? "1Password SSH Agent"
+			: "System SSH Agent";
+	return { name, path: sock };
 }
 
 export { ensureSshAuthSock } from "./env.js";

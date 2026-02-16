@@ -1,36 +1,42 @@
 import { execSync, spawnSync } from "child_process";
 import type { ConfigEntry } from "../../../shared/types.js";
 
+function normalizeScope(scope: string): ConfigEntry["scope"] {
+	switch (scope) {
+		case "system":
+		case "global":
+		case "local":
+		case "worktree":
+			return scope;
+		default:
+			return "unknown";
+	}
+}
+
 export function getEffectiveConfig(cwd: string): ConfigEntry[] {
 	try {
-		const out = execSync("git config --list --show-origin --show-scope", {
+		const out = execSync("git config --list --show-origin --show-scope --null", {
 			cwd,
 			encoding: "utf-8",
 			env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
 		});
+		const parts = out.split("\0");
 		const entries: ConfigEntry[] = [];
-		for (const line of out.split("\n")) {
-			if (!line.trim()) continue;
-			// Format: <scope> <file>:<key>=<value> or <scope> <file>:<key> <value>
-			const scopeMatch = line.match(/^(system|global|local|worktree)\s+/);
-			if (!scopeMatch) continue;
-			const scope = scopeMatch[1] as ConfigEntry["scope"];
-			const rest = line.slice(scopeMatch[0].length);
-			const colonIdx = rest.indexOf(":");
-			if (colonIdx === -1) continue;
-			const origin = rest.slice(0, colonIdx).trim();
-			const keyVal = rest.slice(colonIdx + 1).trim();
-			const eqIdx = keyVal.indexOf("=");
-			let key: string;
-			let value: string;
-			if (eqIdx !== -1) {
-				key = keyVal.slice(0, eqIdx).trim();
-				value = keyVal.slice(eqIdx + 1).trim();
-			} else {
-				key = keyVal;
-				value = "";
-			}
-			entries.push({ key, value, origin, scope });
+		for (let i = 0; i + 2 < parts.length; i += 3) {
+			const scopeRaw = parts[i]?.trim();
+			if (!scopeRaw) continue;
+			const origin = (parts[i + 1] ?? "").trim();
+			const keyValue = parts[i + 2] ?? "";
+			const newlineIdx = keyValue.indexOf("\n");
+			const key = (newlineIdx === -1 ? keyValue : keyValue.slice(0, newlineIdx)).trim();
+			const value = newlineIdx === -1 ? "" : keyValue.slice(newlineIdx + 1).trim();
+			if (!key) continue;
+			entries.push({
+				key,
+				value,
+				origin,
+				scope: normalizeScope(scopeRaw),
+			});
 		}
 		return entries;
 	} catch {
@@ -51,33 +57,64 @@ export function setLocalConfig(cwd: string, key: string, value: string): void {
 	}
 }
 
-export function testSigningConfig(cwd: string, key: string): { ok: boolean; message: string } {
-	if (!key.trim()) {
-		return { ok: false, message: "Signing key is required." };
-	}
-	const result = spawnSync(
-		"git",
-		[
-			"-c",
-			"gpg.format=ssh",
-			"-c",
-			`user.signingkey=${key}`,
-			"config",
-			"--get",
-			"user.signingkey",
-		],
-		{
-			cwd,
-			encoding: "utf-8",
-			env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+export function testSigningConfig(
+	cwd: string,
+	keyOverride?: string
+): { ok: boolean; message: string } {
+	const entries = getEffectiveConfig(cwd);
+	const cfgVal = (k: string): string => {
+		for (let i = entries.length - 1; i >= 0; i--) {
+			if (entries[i].key === k && entries[i].value.trim()) return entries[i].value.trim();
 		}
-	);
-	if (result.status === 0 && result.stdout.trim() === key.trim()) {
-		return { ok: true, message: "Signing configuration looks valid." };
+		return "";
+	};
+
+	const key = keyOverride?.trim() || cfgVal("user.signingkey");
+	if (!key) {
+		return {
+			ok: false,
+			message: "No signing key configured. Set user.signingkey in your git config.",
+		};
+	}
+
+	// Resolve a tree object to create the test signature against
+	const tree = spawnSync("git", ["rev-parse", "HEAD^{tree}"], {
+		cwd,
+		encoding: "utf-8",
+		env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+	});
+	if (tree.status !== 0 || !tree.stdout.trim()) {
+		return {
+			ok: false,
+			message: "No commits in this repository yet — cannot test signing.",
+		};
+	}
+
+	// Build args: respect the full existing config (gpg.format,
+	// gpg.ssh.program, etc.) and only override what's necessary.
+	const args: string[] = [];
+	if (!cfgVal("gpg.format")) args.push("-c", "gpg.format=ssh");
+	if (keyOverride?.trim()) args.push("-c", `user.signingkey=${keyOverride.trim()}`);
+
+	args.push("commit-tree", tree.stdout.trim(), "-S", "-m", "gitagen signing test");
+
+	// Create a signed dangling commit object — exercises the full
+	// signing pipeline without touching any refs.
+	const result = spawnSync("git", args, {
+		cwd,
+		encoding: "utf-8",
+		timeout: 15_000,
+		env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+	});
+
+	if (result.status === 0 && result.stdout.trim()) {
+		return { ok: true, message: `Signing works. Key: ${key}` };
 	}
 	return {
 		ok: false,
 		message:
-			result.stderr?.trim() || result.stdout?.trim() || "Could not validate signing setup.",
+			result.stderr?.trim() ||
+			result.stdout?.trim() ||
+			"Signing failed — check your SSH agent and key.",
 	};
 }

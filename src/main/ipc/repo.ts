@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, shell, type MessageBoxOptions } from "electron";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
-import { join } from "path";
+import { resolve, normalize } from "path";
 import { createGitProvider } from "../services/git/index.js";
 import type { GitProvider } from "../services/git/types.js";
 import { getAppSettings } from "../services/settings/store.js";
@@ -15,8 +15,8 @@ import {
 	getLogCache,
 	setLogCache,
 	updateProjectLastOpened,
-	type ProjectPrefsRow,
 } from "../services/cache/queries.js";
+import { prefsRowToPrefs } from "../services/cache/utils.js";
 import {
 	listWorktrees as listWorktreesManager,
 	addWorktree as addWorktreeManager,
@@ -38,6 +38,13 @@ import type {
 	RepoStatus,
 	TreeNode,
 } from "../../shared/types.js";
+
+const AGENT_DEBUG = process.env.GITAGEN_AGENT_DEBUG === "1";
+
+function debugRepo(label: string, message: string): void {
+	if (!AGENT_DEBUG) return;
+	console.info(`[agent][${label}] ${message}`);
+}
 
 function migrateRepoStatus(raw: unknown): RepoStatus | null {
 	if (!raw || typeof raw !== "object") return null;
@@ -123,8 +130,8 @@ async function setRepoCacheSafe(
 ): Promise<void> {
 	try {
 		await setRepoCache(projectId, fingerprint, includeIgnored, treeData, statusData);
-	} catch {
-		// Cache writes are best-effort and must never block live git responses.
+	} catch (error) {
+		console.error("[setRepoCacheSafe] Cache write failed:", error);
 	}
 }
 
@@ -137,8 +144,8 @@ async function setPatchCacheSafe(
 ): Promise<void> {
 	try {
 		await setPatchCache(projectId, filePath, scope, fingerprint, patchText);
-	} catch {
-		// Cache writes are best-effort and must never block live git responses.
+	} catch (error) {
+		console.error("[setPatchCacheSafe] Cache write failed:", error);
 	}
 }
 
@@ -156,8 +163,8 @@ async function emitConflictsIfAny(projectId: string, git: GitProvider, cwd: stri
 			conflictFiles,
 		};
 		emitConflictDetected(projectId, state);
-	} catch {
-		// Ignore conflict probing errors.
+	} catch (error) {
+		console.error("[emitConflictsIfAny] Failed to check conflicts:", error);
 	}
 }
 
@@ -182,17 +189,6 @@ async function runMutation<T>(
 	}
 }
 
-function prefsRowToPrefs(row: ProjectPrefsRow): ProjectPrefs {
-	return {
-		includeIgnored: Boolean(row.include_ignored),
-		changedOnly: Boolean(row.changed_only),
-		expandedDirs: JSON.parse(row.expanded_dirs || "[]"),
-		selectedFilePath: row.selected_file_path,
-		sidebarScrollTop: row.sidebar_scroll_top,
-		activeWorktreePath: row.active_worktree_path ?? null,
-	};
-}
-
 export function registerRepoHandlers(): void {
 	ipcMain.handle(
 		"repo:openProject",
@@ -201,12 +197,17 @@ export function registerRepoHandlers(): void {
 			if (!project) return null;
 
 			const now = Math.floor(Date.now() / 1000);
-			await updateProjectLastOpened(projectId, now);
 
-			const prefsRow = await getProjectPrefs(projectId);
+			const [prefsRow, cachedLogRow, git] = await Promise.all([
+				getProjectPrefs(projectId),
+				getLogCache(projectId),
+				getGitProvider(),
+			]);
+
+			updateProjectLastOpened(projectId, now);
+
 			const prefs: ProjectPrefs | null = prefsRow ? prefsRowToPrefs(prefsRow) : null;
 
-			const cachedLogRow = await getLogCache(projectId);
 			let cachedLog: CommitInfo[] | null = null;
 			let cachedUnpushedOids: string[] | null = null;
 			if (cachedLogRow) {
@@ -222,7 +223,9 @@ export function registerRepoHandlers(): void {
 				}
 			}
 
-			const cwd = await getRepoPath(projectId);
+			const activePath = prefsRow?.active_worktree_path;
+			const cwd =
+				activePath && activePath.trim() !== "" ? activePath : project.path;
 			if (!cwd) {
 				return {
 					status: null,
@@ -234,7 +237,6 @@ export function registerRepoHandlers(): void {
 				};
 			}
 
-			const git = await getGitProvider();
 			const [status, branches, remotes] = await Promise.all([
 				(async () => {
 					try {
@@ -322,8 +324,13 @@ export function registerRepoHandlers(): void {
 	);
 
 	ipcMain.handle("repo:getStatus", async (_, projectId: string) => {
+		const startedAt = Date.now();
+		debugRepo("repo:getStatus", `start projectId=${projectId}`);
 		const cwd = await getRepoPath(projectId);
-		if (!cwd) return null;
+		if (!cwd) {
+			debugRepo("repo:getStatus", `project not found projectId=${projectId}`);
+			return null;
+		}
 		const git = await getGitProvider();
 		try {
 			const baseFingerprint = await getBaseFingerprintKey(git, cwd);
@@ -331,15 +338,29 @@ export function registerRepoHandlers(): void {
 				const cached = await getRepoCache(projectId, baseFingerprint, false);
 				const raw = parseJsonSafe<unknown>(cached?.status_data ?? null);
 				const cachedStatus = raw ? migrateRepoStatus(raw) : null;
-				if (cachedStatus) return cachedStatus;
+				if (cachedStatus) {
+					debugRepo(
+						"repo:getStatus",
+						`cache hit projectId=${projectId} took=${Date.now() - startedAt}ms`
+					);
+					return cachedStatus;
+				}
 			}
 
 			const status = await git.getStatus(cwd);
 			if (baseFingerprint && status) {
 				setRepoCacheSafe(projectId, baseFingerprint, false, null, JSON.stringify(status));
 			}
+			debugRepo(
+				"repo:getStatus",
+				`ok projectId=${projectId} took=${Date.now() - startedAt}ms staged=${status?.staged.length ?? 0} unstaged=${status?.unstaged.length ?? 0} untracked=${status?.untracked.length ?? 0}`
+			);
 			return status;
 		} catch (error) {
+			debugRepo(
+				"repo:getStatus",
+				`error projectId=${projectId} took=${Date.now() - startedAt}ms message=${error instanceof Error ? error.message : String(error)}`
+			);
 			emitRepoError(projectId, error);
 			return null;
 		}
@@ -353,8 +374,16 @@ export function registerRepoHandlers(): void {
 			filePath: string,
 			scope: "staged" | "unstaged" | "untracked"
 		) => {
+			const startedAt = Date.now();
+			debugRepo(
+				"repo:getPatch",
+				`start projectId=${projectId} scope=${scope} filePath=${filePath}`
+			);
 			const cwd = await getRepoPath(projectId);
-			if (!cwd) return null;
+			if (!cwd) {
+				debugRepo("repo:getPatch", `project not found projectId=${projectId}`);
+				return null;
+			}
 			const git = await getGitProvider();
 			try {
 				const baseFingerprint = await getBaseFingerprintKey(git, cwd);
@@ -366,15 +395,29 @@ export function registerRepoHandlers(): void {
 						scope,
 						patchFingerprint
 					);
-					if (cached != null) return cached;
+					if (cached != null) {
+						debugRepo(
+							"repo:getPatch",
+							`cache hit projectId=${projectId} scope=${scope} filePath=${filePath} took=${Date.now() - startedAt}ms`
+						);
+						return cached;
+					}
 				}
 
 				const patch = await git.getPatch({ cwd, filePath, scope });
 				if (patchFingerprint && patch != null) {
 					setPatchCacheSafe(projectId, filePath, scope, patchFingerprint, patch);
 				}
+				debugRepo(
+					"repo:getPatch",
+					`ok projectId=${projectId} scope=${scope} filePath=${filePath} took=${Date.now() - startedAt}ms hasPatch=${String(patch != null)}`
+				);
 				return patch;
 			} catch (error) {
+				debugRepo(
+					"repo:getPatch",
+					`error projectId=${projectId} scope=${scope} filePath=${filePath} took=${Date.now() - startedAt}ms message=${error instanceof Error ? error.message : String(error)}`
+				);
 				emitRepoError(projectId, error);
 				return null;
 			}
@@ -384,8 +427,13 @@ export function registerRepoHandlers(): void {
 	ipcMain.handle(
 		"repo:getAllDiffs",
 		async (_, projectId: string): Promise<{ path: string; scope: string; diff: string }[]> => {
+			const startedAt = Date.now();
+			debugRepo("repo:getAllDiffs", `start projectId=${projectId}`);
 			const cwd = await getRepoPath(projectId);
-			if (!cwd) return [];
+			if (!cwd) {
+				debugRepo("repo:getAllDiffs", `project not found projectId=${projectId}`);
+				return [];
+			}
 			const git = await getGitProvider();
 			try {
 				const status = await git.getStatus(cwd);
@@ -408,8 +456,16 @@ export function registerRepoHandlers(): void {
 						results.push({ path: entry.path, scope: entry.scope, diff: patch });
 					}
 				}
+				debugRepo(
+					"repo:getAllDiffs",
+					`ok projectId=${projectId} took=${Date.now() - startedAt}ms entries=${entries.length} results=${results.length}`
+				);
 				return results;
 			} catch (error) {
+				debugRepo(
+					"repo:getAllDiffs",
+					`error projectId=${projectId} took=${Date.now() - startedAt}ms message=${error instanceof Error ? error.message : String(error)}`
+				);
 				emitRepoError(projectId, error);
 				return [];
 			}
@@ -450,13 +506,52 @@ export function registerRepoHandlers(): void {
 		async (_, projectId: string, filePath: string): Promise<void> => {
 			const cwd = await getRepoPath(projectId);
 			if (!cwd) throw new Error("Project not found");
-			const fullPath = join(cwd, filePath);
+			const normalizedFilePath = normalize(filePath);
+			if (normalizedFilePath.startsWith("..") || filePath.includes("\0")) {
+				throw new Error("Invalid file path");
+			}
+			const fullPath = resolve(cwd, filePath);
+			if (!fullPath.startsWith(resolve(cwd))) {
+				throw new Error("Path traversal detected");
+			}
 			await shell.openPath(fullPath);
 		}
 	);
 
-	ipcMain.handle("app:openExternal", async (_, url: string): Promise<void> => {
-		await shell.openExternal(url);
+	ipcMain.handle("app:openExternal", async (event, url: string): Promise<void> => {
+		let parsedUrl: URL;
+		try {
+			parsedUrl = new URL(url);
+		} catch {
+			throw new Error("Invalid URL format");
+		}
+		if (parsedUrl.protocol !== "https:") {
+			throw new Error("Only https URLs are allowed");
+		}
+		const allowedDomains = ["github.com", "gitlab.com", "bitbucket.org", "dev.azure.com"];
+		const isAllowed = allowedDomains.some(
+			(domain) =>
+				parsedUrl.hostname === domain || parsedUrl.hostname.endsWith(`.${domain}`)
+		);
+		if (!isAllowed) {
+			const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+			const config: MessageBoxOptions = {
+				type: "warning",
+				title: "Open External Link",
+				message: "Open external link?",
+				detail: `Do you want to open ${url}?`,
+				buttons: ["Cancel", "Open"],
+				defaultId: 1,
+				cancelId: 0,
+			};
+			const result = win
+				? await dialog.showMessageBox(win, config)
+				: await dialog.showMessageBox(config);
+			if (result.response !== 1) {
+				return;
+			}
+		}
+		await shell.openExternal(url, { activate: true });
 	});
 
 	ipcMain.handle(
@@ -534,15 +629,26 @@ export function registerRepoHandlers(): void {
 			projectId: string,
 			opts?: { limit?: number; branch?: string; offset?: number }
 		) => {
+			const startedAt = Date.now();
+			debugRepo(
+				"repo:getLog",
+				`start projectId=${projectId} limit=${opts?.limit ?? "default"} branch=${opts?.branch ?? "current"} offset=${opts?.offset ?? 0}`
+			);
 			const cwd = await getRepoPath(projectId);
-			if (!cwd) return [];
+			if (!cwd) {
+				debugRepo("repo:getLog", `project not found projectId=${projectId}`);
+				return [];
+			}
 			try {
-				const commits = await (await getGitProvider()).getLog(cwd, opts);
-				// Cache the result for instant loading on next open (only for default queries)
-				if (!opts?.branch && !opts?.offset) {
+				const git = await getGitProvider();
+				const shouldCache = !opts?.branch && !opts?.offset;
+				const [commits, unpushed] = await Promise.all([
+					git.getLog(cwd, opts),
+					shouldCache ? git.getUnpushedOids(cwd) : Promise.resolve(null),
+				]);
+				if (shouldCache) {
 					try {
 						const headOid = commits.length > 0 ? commits[0]!.oid : null;
-						const unpushed = await (await getGitProvider()).getUnpushedOids(cwd);
 						const unpushedJson =
 							unpushed && unpushed.length > 0 ? JSON.stringify(unpushed) : null;
 						await setLogCache(
@@ -555,8 +661,16 @@ export function registerRepoHandlers(): void {
 						// Cache write failure must never discard actual git data
 					}
 				}
+				debugRepo(
+					"repo:getLog",
+					`ok projectId=${projectId} took=${Date.now() - startedAt}ms commits=${commits.length}`
+				);
 				return commits;
 			} catch (error) {
+				debugRepo(
+					"repo:getLog",
+					`error projectId=${projectId} took=${Date.now() - startedAt}ms message=${error instanceof Error ? error.message : String(error)}`
+				);
 				emitRepoError(projectId, error);
 				return [];
 			}

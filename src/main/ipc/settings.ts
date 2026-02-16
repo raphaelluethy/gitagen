@@ -8,8 +8,8 @@ import { validateGitBinary, discoverGitBinaries, getSshAgentInfo } from "../serv
 import {
 	getProjectPrefs,
 	setProjectPrefs,
-	type ProjectPrefsRow,
 } from "../services/cache/queries.js";
+import { prefsRowToPrefs } from "../services/cache/utils.js";
 import { fetchModelsFromProvider, type FetchModelsResult } from "../services/ai/models.js";
 import { getAllProviders } from "../services/ai/index.js";
 import type {
@@ -18,17 +18,6 @@ import type {
 	AIProviderType,
 	AIProviderDescriptor,
 } from "../../shared/types.js";
-
-function prefsRowToPrefs(row: ProjectPrefsRow): ProjectPrefs {
-	return {
-		includeIgnored: Boolean(row.include_ignored),
-		changedOnly: Boolean(row.changed_only),
-		expandedDirs: JSON.parse(row.expanded_dirs || "[]"),
-		selectedFilePath: row.selected_file_path,
-		sidebarScrollTop: row.sidebar_scroll_top,
-		activeWorktreePath: row.active_worktree_path ?? null,
-	};
-}
 
 export function registerSettingsHandlers(): void {
 	ipcMain.handle("settings:getGlobal", async (): Promise<AppSettings> => {
@@ -96,6 +85,28 @@ export function registerSettingsHandlers(): void {
 		return null;
 	});
 
+const VALID_PROVIDER_TYPES: AIProviderType[] = [
+	"openai",
+	"anthropic",
+	"openrouter",
+	"cerebras",
+	"fireworks",
+	"openai-compatible",
+];
+
+function isValidUrl(url: string): boolean {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === "http:" || parsed.protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+function isValidProviderType(type: string): type is AIProviderType {
+	return VALID_PROVIDER_TYPES.includes(type as AIProviderType);
+}
+
 	ipcMain.handle(
 		"settings:fetchModels",
 		async (
@@ -104,6 +115,12 @@ export function registerSettingsHandlers(): void {
 			apiKey: string,
 			baseURL?: string
 		): Promise<FetchModelsResult> => {
+			if (!isValidProviderType(type)) {
+				return { success: false, models: [], error: "Invalid provider type" };
+			}
+			if (baseURL !== undefined && baseURL !== "" && !isValidUrl(baseURL)) {
+				return { success: false, models: [], error: "Invalid base URL: must be http or https" };
+			}
 			return fetchModelsFromProvider(type, apiKey, baseURL);
 		}
 	);

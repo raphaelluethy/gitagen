@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+	GroupedProject,
 	Project,
 	AppSettings,
 	ProjectPrefs,
@@ -23,6 +24,7 @@ const EVENT_AI_COMMIT_CHUNK = "ai:commitChunk";
 
 const projects = {
 	list: (): Promise<Project[]> => ipcRenderer.invoke("projects:list"),
+	listGrouped: (): Promise<GroupedProject[]> => ipcRenderer.invoke("projects:listGrouped"),
 	add: (name: string, path: string): Promise<Project> =>
 		ipcRenderer.invoke("projects:add", name, path),
 	remove: (projectId: string): Promise<void> => ipcRenderer.invoke("projects:remove", projectId),
@@ -148,7 +150,7 @@ const repo = {
 		ipcRenderer.invoke("repo:getEffectiveConfig", projectId),
 	setLocalConfig: (projectId: string, key: string, value: string): Promise<void> =>
 		ipcRenderer.invoke("repo:setLocalConfig", projectId, key, value),
-	testSigning: (projectId: string, key: string): Promise<{ ok: boolean; message: string }> =>
+	testSigning: (projectId: string, key?: string): Promise<{ ok: boolean; message: string }> =>
 		ipcRenderer.invoke("repo:testSigning", projectId, key),
 	listWorktrees: (projectId: string): Promise<WorktreeInfo[]> =>
 		ipcRenderer.invoke("repo:listWorktrees", projectId),

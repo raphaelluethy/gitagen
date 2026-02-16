@@ -24,6 +24,7 @@ export type IpcChannel =
 	| "git:getFileDiff"
 	| "git:getStagedFileDiff"
 	| "projects:list"
+	| "projects:listGrouped"
 	| "projects:add"
 	| "projects:remove"
 	| "projects:switchTo"
@@ -35,7 +36,7 @@ export type DiffStyle = "unified" | "split";
 
 // --- Plan v1 types ---
 
-export type FontFamily = "geist" | "geist-pixel" | "system";
+export type FontFamily = "geist" | "geist-pixel" | "system" | (string & {});
 
 export interface AppSettings {
 	gitBinaryPath: string | null;
@@ -50,6 +51,7 @@ export interface AppSettings {
 	commitMessageFontSize: number;
 	fontFamily: FontFamily;
 	gpuAcceleration: boolean;
+	devMode: boolean;
 }
 
 export interface Project {
@@ -60,6 +62,12 @@ export interface Project {
 	createdAt: number;
 	worktrees?: WorktreeInfo[];
 	activeWorktreePath?: string;
+}
+
+/** Project with worktree grouping: parentProjectId when this project is a worktree of another; worktreeChildren when this project has worktrees in the list */
+export interface GroupedProject extends Project {
+	parentProjectId?: string;
+	worktreeChildren?: Project[];
 }
 
 export interface WorktreeInfo {
@@ -148,7 +156,7 @@ export interface ConfigEntry {
 	key: string;
 	value: string;
 	origin: string;
-	scope: "system" | "global" | "local" | "worktree";
+	scope: "system" | "global" | "local" | "worktree" | "unknown";
 }
 
 // --- AI Provider Types ---

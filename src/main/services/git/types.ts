@@ -11,6 +11,7 @@ export interface RepoFingerprint {
 	repoPath: string;
 	headOid: string;
 	indexMtimeMs: number;
+	headMtimeMs: number;
 	statusHash: string;
 }
 
@@ -29,6 +30,8 @@ export interface GetPatchOptions {
 export interface GitProvider {
 	getTree(options: GetTreeOptions): Promise<TreeNode[]>;
 	getStatus(cwd: string): Promise<RepoStatus | null>;
+	/** Returns the top-level directory of the repo; same as cwd if not a worktree. Returns null on error. */
+	getToplevel(cwd: string): Promise<string | null>;
 	getPatch(options: GetPatchOptions): Promise<string | null>;
 	getHeadOid(cwd: string): Promise<string | null>;
 	getRepoFingerprint(cwd: string): Promise<RepoFingerprint | null>;
@@ -103,7 +106,7 @@ export interface GitProvider {
 		branch: string,
 		newBranch?: string
 	): Promise<void>;
-	removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
+	removeWorktree(repoPath: string, worktreePath: string, force?: boolean): Promise<void>;
 	pruneWorktrees(repoPath: string): Promise<void>;
 }
 

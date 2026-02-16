@@ -1,10 +1,75 @@
-import { readFileSync } from "fs";
-import { join } from "path";
+import { spawn } from "child_process";
+import { readFileSync, statSync } from "fs";
+import { join, resolve } from "path";
 import simpleGit, { SimpleGit, StatusResult } from "simple-git";
+
+const MAX_NEW_FILE_BYTES = 1024 * 1024;
+const STATUS_CACHE_TTL_MS = 1000;
+const statusCache = new Map<string, { status: StatusResult; fetchedAt: number }>();
+
+async function getStatusCached(git: SimpleGit, cwd: string): Promise<StatusResult | null> {
+	const cached = statusCache.get(cwd);
+	const now = Date.now();
+	if (cached && now - cached.fetchedAt < STATUS_CACHE_TTL_MS) {
+		return cached.status;
+	}
+	const status = await git.status().catch(() => null);
+	if (status) {
+		statusCache.set(cwd, { status, fetchedAt: now });
+	}
+	return status;
+}
+
+function resolveGitDir(repoPath: string): string | null {
+	const dotGitPath = join(repoPath, ".git");
+	try {
+		const stat = statSync(dotGitPath);
+		if (stat.isDirectory()) return dotGitPath;
+		if (!stat.isFile()) return null;
+		const contents = readFileSync(dotGitPath, "utf-8");
+		const match = contents.match(/^gitdir:\s*(.+)$/m);
+		if (!match) return null;
+		return resolve(repoPath, match[1].trim());
+	} catch {
+		return null;
+	}
+}
+
+function listGitPaths(
+	cwd: string,
+	binary: string | null | undefined,
+	args: string[]
+): Promise<string[]> {
+	return new Promise((resolvePromise) => {
+		const cmd = binary ?? "git";
+		const child = spawn(cmd, args, { cwd });
+		const paths: string[] = [];
+		let buffer = "";
+		child.stdout.setEncoding("utf-8");
+		child.stdout.on("data", (chunk: string) => {
+			buffer += chunk;
+			let index = buffer.indexOf("\0");
+			while (index >= 0) {
+				const entry = buffer.slice(0, index);
+				if (entry) paths.push(entry);
+				buffer = buffer.slice(index + 1);
+				index = buffer.indexOf("\0");
+			}
+		});
+		child.on("close", (code) => {
+			if (buffer.length > 0) paths.push(buffer);
+			if (code === 0) resolvePromise(paths.filter(Boolean));
+			else resolvePromise([]);
+		});
+		child.on("error", () => resolvePromise([]));
+	});
+}
 
 function buildNewFileDiff(repoPath: string, filePath: string): string | null {
 	try {
 		const fullPath = join(repoPath, filePath);
+		const stats = statSync(fullPath);
+		if (stats.size > MAX_NEW_FILE_BYTES) return null;
 		const content = readFileSync(fullPath, "utf-8");
 		if (content.includes("\0")) return null;
 		const lines = content.split(/\r?\n/);
@@ -126,19 +191,28 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 	return {
 		async getTree(opts): Promise<TreeNode[]> {
 			const git = createGit(opts.cwd, binary);
-			const [rawIgnored, rawTracked, status] = await Promise.all([
-				opts.includeIgnored
-					? git
-							.raw(["ls-files", "--others", "--ignored", "--exclude-standard", "-z"])
-							.catch(() => "")
-					: Promise.resolve(""),
-				git.raw(["ls-files", "-z"]).catch(() => ""),
-				git.status().catch(() => null),
+			const includeIgnored = Boolean(opts.includeIgnored) && !opts.changedOnly;
+			const includeTracked = !opts.changedOnly;
+			const [ignoredPaths, trackedPaths, status] = await Promise.all([
+				includeIgnored
+					? listGitPaths(opts.cwd, binary, [
+							"ls-files",
+							"--others",
+							"--ignored",
+							"--exclude-standard",
+							"-z",
+						])
+					: Promise.resolve([]),
+				includeTracked
+					? listGitPaths(opts.cwd, binary, ["ls-files", "-z"])
+					: Promise.resolve([]),
+				getStatusCached(git, opts.cwd),
 			]);
 			const allPaths = new Set<string>();
-			for (const p of rawTracked.split("\0").filter(Boolean)) allPaths.add(p);
-			for (const p of rawIgnored.split("\0").filter(Boolean)) allPaths.add(p);
+			for (const p of trackedPaths) allPaths.add(p);
+			for (const p of ignoredPaths) allPaths.add(p);
 			if (status) {
+				for (const f of status.files) allPaths.add(f.path);
 				for (const p of status.not_added) allPaths.add(p);
 			}
 			const statusMap = status ? statusToMap(status) : new Map();
@@ -151,7 +225,7 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 				const [head, branch, status] = await Promise.all([
 					git.revparse(["HEAD"]).catch(() => ({ value: "" })),
 					git.branch().catch(() => ({ current: "" })),
-					git.status().catch(() => null),
+					getStatusCached(git, cwd),
 				]);
 				if (!status) return null;
 				const headOid = (head as { value?: string })?.value?.trim() ?? "";
@@ -211,21 +285,37 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			}
 		},
 
+		async getToplevel(cwd: string): Promise<string | null> {
+			try {
+				const git = createGit(cwd, binary);
+				const out = (await git.revparse(["--show-toplevel"])) as string;
+				return out?.trim() ?? null;
+			} catch {
+				return null;
+			}
+		},
+
 		async getRepoFingerprint(cwd: string): Promise<RepoFingerprint | null> {
 			try {
-				const { statSync } = await import("fs");
 				const git = createGit(cwd, binary);
 				const [head, status] = await Promise.all([
 					git.revparse(["HEAD"]).catch(() => ""),
-					git.status().catch(() => null),
+					getStatusCached(git, cwd),
 				]);
 				const headOid = (head as string)?.trim() ?? "";
-				const indexPath = join(cwd, ".git/index");
+				const gitDir = resolveGitDir(cwd) ?? join(cwd, ".git");
+				const indexPath = join(gitDir, "index");
 				let indexMtimeMs = 0;
+				let headMtimeMs = 0;
 				try {
 					indexMtimeMs = statSync(indexPath).mtimeMs;
 				} catch {
 					// no index
+				}
+				try {
+					headMtimeMs = statSync(join(gitDir, "HEAD")).mtimeMs;
+				} catch {
+					// no head file
 				}
 				const statusHash = status
 					? JSON.stringify({
@@ -233,12 +323,13 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 							unstaged: status.files.filter(
 								(f) => f.working_dir !== " " && f.working_dir !== "?"
 							),
-						})
+					})
 					: "";
 				return {
 					repoPath: cwd,
 					headOid,
 					indexMtimeMs,
+					headMtimeMs,
 					statusHash,
 				};
 			} catch {
@@ -278,10 +369,10 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 
 		async commit(cwd, opts): Promise<{ oid: string; signed: boolean }> {
 			const git = createGit(cwd, binary);
-			const args: string[] = ["-m", opts.message];
-			if (opts.amend) args.push("--amend");
-			if (opts.sign) args.push("-S");
-			await git.commit(args);
+			const customArgs: string[] = [];
+			if (opts.amend) customArgs.push("--amend");
+			if (opts.sign) customArgs.push("-S");
+			await git.commit(opts.message, customArgs);
 			const rev = await git.revparse(["HEAD"]);
 			const oid = (rev as string)?.trim() ?? "";
 			const logOut = await git.raw(["log", "-1", "--format=%G?"]);
@@ -573,9 +664,15 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			}
 		},
 
-		async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
+		async removeWorktree(
+			repoPath: string,
+			worktreePath: string,
+			force?: boolean
+		): Promise<void> {
 			const git = createGit(repoPath, binary);
-			await git.raw(["worktree", "remove", worktreePath]);
+			const args = ["worktree", "remove", worktreePath];
+			if (force) args.splice(2, 0, "--force");
+			await git.raw(args);
 		},
 
 		async pruneWorktrees(repoPath: string): Promise<void> {

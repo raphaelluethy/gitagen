@@ -1,6 +1,11 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { join } from "path";
-import { getGitStatus, getFileDiff } from "./git.js";
+import { closeDb, getDb } from "./services/cache/sqlite.js";
+import { runRetention } from "./services/cache/retention.js";
+import { registerProjectsHandlers } from "./ipc/projects.js";
+import { registerSettingsHandlers } from "./ipc/settings.js";
+import { registerRepoHandlers } from "./ipc/repo.js";
+import { registerEventsHandlers } from "./ipc/events.js";
 
 function createWindow(): BrowserWindow {
 	const win = new BrowserWindow({
@@ -8,8 +13,9 @@ function createWindow(): BrowserWindow {
 		height: 800,
 		webPreferences: {
 			preload: join(__dirname, "../preload/index.js"),
-			sandbox: false,
+			sandbox: true,
 			contextIsolation: true,
+			nodeIntegration: false,
 		},
 	});
 
@@ -24,17 +30,14 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
-	ipcMain.handle("git:getStatus", async (_, cwd?: string) => {
-		const repoPath = cwd ?? process.cwd();
-		return getGitStatus(repoPath);
-	});
+	// Initialize DB and run retention
+	getDb();
+	runRetention();
 
-	ipcMain.handle(
-		"git:getFileDiff",
-		async (_, cwd: string, filePath: string, mode: "staged" | "unstaged" | "untracked") => {
-			return getFileDiff(cwd, filePath, mode);
-		}
-	);
+	registerProjectsHandlers();
+	registerSettingsHandlers();
+	registerRepoHandlers();
+	registerEventsHandlers();
 
 	createWindow();
 
@@ -45,4 +48,8 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") app.quit();
+});
+
+app.on("quit", () => {
+	closeDb();
 });

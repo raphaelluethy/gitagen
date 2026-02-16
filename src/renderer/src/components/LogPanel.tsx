@@ -1,9 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { GitCommit, Shield } from "lucide-react";
 import type { CommitInfo } from "../../../shared/types";
 
+const ROW_HEIGHT = 80;
+const OVERSCAN = 3;
+
 interface LogPanelProps {
 	projectId: string;
+	selectedOid?: string | null;
+	onSelectCommit?: (oid: string) => void;
 }
 
 function formatRelativeTime(date: Date): string {
@@ -33,9 +39,10 @@ function fetchLog(projectId: string): Promise<CommitInfo[]> {
 	return window.gitagen.repo.getLog(projectId, { limit: 50 });
 }
 
-export default function LogPanel({ projectId }: LogPanelProps) {
+export default function LogPanel({ projectId, selectedOid, onSelectCommit }: LogPanelProps) {
 	const [commits, setCommits] = useState<CommitInfo[]>([]);
 	const [loading, setLoading] = useState(true);
+	const scrollRef = useRef<HTMLDivElement>(null);
 
 	const loadCommits = useCallback(
 		(opts?: { background?: boolean }) => {
@@ -62,6 +69,13 @@ export default function LogPanel({ projectId }: LogPanelProps) {
 		};
 	}, [projectId, loadCommits]);
 
+	const rowVirtualizer = useVirtualizer({
+		count: commits.length,
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => ROW_HEIGHT,
+		overscan: OVERSCAN,
+	});
+
 	if (loading && commits.length === 0) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 p-8">
@@ -86,39 +100,69 @@ export default function LogPanel({ projectId }: LogPanelProps) {
 	}
 
 	return (
-		<div className="overflow-auto">
-			{commits.map((c, idx) => (
-				<div
-					key={c.oid}
-					className={`group border-b border-(--border-secondary) px-3 py-2.5 transition-colors ${
-						idx === 0
-							? "border-l-2 border-l-(--text-muted) bg-(--bg-hover)"
-							: "hover:bg-(--bg-hover)"
-					}`}
-				>
-					<p className="truncate text-[12px] font-medium leading-snug text-(--text-primary)">
-						{c.message.split("\n")[0]}
-					</p>
-					<div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-(--text-muted)">
-						<code className="shrink-0 rounded bg-(--bg-tertiary) px-1 py-px font-mono text-[10px] text-(--text-muted)">
-							{c.oid.slice(0, 7)}
-						</code>
-						<span className="truncate text-(--text-secondary)">{c.author.name}</span>
-					</div>
-					<div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-(--text-subtle)">
-						<span>{formatRelativeTime(new Date(c.author.date))}</span>
-						{c.signed && (
-							<>
-								<span className="text-(--border-primary)">·</span>
-								<span className="flex items-center gap-0.5">
-									<Shield size={9} />
-									<span>signed</span>
+		<div ref={scrollRef} className="h-full overflow-auto -mx-1 px-1">
+			<div
+				style={{
+					height: `${rowVirtualizer.getTotalSize()}px`,
+					width: "100%",
+					position: "relative",
+				}}
+			>
+				{rowVirtualizer.getVirtualItems().map((virtualRow) => {
+					const c = commits[virtualRow.index]!;
+					const isSelected = selectedOid === c.oid;
+					const isFirst = virtualRow.index === 0;
+					return (
+						<div
+							key={virtualRow.key}
+							role="button"
+							tabIndex={0}
+							onClick={() => onSelectCommit?.(c.oid)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.preventDefault();
+									onSelectCommit?.(c.oid);
+								}
+							}}
+							className={`absolute left-0 top-0 w-full cursor-pointer border-b border-(--border-secondary) px-3 py-2.5 transition-colors ${
+								isSelected
+									? "border-l-2 border-l-(--accent-primary) bg-(--bg-hover)"
+									: isFirst
+										? "border-l-2 border-l-(--text-muted) hover:bg-(--bg-hover)"
+										: "border-l-2 border-l-transparent hover:bg-(--bg-hover)"
+							}`}
+							style={{
+								height: `${virtualRow.size}px`,
+								transform: `translateY(${virtualRow.start}px)`,
+							}}
+						>
+							<p className="truncate text-[12px] font-medium leading-snug text-(--text-primary)">
+								{c.message.split("\n")[0]}
+							</p>
+							<div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-(--text-muted)">
+								<code className="shrink-0 rounded bg-(--bg-tertiary) px-1 py-px font-mono text-[10px] text-(--text-muted)">
+									{c.oid.slice(0, 7)}
+								</code>
+								<span className="truncate text-(--text-secondary)">
+									{c.author.name}
 								</span>
-							</>
-						)}
-					</div>
-				</div>
-			))}
+							</div>
+							<div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-(--text-subtle)">
+								<span>{formatRelativeTime(new Date(c.author.date))}</span>
+								{c.signed && (
+									<>
+										<span className="text-(--border-primary)">·</span>
+										<span className="flex items-center gap-0.5 text-(--success)">
+											<Shield size={9} />
+											<span>signed</span>
+										</span>
+									</>
+								)}
+							</div>
+						</div>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

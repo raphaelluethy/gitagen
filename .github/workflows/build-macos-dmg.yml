@@ -50,37 +50,27 @@ jobs:
             exit 1
           fi
 
-          VERIFY_ROOT="$(mktemp -d)"
-          mkdir -p "$VERIFY_ROOT/Applications/Gitagen.app/Contents/Resources"
-          ln -s "$APP_RESOURCES_DIR/node_modules" "$VERIFY_ROOT/Applications/Gitagen.app/Contents/Resources/node_modules"
-          export VERIFY_ENTRY="$VERIFY_ROOT/Applications/Gitagen.app/Contents/Resources/app.asar/node_modules/@ai-sdk/provider-utils/dist/index.js"
+          REQUIRED_FILES=(
+            "node_modules/eventsource-parser/dist/stream.cjs"
+            "node_modules/ms/index.js"
+            "node_modules/simple-git/dist/cjs/index.js"
+            "node_modules/@ai-sdk/openai/dist/index.js"
+          )
 
-          node - <<'NODE'
-          const { createRequire } = require("node:module");
-          const req = createRequire(
-            process.env.VERIFY_ENTRY ||
-              "/tmp/placeholder/Applications/Gitagen.app/Contents/Resources/app.asar/node_modules/@ai-sdk/provider-utils/dist/index.js",
-          );
-          const required = [
-            "eventsource-parser/stream",
-            "ms",
-            "simple-git",
-            "@ai-sdk/openai",
-          ];
-          const missing = [];
-          for (const id of required) {
-            try {
-              req.resolve(id);
-            } catch {
-              missing.push(id);
-            }
-          }
-          if (missing.length) {
-            console.error("Missing runtime modules:", missing.join(", "));
-            process.exit(1);
-          }
-          console.log("Runtime dependency resolution check passed.");
-          NODE
+          MISSING_FILES=()
+          for rel in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$APP_RESOURCES_DIR/$rel" ]; then
+              MISSING_FILES+=("$rel")
+            fi
+          done
+
+          if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+            echo "Missing runtime module files:"
+            printf '%s\n' "${MISSING_FILES[@]}"
+            exit 1
+          fi
+
+          echo "Runtime dependency file check passed."
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4

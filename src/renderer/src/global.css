@@ -1216,11 +1216,15 @@ select {
 
 	.ac-message-user .ac-message-content {
 		background: var(--accent-primary);
-		color: white;
+		color: var(--bg-primary);
 		border-radius: 12px 12px 4px 12px;
 		padding: 8px 12px;
 		max-width: 80%;
 		font-size: 13px;
+	}
+
+	.ac-message-user .ac-text {
+		color: var(--bg-primary);
 	}
 
 	.ac-message-assistant .ac-message-content {
@@ -1254,14 +1258,47 @@ select {
 		margin: 8px 0;
 	}
 
+	.ac-thinking {
+		margin: 4px 0;
+		border: 1px dashed var(--border-secondary);
+		border-radius: 8px;
+		background: color-mix(in oklab, var(--bg-secondary) 50%, transparent);
+	}
+
+	.ac-thinking-summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		cursor: pointer;
+		font-size: 11px;
+		color: var(--text-muted);
+		padding: 8px 10px 6px;
+		user-select: none;
+	}
+
+	.ac-thinking-body {
+		padding: 0 10px 10px;
+		font-size: 12px;
+		line-height: 1.5;
+		color: var(--text-secondary);
+		white-space: pre-wrap;
+	}
+
 	/* Tool steps */
 	.ac-tool-step {
 		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 4px 0;
+		flex-direction: column;
+		gap: 4px;
+		padding: 6px 0;
 		font-size: 12px;
 		color: var(--text-secondary);
+	}
+
+	.ac-tool-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
 	}
 
 	.ac-tool-icon {
@@ -1269,16 +1306,86 @@ select {
 	}
 
 	.ac-tool-label {
-		flex-shrink: 0;
+		font-weight: 500;
+	}
+
+	.ac-tool-state {
+		margin-left: auto;
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: color-mix(in oklab, var(--text-muted) 10%, transparent);
+		color: var(--text-muted);
+	}
+
+	.ac-tool-state-done {
+		background: color-mix(in oklab, var(--success) 15%, transparent);
+		color: var(--success);
+	}
+
+	.ac-tool-state-error {
+		background: color-mix(in oklab, var(--danger) 15%, transparent);
+		color: var(--danger);
+	}
+
+	.ac-tool-call-id {
+		font-size: 10px;
+		color: var(--text-muted);
+		font-family: var(--font-mono);
 	}
 
 	.ac-tool-detail {
 		color: var(--text-muted);
 		font-size: 11px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 		min-width: 0;
+		padding-left: 22px;
+	}
+
+	.ac-tool-detail-error {
+		color: var(--danger);
+		word-break: break-word;
+	}
+
+	.ac-tool-payload {
+		margin-left: 22px;
+		width: calc(100% - 22px);
+	}
+
+	.ac-tool-payload > summary {
+		cursor: pointer;
+		font-size: 10px;
+		color: var(--text-muted);
+		user-select: none;
+	}
+
+	.ac-tool-payload-block {
+		margin-top: 6px;
+	}
+
+	.ac-tool-payload-title {
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--text-muted);
+		margin-bottom: 3px;
+	}
+
+	.ac-tool-payload pre {
+		margin: 0;
+		padding: 6px 8px;
+		font-size: 11px;
+		line-height: 1.35;
+		max-height: 120px;
+		overflow: auto;
+		border: 1px solid var(--border-secondary);
+		border-radius: 6px;
+		background: color-mix(in oklab, var(--bg-secondary) 65%, transparent);
+		color: var(--text-secondary);
+		white-space: pre-wrap;
+		word-break: break-word;
+		font-family: var(--font-mono);
 	}
 
 	/* Commit proposal */
@@ -1433,5 +1540,55 @@ select {
 
 	.ac-input-row .input {
 		flex: 1;
+	}
+
+	.ac-trace {
+		margin-top: 4px;
+		border-top: 1px dashed var(--border-secondary);
+		padding-top: 6px;
+	}
+
+	.ac-trace > summary {
+		cursor: pointer;
+		font-size: 11px;
+		color: var(--text-muted);
+		user-select: none;
+	}
+
+	.ac-trace-list {
+		margin-top: 6px;
+		max-height: 140px;
+		overflow: auto;
+		border: 1px solid var(--border-secondary);
+		border-radius: 6px;
+		background: color-mix(in oklab, var(--bg-secondary) 65%, transparent);
+		padding: 6px 8px;
+	}
+
+	.ac-trace-entry {
+		display: flex;
+		gap: 8px;
+		font-size: 11px;
+		line-height: 1.4;
+		color: var(--text-secondary);
+		margin-bottom: 4px;
+	}
+
+	.ac-trace-entry:last-child {
+		margin-bottom: 0;
+	}
+
+	.ac-trace-time {
+		flex-shrink: 0;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.ac-trace-error {
+		color: var(--danger);
+	}
+
+	.ac-trace-warn {
+		color: var(--warning);
 	}
 }

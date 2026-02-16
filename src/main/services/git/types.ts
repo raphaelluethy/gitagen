@@ -9,6 +9,7 @@ import type {
 	RemoteInfo,
 	StashEntry,
 	TreeNode,
+	WorktreeInfo,
 } from "../../../shared/types.js";
 
 export interface RepoFingerprint {
@@ -133,12 +134,4 @@ export interface GitProvider {
 	): Promise<void>;
 	removeWorktree(repoPath: string, worktreePath: string, force?: boolean): Promise<void>;
 	pruneWorktrees(repoPath: string): Promise<void>;
-}
-
-export interface WorktreeInfo {
-	path: string;
-	branch: string;
-	head: string;
-	isMainWorktree: boolean;
-	name?: string;
 }

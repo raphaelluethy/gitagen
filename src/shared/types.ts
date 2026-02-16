@@ -20,17 +20,85 @@ export interface GitStatus {
 }
 
 export type IpcChannel =
-	| "git:getStatus"
-	| "git:getFileDiff"
-	| "git:getStagedFileDiff"
 	| "projects:list"
 	| "projects:listGrouped"
 	| "projects:add"
 	| "projects:remove"
 	| "projects:switchTo"
-	| "repo:*"
-	| "settings:*"
-	| "events:*";
+	| "repo:openProject"
+	| "repo:getTree"
+	| "repo:getStatus"
+	| "repo:getPatch"
+	| "repo:getAllDiffs"
+	| "repo:openInEditor"
+	| "repo:refresh"
+	| "repo:stageFiles"
+	| "repo:unstageFiles"
+	| "repo:stageAll"
+	| "repo:unstageAll"
+	| "repo:discardFiles"
+	| "repo:discardAllUnstaged"
+	| "repo:commit"
+	| "repo:undoLastCommit"
+	| "repo:getUnpushedOids"
+	| "repo:generateCommitMessage"
+	| "repo:getLog"
+	| "repo:getCachedLog"
+	| "repo:getCommitDetail"
+	| "repo:listBranches"
+	| "repo:createBranch"
+	| "repo:switchBranch"
+	| "repo:deleteBranch"
+	| "repo:renameBranch"
+	| "repo:mergeBranch"
+	| "repo:fetch"
+	| "repo:pull"
+	| "repo:push"
+	| "repo:listRemotes"
+	| "repo:addRemote"
+	| "repo:removeRemote"
+	| "repo:stash"
+	| "repo:stashPop"
+	| "repo:stashApply"
+	| "repo:stashList"
+	| "repo:stashDrop"
+	| "repo:listTags"
+	| "repo:createTag"
+	| "repo:deleteTag"
+	| "repo:rebase"
+	| "repo:rebaseAbort"
+	| "repo:rebaseContinue"
+	| "repo:rebaseSkip"
+	| "repo:cherryPick"
+	| "repo:cherryPickAbort"
+	| "repo:cherryPickContinue"
+	| "repo:getConflictFiles"
+	| "repo:markResolved"
+	| "repo:getEffectiveConfig"
+	| "repo:setLocalConfig"
+	| "repo:testSigning"
+	| "repo:listWorktrees"
+	| "repo:addWorktree"
+	| "repo:removeWorktree"
+	| "repo:pruneWorktrees"
+	| "settings:getGlobal"
+	| "settings:getGlobalWithKeys"
+	| "settings:setGlobal"
+	| "settings:getProjectPrefs"
+	| "settings:setProjectPrefs"
+	| "settings:discoverGitBinaries"
+	| "settings:getSshAgentInfo"
+	| "settings:selectGitBinary"
+	| "settings:selectFolder"
+	| "settings:fetchModels"
+	| "settings:listAIProviders"
+	| "app:openExternal"
+	| "app:confirm"
+	| "events:repoUpdated"
+	| "events:repoError"
+	| "events:conflictDetected"
+	| "events:openRepo"
+	| "ai:commitChunk";
 
 export type DiffStyle = "unified" | "split";
 
@@ -77,7 +145,7 @@ export interface WorktreeInfo {
 	branch: string;
 	head: string;
 	isMainWorktree: boolean;
-	name: string;
+	name?: string;
 }
 
 export interface AddWorktreeOptions {
@@ -223,7 +291,7 @@ export interface ConfigEntry {
 
 // --- AI Provider Types ---
 
-export type AIProviderType = string;
+export type AIProviderType = "openai" | "anthropic" | "openrouter" | "cerebras" | "fireworks" | (string & {});
 
 export interface AIProviderDescriptor {
 	id: AIProviderType;

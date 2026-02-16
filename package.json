@@ -1,0 +1,42 @@
+{
+	"name": "gitagen",
+	"version": "1.0.0",
+	"description": "Electron-based Git client",
+	"keywords": [],
+	"license": "ISC",
+	"author": "",
+	"main": "./out/main/index.js",
+	"scripts": {
+		"dev": "electron-vite dev",
+		"build": "electron-vite build",
+		"preview": "electron-vite preview",
+		"typecheck": "tsgo --noEmit -p tsconfig.typecheck.json",
+		"lint": "oxlint src",
+		"lint:fix": "oxlint src --fix",
+		"fmt": "oxfmt",
+		"fmt:check": "oxfmt --check",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"dependencies": {
+		"@pierre/diffs": "^1.0.11",
+		"lucide-react": "^0.564.0",
+		"react": "^19.2.4",
+		"react-dom": "^19.2.4",
+		"simple-git": "^3.31.1"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "^4.1.18",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@typescript/native-preview": "7.0.0-dev.20260215.1",
+		"@vitejs/plugin-react": "^5.1.4",
+		"electron": "^40.4.1",
+		"electron-vite": "^5.0.0",
+		"oxfmt": "^0.32.0",
+		"oxlint": "^1.47.0",
+		"tailwindcss": "^4.1.18",
+		"typescript": "^5.9.3",
+		"vite": "^7.3.1"
+	},
+	"packageManager": "pnpm@10.29.3"
+}

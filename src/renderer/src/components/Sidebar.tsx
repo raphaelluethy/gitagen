@@ -1,11 +1,20 @@
 import { useState, useMemo } from "react";
-import { ChevronRight, ChevronDown, ChevronsDownUp, File, Folder, FolderOpen } from "lucide-react";
+import {
+	ChevronRight,
+	ChevronDown,
+	ChevronsDownUp,
+	ChevronLeft,
+	File,
+	Folder,
+	FolderOpen,
+} from "lucide-react";
 import type { GitStatus, GitFileStatus } from "../../../shared/types";
 
 interface SidebarProps {
 	status: GitStatus;
 	selectedFile: GitFileStatus | null;
 	onSelectFile: (file: GitFileStatus) => void;
+	onBack?: () => void;
 }
 
 export interface FileTreeNode {
@@ -134,7 +143,11 @@ function TreeItem({
 						<ChevronRight size={14} className="shrink-0" strokeWidth={2} />
 					)}
 					{isExpanded ? (
-						<FolderOpen size={14} className="shrink-0 text-amber-600/80" strokeWidth={2} />
+						<FolderOpen
+							size={14}
+							className="shrink-0 text-amber-600/80"
+							strokeWidth={2}
+						/>
 					) : (
 						<Folder size={14} className="shrink-0 text-amber-600/80" strokeWidth={2} />
 					)}
@@ -198,7 +211,9 @@ function FileTreeSection({
 	return (
 		<div className="mb-4">
 			<div className="mb-1 flex items-center justify-between px-3 py-1">
-				<h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{title}</h3>
+				<h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+					{title}
+				</h3>
 				<button
 					type="button"
 					onClick={expandAll}
@@ -226,7 +241,7 @@ function FileTreeSection({
 	);
 }
 
-export default function Sidebar({ status, selectedFile, onSelectFile }: SidebarProps) {
+export default function Sidebar({ status, selectedFile, onSelectFile, onBack }: SidebarProps) {
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
 
 	const toggleFolder = (path: string) => {
@@ -243,12 +258,29 @@ export default function Sidebar({ status, selectedFile, onSelectFile }: SidebarP
 	};
 
 	return (
-		<aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
-			<div className="border-b border-zinc-800 px-3 py-3">
-				<p className="truncate text-xs font-medium text-zinc-500" title={status.repoPath}>
-					{status.repoPath}
-				</p>
-				<h2 className="text-sm font-semibold text-zinc-200">Changes</h2>
+		<aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
+			<div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-3 dark:border-zinc-800">
+				{onBack && (
+					<button
+						type="button"
+						onClick={onBack}
+						className="-ml-1 rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+						title="Back to projects"
+					>
+						<ChevronLeft size={14} />
+					</button>
+				)}
+				<div className="min-w-0 flex-1">
+					<p
+						className="truncate text-xs font-medium text-zinc-500"
+						title={status.repoPath}
+					>
+						{status.repoPath}
+					</p>
+					<h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+						Changes
+					</h2>
+				</div>
 			</div>
 			<div className="flex-1 overflow-y-auto p-2">
 				<FileTreeSection

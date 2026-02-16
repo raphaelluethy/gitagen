@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GitBranch, ChevronDown, Check } from "lucide-react";
 import type { BranchInfo } from "../../../shared/types";
 import { useToast } from "../toast/provider";
@@ -21,10 +21,16 @@ export default function BranchSelector({
 	const { toast } = useToast();
 
 	useEffect(() => {
-		window.gitagen.repo.listBranches(projectId).then(setBranches);
+		let cancelled = false;
+		window.gitagen.repo.listBranches(projectId).then((branches) => {
+			if (!cancelled) setBranches(branches);
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [projectId, currentBranch]);
 
-	const handleSwitch = async (name: string) => {
+	const handleSwitch = useCallback(async (name: string) => {
 		if (name === currentBranch) {
 			setOpen(false);
 			return;
@@ -41,7 +47,7 @@ export default function BranchSelector({
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, [projectId, currentBranch, onBranchChange, toast]);
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>

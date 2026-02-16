@@ -20,7 +20,13 @@ export default function WorktreeSelector({
 	const [open, setOpen] = useState(false);
 
 	useEffect(() => {
-		window.gitagen.repo.listWorktrees(projectId).then(setWorktrees);
+		let cancelled = false;
+		window.gitagen.repo.listWorktrees(projectId).then((worktrees) => {
+			if (!cancelled) setWorktrees(worktrees);
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [projectId, activeWorktreePath]);
 
 	const currentPath = activeWorktreePath || mainRepoPath;

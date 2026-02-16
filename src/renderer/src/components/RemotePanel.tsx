@@ -67,7 +67,13 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 	const loading = loadingOp !== null;
 
 	useEffect(() => {
-		window.gitagen.repo.listRemotes(projectId).then(setRemotes);
+		let cancelled = false;
+		window.gitagen.repo.listRemotes(projectId).then((remotes) => {
+			if (!cancelled) setRemotes(remotes);
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [projectId]);
 
 	const handleFetch = async () => {

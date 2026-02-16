@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderOpen, Plus, GitBranch, Check, GitFork, ChevronRight } from "lucide-react";
 import type { GroupedProject, Project, RepoStatus } from "../../../shared/types";
@@ -187,17 +187,26 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 		});
 	}, []);
 
-	const roots = buildDisplayList(grouped ?? projects.map((p) => ({ ...p })));
-	const recent = roots.slice(0, 4);
-	const other = roots.slice(4);
+	const roots = useMemo(
+		() => buildDisplayList(grouped ?? projects.map((p) => ({ ...p }))),
+		[grouped, projects]
+	);
+	const recent = useMemo(() => roots.slice(0, 4), [roots]);
+	const other = useMemo(() => roots.slice(4), [roots]);
 
 	const recentIds = recent.map((p) => p.id).join(",");
 	useEffect(() => {
+		let cancelled = false;
 		for (const p of recent) {
 			window.gitagen.repo.getStatus(p.id).then((status) => {
-				setStatusMap((prev) => ({ ...prev, [p.id]: status }));
+				if (!cancelled) {
+					setStatusMap((prev) => ({ ...prev, [p.id]: status }));
+				}
 			});
 		}
+		return () => {
+			cancelled = true;
+		};
 	}, [recentIds]);
 
 	useEffect(() => {

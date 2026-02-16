@@ -36,9 +36,17 @@ export default function GravatarAvatar({
 			return;
 		}
 		setFailed(false);
+		let cancelled = false;
 		getGravatarUrl(email, size * 2)
-			.then(setGravatarUrl)
-			.catch(() => setFailed(true));
+			.then((url) => {
+				if (!cancelled) setGravatarUrl(url);
+			})
+			.catch(() => {
+				if (!cancelled) setFailed(true);
+			});
+		return () => {
+			cancelled = true;
+		};
 	}, [email, size]);
 
 	const initials = getInitials(name);

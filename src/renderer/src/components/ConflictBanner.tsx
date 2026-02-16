@@ -6,7 +6,10 @@ interface ConflictBannerProps {
 	onResolved: () => void;
 }
 
-export default function ConflictBanner({ projectId, onResolved }: ConflictBannerProps) {
+export default function ConflictBanner({
+	projectId,
+	onResolved: _onResolved,
+}: ConflictBannerProps) {
 	const [conflictFiles, setConflictFiles] = useState<string[]>([]);
 
 	useEffect(() => {
@@ -16,17 +19,19 @@ export default function ConflictBanner({ projectId, onResolved }: ConflictBanner
 	if (conflictFiles.length === 0) return null;
 
 	return (
-		<div className="flex items-center justify-between gap-4 border-b border-amber-600/50 bg-amber-500/10 px-4 py-2 dark:border-amber-500/30 dark:bg-amber-900/20">
-			<div className="flex items-center gap-2">
-				<AlertTriangle size={16} className="text-amber-600 dark:text-amber-500" />
-				<span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+		<div className="flex items-center justify-between gap-4 border-b border-[var(--warning)]/30 bg-[var(--warning-bg)] px-4 py-2.5">
+			<div className="flex items-center gap-2.5">
+				<AlertTriangle size={16} className="text-[var(--warning)]" />
+				<span className="text-[13px] font-medium text-[var(--warning)]">
 					Merge/rebase conflicts ({conflictFiles.length} files)
 				</span>
 			</div>
-			<ul className="truncate text-xs text-amber-700 dark:text-amber-300">
-				{conflictFiles.slice(0, 3).join(", ")}
-				{conflictFiles.length > 3 && ` +${conflictFiles.length - 3} more`}
-			</ul>
+			<div className="flex items-center gap-2">
+				<span className="truncate text-xs text-[var(--warning)]/80">
+					{conflictFiles.slice(0, 3).join(", ")}
+					{conflictFiles.length > 3 && ` +${conflictFiles.length - 3} more`}
+				</span>
+			</div>
 		</div>
 	);
 }

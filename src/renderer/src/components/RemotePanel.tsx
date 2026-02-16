@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, Download, RefreshCw } from "lucide-react";
+import { Upload, Download, RefreshCw, Cloud, Link } from "lucide-react";
 import type { RemoteInfo } from "../../../shared/types";
 
 interface RemotePanelProps {
@@ -46,24 +46,24 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 	};
 
 	return (
-		<div className="flex flex-col gap-2 p-2">
-			<div className="flex gap-1">
+		<div className="flex flex-col gap-4 p-3">
+			<div className="flex gap-2">
 				<button
 					type="button"
 					onClick={handleFetch}
 					disabled={loading || remotes.length === 0}
-					className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium bg-zinc-200 hover:bg-zinc-300 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
-					title="Fetch"
+					className="btn btn-secondary flex-1 text-xs"
+					title="Fetch from remote"
 				>
-					<RefreshCw size={12} />
+					<RefreshCw size={12} className={loading ? "animate-spin" : ""} />
 					Fetch
 				</button>
 				<button
 					type="button"
 					onClick={handlePull}
 					disabled={loading || remotes.length === 0}
-					className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium bg-zinc-200 hover:bg-zinc-300 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
-					title="Pull"
+					className="btn btn-secondary flex-1 text-xs"
+					title="Pull from remote"
 				>
 					<Download size={12} />
 					Pull
@@ -72,20 +72,43 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 					type="button"
 					onClick={handlePush}
 					disabled={loading || remotes.length === 0}
-					className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium bg-zinc-200 hover:bg-zinc-300 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
-					title="Push"
+					className="btn btn-primary flex-1 text-xs"
+					title="Push to remote"
 				>
 					<Upload size={12} />
 					Push
 				</button>
 			</div>
-			{remotes.length > 0 && (
-				<div className="text-[10px] text-zinc-500 dark:text-zinc-400">
+			{remotes.length > 0 ? (
+				<div className="space-y-2">
 					{remotes.map((r) => (
-						<div key={r.name}>
-							{r.name}: {r.url}
+						<div
+							key={r.name}
+							className="rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-3"
+						>
+							<div className="flex items-center gap-2">
+								<Link size={12} className="text-[var(--text-muted)]" />
+								<p className="text-xs font-semibold text-[var(--text-primary)]">
+									{r.name}
+								</p>
+							</div>
+							<p className="mt-1 truncate font-mono text-[10px] text-[var(--text-muted)]">
+								{r.url}
+							</p>
 						</div>
 					))}
+				</div>
+			) : (
+				<div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+					<Cloud size={28} className="text-[var(--border-primary)]" />
+					<div>
+						<p className="text-sm font-medium text-[var(--text-muted)]">
+							No remotes configured
+						</p>
+						<p className="mt-1 text-xs text-[var(--text-subtle)]">
+							Add a remote to sync with GitHub, GitLab, etc.
+						</p>
+					</div>
 				</div>
 			)}
 		</div>

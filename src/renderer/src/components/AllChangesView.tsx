@@ -1,14 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
 	ChevronDown,
 	ChevronRight,
 	Square,
 	CheckSquare,
 	ExternalLink,
+	FileCode,
 } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
-import { changeTypeColorClass } from "../utils/status-badge";
+import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
+import { useTheme } from "../theme/provider";
 
 interface AllChangesViewProps {
 	projectId: string;
@@ -19,10 +21,6 @@ interface AllChangesViewProps {
 
 function fileKey(file: GitFileStatus): string {
 	return `${file.status}:${file.path}`;
-}
-
-function allFilePaths(files: GitFileStatus[]): string {
-	return files.map((f) => f.path).sort().join("\0");
 }
 
 function FileChangeCard({
@@ -40,6 +38,7 @@ function FileChangeCard({
 	isExpanded: boolean;
 	onToggleExpand: () => void;
 }) {
+	const { resolved } = useTheme();
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const isStaged = file.status === "staged";
@@ -83,66 +82,82 @@ function FileChangeCard({
 	};
 
 	return (
-		<div className="border-b border-zinc-200 dark:border-zinc-800">
-			<div className="flex items-center gap-2 bg-zinc-100 px-3 py-2 dark:bg-zinc-900">
+		<div className="border-b border-[var(--border-secondary)] last:border-b-0">
+			<div className="flex items-center gap-2 bg-[var(--bg-panel)] px-4 py-3">
 				<button
 					type="button"
 					onClick={onToggleExpand}
-					className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+					className="btn-icon rounded-md p-1.5"
 					title={isExpanded ? "Collapse" : "Expand"}
 				>
-					{isExpanded ? (
-						<ChevronDown size={16} />
-					) : (
-						<ChevronRight size={16} />
-					)}
+					{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
 				</button>
 				<button
 					type="button"
 					onClick={handleStageToggle}
-					className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-					title={isStaged ? "Unstage" : "Stage"}
+					className="btn-icon rounded-md p-1.5"
+					title={isStaged ? "Unstage file" : "Stage file"}
 				>
 					{isStaged ? (
-						<CheckSquare size={16} className="text-emerald-600" />
+						<CheckSquare size={18} className="text-[var(--success)]" />
 					) : (
-						<Square size={16} />
+						<Square size={18} className="text-[var(--text-muted)]" />
 					)}
 				</button>
 				<button
 					type="button"
 					onClick={handleOpenInEditor}
-					className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+					className="btn-icon rounded-md p-1.5"
 					title="Open in editor"
 				>
-					<ExternalLink size={14} />
+					<ExternalLink size={15} />
 				</button>
+				<div className="mx-2 h-4 w-px bg-[var(--border-secondary)]" />
 				<span
-					className={`flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-bold ${changeTypeColorClass(letter)}`}
+					className={`badge ${changeTypeColorClass(letter)}`}
+					title={changeTypeLabel(letter)}
 				>
 					{letter}
 				</span>
-				<span className="truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
+				<span className="font-mono truncate text-sm text-[var(--text-primary)]">
 					{file.path}
 				</span>
+				{isStaged && (
+					<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--success)]">
+						Staged
+					</span>
+				)}
 			</div>
 			{isExpanded && (
-				<div className="bg-zinc-50 dark:bg-zinc-950 [&_pre]:!bg-transparent">
+				<div className="border-t border-[var(--border-secondary)] bg-[var(--bg-primary)] [&_pre]:!bg-transparent [&_pre]:!font-mono [&_pre]:!text-[13px]">
 					{loading ? (
-						<div className="p-4 text-sm text-zinc-500">Loading diff...</div>
+						<div className="flex items-center gap-3 p-6">
+							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+							<span className="text-sm text-[var(--text-muted)]">
+								Loading diff...
+							</span>
+						</div>
 					) : patch && patch !== "" ? (
 						<PatchDiff
 							patch={patch}
 							options={{
-								theme: "github-dark",
+								theme: resolved === "dark" ? "github-dark" : "github-light",
 								diffStyle,
 								disableLineNumbers: false,
 							}}
 							className="min-h-0"
 						/>
 					) : (
-						<div className="p-4 text-sm text-zinc-500">
-							No changes or binary file
+						<div className="flex flex-col items-center gap-3 p-8 text-center">
+							<FileCode size={24} className="text-[var(--border-primary)]" />
+							<div>
+								<p className="text-sm text-[var(--text-muted)]">
+									No changes or binary file
+								</p>
+								<p className="mt-1 text-xs text-[var(--text-subtle)]">
+									This file has no text diff to display
+								</p>
+							</div>
 						</div>
 					)}
 				</div>
@@ -157,11 +172,10 @@ export default function AllChangesView({
 	diffStyle,
 	onRefresh,
 }: AllChangesViewProps) {
-	const allFiles: GitFileStatus[] = [
-		...gitStatus.staged,
-		...gitStatus.unstaged,
-		...gitStatus.untracked,
-	];
+	const allFiles: GitFileStatus[] = useMemo(
+		() => [...gitStatus.staged, ...gitStatus.unstaged, ...gitStatus.untracked],
+		[gitStatus]
+	);
 
 	const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => {
 		const keys = new Set<string>();
@@ -169,8 +183,6 @@ export default function AllChangesView({
 		return keys;
 	});
 
-	// When new files appear, expand them by default
-	const filePathsKey = allFilePaths(allFiles);
 	useEffect(() => {
 		setExpandedKeys((prev) => {
 			const next = new Set(prev);
@@ -180,7 +192,7 @@ export default function AllChangesView({
 			}
 			return next;
 		});
-	}, [filePathsKey]);
+	}, [allFiles]);
 
 	const toggleExpand = (file: GitFileStatus) => {
 		const k = fileKey(file);
@@ -194,8 +206,16 @@ export default function AllChangesView({
 
 	if (allFiles.length === 0) {
 		return (
-			<div className="flex flex-1 items-center justify-center text-zinc-500 dark:text-zinc-500">
-				<p>No changes</p>
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--text-muted)]">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-secondary)]">
+					<FileCode size={24} className="text-[var(--border-primary)]" />
+				</div>
+				<div className="text-center">
+					<p className="text-sm font-medium text-[var(--text-secondary)]">No changes</p>
+					<p className="mt-1 text-xs text-[var(--text-subtle)]">
+						All files are committed
+					</p>
+				</div>
 			</div>
 		);
 	}

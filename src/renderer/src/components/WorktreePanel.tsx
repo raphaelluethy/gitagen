@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { GitBranchPlus, Trash2 } from "lucide-react";
+import { GitBranchPlus, Trash2, Check } from "lucide-react";
 import type { WorktreeInfo } from "../../../shared/types";
 
 interface WorktreePanelProps {
@@ -13,8 +13,8 @@ interface WorktreePanelProps {
 
 export default function WorktreePanel({
 	projectId,
-	projectName,
-	projectPath,
+	projectName: _projectName,
+	projectPath: _projectPath,
 	currentBranch,
 	activeWorktreePath,
 	onRefresh,
@@ -60,20 +60,18 @@ export default function WorktreePanel({
 	};
 
 	if (loading) {
-		return <div className="p-2 text-xs text-zinc-500">Loading worktrees...</div>;
+		return <div className="p-3 text-xs text-[var(--text-muted)]">Loading worktrees...</div>;
 	}
 
 	return (
 		<div className="p-2">
-			<div className="mb-2 flex items-center justify-between">
-				<span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-					Worktrees
-				</span>
+			<div className="mb-2 flex items-center justify-between px-1">
+				<span className="section-title">Worktrees</span>
 				<button
 					type="button"
 					onClick={handleAdd}
 					disabled={adding}
-					className="flex items-center gap-1 rounded p-1 text-xs text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+					className="flex items-center gap-1 rounded-[var(--radius-md)] px-2 py-1 text-[10px] font-medium text-[var(--text-muted)] outline-none hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] disabled:opacity-50"
 					title="Add worktree"
 				>
 					<GitBranchPlus size={12} />
@@ -89,17 +87,22 @@ export default function WorktreePanel({
 					return (
 						<div
 							key={w.path}
-							className={`flex items-center justify-between gap-1 rounded border p-2 ${
+							className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
 								isActive
-									? "border-zinc-400 bg-zinc-200/50 dark:border-zinc-500 dark:bg-zinc-800/50"
-									: "border-zinc-200 dark:border-zinc-700"
+									? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/5"
+									: "border-[var(--border-primary)] hover:border-[var(--border-focus)]"
 							}`}
 						>
+							<span
+								className={`shrink-0 ${isActive ? "text-[var(--accent-primary)]" : "invisible"}`}
+							>
+								<Check size={12} />
+							</span>
 							<div className="min-w-0 flex-1">
-								<p className="truncate text-xs font-medium dark:text-zinc-200">
+								<p className="truncate text-xs font-medium text-[var(--text-primary)]">
 									{name}
 								</p>
-								<p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400">
+								<p className="truncate text-[10px] text-[var(--text-muted)]">
 									{w.branch}
 								</p>
 							</div>
@@ -113,8 +116,7 @@ export default function WorktreePanel({
 											});
 											onRefresh();
 										}}
-										className="rounded px-1.5 py-0.5 text-[10px] bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600"
-										title="Switch to this worktree"
+										className="rounded-[var(--radius-md)] bg-[var(--bg-tertiary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
 									>
 										Switch
 									</button>
@@ -123,7 +125,7 @@ export default function WorktreePanel({
 									<button
 										type="button"
 										onClick={() => handleRemove(w.path)}
-										className="rounded p-1 text-zinc-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+										className="rounded-[var(--radius-md)] p-1 text-[var(--text-muted)] outline-none hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]"
 										title="Remove worktree"
 									>
 										<Trash2 size={12} />

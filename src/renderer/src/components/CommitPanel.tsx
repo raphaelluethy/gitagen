@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Send, GitCommit } from "lucide-react";
 
 interface CommitPanelProps {
 	projectId: string;
@@ -29,40 +29,54 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 		}
 	};
 
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+			e.preventDefault();
+			handleCommit();
+		}
+	};
+
 	return (
-		<div className="flex flex-col gap-2 border-t border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+		<div className="shrink-0 border-t border-[var(--border-secondary)] bg-[var(--bg-panel)] px-4 py-4">
+			<div className="mb-3 flex items-center gap-2">
+				<GitCommit size={16} className="text-[var(--accent-primary)]" />
+				<span className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+					Commit
+				</span>
+			</div>
 			<textarea
 				value={message}
 				onChange={(e) => setMessage(e.target.value)}
-				placeholder="Commit message..."
-				rows={2}
-				className="w-full resize-none rounded border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+				onKeyDown={handleKeyDown}
+				placeholder="Enter commit message... (⌘+Enter to commit)"
+				rows={3}
+				className="input commit-message-text mb-3 resize-none"
 				disabled={disabled}
+				style={{ fontSize: "var(--commit-message-font-size)" }}
 			/>
-			<div className="flex items-center justify-between gap-2">
+			<div className="flex items-center justify-between gap-3">
+				<label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+					<input
+						type="checkbox"
+						checked={amend}
+						onChange={(e) => setAmend(e.target.checked)}
+					/>
+					Amend previous
+				</label>
 				<div className="flex items-center gap-3">
-					<label className="flex items-center gap-1.5 text-xs">
-						<input
-							type="checkbox"
-							checked={amend}
-							onChange={(e) => setAmend(e.target.checked)}
-							className="rounded"
-						/>
-						Amend
-					</label>
-				</div>
-				<div className="flex items-center gap-2">
 					{error && (
-						<span className="text-xs text-red-600 dark:text-red-400">{error}</span>
+						<span className="max-w-[200px] truncate text-xs text-[var(--danger)]">
+							{error}
+						</span>
 					)}
 					<button
 						type="button"
 						onClick={handleCommit}
 						disabled={disabled || loading || !message.trim()}
-						className="flex items-center gap-2 rounded bg-zinc-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+						className="btn btn-primary"
 					>
 						<Send size={14} />
-						{loading ? "..." : "Commit"}
+						{loading ? "Committing..." : "Commit"}
 					</button>
 				</div>
 			</div>

@@ -22,13 +22,7 @@ ${diffLines}${eof}`;
 		return null;
 	}
 }
-import type {
-	GetPatchOptions,
-	GetTreeOptions,
-	GitProvider,
-	RepoFingerprint,
-	WorktreeInfo,
-} from "./types.js";
+import type { GetPatchOptions, GitProvider, RepoFingerprint, WorktreeInfo } from "./types.js";
 import type {
 	BranchInfo,
 	CommitInfo,
@@ -38,12 +32,11 @@ import type {
 	TreeNode,
 } from "../../../shared/types.js";
 
-function createGit(cwd: string, binary?: string | null, env?: NodeJS.ProcessEnv): SimpleGit {
-	const opts: { baseDir: string; binary?: string; env?: NodeJS.ProcessEnv } = {
+function createGit(cwd: string, binary?: string | null): SimpleGit {
+	const opts: { baseDir: string; binary?: string } = {
 		baseDir: cwd,
 	};
 	if (binary) opts.binary = binary;
-	if (env) opts.env = { ...process.env, ...env };
 	return simpleGit(opts);
 }
 
@@ -129,13 +122,10 @@ function statusToMap(status: StatusResult): Map<string, string> {
 	return m;
 }
 
-export function createSimpleGitProvider(
-	binary?: string | null,
-	env?: NodeJS.ProcessEnv
-): GitProvider {
+export function createSimpleGitProvider(binary?: string | null): GitProvider {
 	return {
 		async getTree(opts): Promise<TreeNode[]> {
-			const git = createGit(opts.cwd, binary, env);
+			const git = createGit(opts.cwd, binary);
 			const [rawIgnored, rawTracked, status] = await Promise.all([
 				opts.includeIgnored
 					? git
@@ -157,7 +147,7 @@ export function createSimpleGitProvider(
 
 		async getStatus(cwd: string): Promise<RepoStatus | null> {
 			try {
-				const git = createGit(cwd, binary, env);
+				const git = createGit(cwd, binary);
 				const [head, branch, status] = await Promise.all([
 					git.revparse(["HEAD"]).catch(() => ({ value: "" })),
 					git.branch().catch(() => ({ current: "" })),
@@ -194,7 +184,7 @@ export function createSimpleGitProvider(
 
 		async getPatch(opts: GetPatchOptions): Promise<string | null> {
 			try {
-				const git = createGit(opts.cwd, binary, env);
+				const git = createGit(opts.cwd, binary);
 				if (opts.scope === "staged") {
 					return git.diff(["--cached", "--", opts.filePath]);
 				}
@@ -213,7 +203,7 @@ export function createSimpleGitProvider(
 
 		async getHeadOid(cwd: string): Promise<string | null> {
 			try {
-				const git = createGit(cwd, binary, env);
+				const git = createGit(cwd, binary);
 				const r = await git.revparse(["HEAD"]);
 				return (r as string)?.trim() ?? null;
 			} catch {
@@ -224,7 +214,7 @@ export function createSimpleGitProvider(
 		async getRepoFingerprint(cwd: string): Promise<RepoFingerprint | null> {
 			try {
 				const { statSync } = await import("fs");
-				const git = createGit(cwd, binary, env);
+				const git = createGit(cwd, binary);
 				const [head, status] = await Promise.all([
 					git.revparse(["HEAD"]).catch(() => ""),
 					git.status().catch(() => null),
@@ -257,37 +247,37 @@ export function createSimpleGitProvider(
 		},
 
 		async stageFiles(cwd: string, paths: string[]): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.add(paths);
 		},
 
 		async unstageFiles(cwd: string, paths: string[]): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.reset(["--", ...paths]);
 		},
 
 		async stageAll(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.add(["-A"]);
 		},
 
 		async unstageAll(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.reset(["HEAD"]);
 		},
 
 		async discardFiles(cwd: string, paths: string[]): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.checkout(["--", ...paths]);
 		},
 
 		async discardAllUnstaged(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.checkout(["."]);
 		},
 
 		async commit(cwd, opts): Promise<{ oid: string; signed: boolean }> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args: string[] = ["-m", opts.message];
 			if (opts.amend) args.push("--amend");
 			if (opts.sign) args.push("-S");
@@ -300,7 +290,7 @@ export function createSimpleGitProvider(
 		},
 
 		async getLog(cwd, opts): Promise<CommitInfo[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args = ["log", "--format=%H%n%s%n%an%n%ae%n%ai%n%P%n%G?"];
 			if (opts?.limit) args.push(`-n`, String(opts.limit));
 			if (opts?.offset) args.push("--skip", String(opts.offset));
@@ -327,7 +317,7 @@ export function createSimpleGitProvider(
 		},
 
 		async listBranches(cwd: string): Promise<BranchInfo[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const [summary, status] = await Promise.all([
 				git.branchLocal(),
 				git.status().catch(() => null),
@@ -349,28 +339,28 @@ export function createSimpleGitProvider(
 		},
 
 		async createBranch(cwd: string, name: string, startPoint?: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			if (startPoint) await git.checkoutBranch(name, startPoint);
 			else await git.branch([name]);
 		},
 
 		async switchBranch(cwd: string, name: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.checkout(name);
 		},
 
 		async deleteBranch(cwd: string, name: string, force?: boolean): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.branch([force ? "-D" : "-d", name]);
 		},
 
 		async renameBranch(cwd: string, oldName: string, newName: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.branch(["-m", oldName, newName]);
 		},
 
 		async mergeBranch(cwd, source, opts): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args: string[] = [source];
 			if (opts?.noFf) args.unshift("--no-ff");
 			if (opts?.squash) args.unshift("--squash");
@@ -379,7 +369,7 @@ export function createSimpleGitProvider(
 		},
 
 		async fetch(cwd, opts): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args: string[] = [];
 			if (opts?.remote) args.push(opts.remote);
 			if (opts?.prune) args.push("--prune");
@@ -387,7 +377,7 @@ export function createSimpleGitProvider(
 		},
 
 		async pull(cwd, opts): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args: string[] = opts?.rebase ? ["--rebase"] : [];
 			if (opts?.remote) args.push(opts.remote);
 			if (opts?.branch) args.push(opts.branch);
@@ -395,7 +385,7 @@ export function createSimpleGitProvider(
 		},
 
 		async push(cwd, opts): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args: string[] = [];
 			if (opts?.force) args.push("--force");
 			if (opts?.setUpstream) args.push("-u");
@@ -405,7 +395,7 @@ export function createSimpleGitProvider(
 		},
 
 		async listRemotes(cwd: string): Promise<RemoteInfo[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const remotes = await git.getRemotes(true);
 			return Object.entries(remotes).map(([name, r]) => ({
 				name,
@@ -415,17 +405,17 @@ export function createSimpleGitProvider(
 		},
 
 		async addRemote(cwd: string, name: string, url: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.addRemote(name, url);
 		},
 
 		async removeRemote(cwd: string, name: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.removeRemote(name);
 		},
 
 		async stash(cwd, opts): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.stash([
 				"push",
 				...(opts?.includeUntracked ? ["-u"] : []),
@@ -434,19 +424,19 @@ export function createSimpleGitProvider(
 		},
 
 		async stashPop(cwd: string, index?: number): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			if (index != null) await git.stash(["pop", `stash@{${index}}`]);
 			else await git.stash(["pop"]);
 		},
 
 		async stashApply(cwd: string, index?: number): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			if (index != null) await git.stash(["apply", `stash@{${index}}`]);
 			else await git.stash(["apply"]);
 		},
 
 		async stashList(cwd: string): Promise<StashEntry[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const out = (await git.raw(["stash", "list"])) as string;
 			return out
 				.trim()
@@ -461,19 +451,19 @@ export function createSimpleGitProvider(
 		},
 
 		async stashDrop(cwd: string, index?: number): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			if (index != null) await git.stash(["drop", `stash@{${index}}`]);
 			else await git.stash(["drop"]);
 		},
 
 		async listTags(cwd: string): Promise<string[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const tags = await git.tags();
 			return tags.all;
 		},
 
 		async createTag(cwd, name, opts): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const args: string[] = [name];
 			if (opts?.message) args.push("-m", opts.message);
 			if (opts?.ref) args.push(opts.ref);
@@ -482,47 +472,47 @@ export function createSimpleGitProvider(
 		},
 
 		async deleteTag(cwd: string, name: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.tag(["-d", name]);
 		},
 
 		async rebase(cwd: string, opts: { onto: string }): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.rebase([opts.onto]);
 		},
 
 		async rebaseAbort(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.rebase(["--abort"]);
 		},
 
 		async rebaseContinue(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.rebase(["--continue"]);
 		},
 
 		async rebaseSkip(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.rebase(["--skip"]);
 		},
 
 		async cherryPick(cwd: string, refs: string[]): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.raw(["cherry-pick", ...refs]);
 		},
 
 		async cherryPickAbort(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.raw(["cherry-pick", "--abort"]);
 		},
 
 		async cherryPickContinue(cwd: string): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.raw(["cherry-pick", "--continue"]);
 		},
 
 		async getConflictFiles(cwd: string): Promise<string[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const out = (await git.raw(["diff", "--name-only", "--diff-filter=U"])) as string;
 			return out
 				.split("\n")
@@ -531,12 +521,12 @@ export function createSimpleGitProvider(
 		},
 
 		async markResolved(cwd: string, paths: string[]): Promise<void> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			await git.add(paths);
 		},
 
 		async listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
-			const git = createGit(cwd, binary, env);
+			const git = createGit(cwd, binary);
 			const mainPath = ((await git.revparse(["--show-toplevel"])) as string)?.trim() ?? cwd;
 			const out = (await git.raw(["worktree", "list", "--porcelain"])) as string;
 			const list: WorktreeInfo[] = [];
@@ -575,7 +565,7 @@ export function createSimpleGitProvider(
 			branch: string,
 			newBranch?: string
 		): Promise<void> {
-			const git = createGit(repoPath, binary, env);
+			const git = createGit(repoPath, binary);
 			if (newBranch) {
 				await git.raw(["worktree", "add", "-b", newBranch, worktreePath, branch]);
 			} else {
@@ -584,12 +574,12 @@ export function createSimpleGitProvider(
 		},
 
 		async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
-			const git = createGit(repoPath, binary, env);
+			const git = createGit(repoPath, binary);
 			await git.raw(["worktree", "remove", worktreePath]);
 		},
 
 		async pruneWorktrees(repoPath: string): Promise<void> {
-			const git = createGit(repoPath, binary, env);
+			const git = createGit(repoPath, binary);
 			await git.raw(["worktree", "prune"]);
 		},
 	};

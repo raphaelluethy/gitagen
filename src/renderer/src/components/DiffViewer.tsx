@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Square, CheckSquare, ExternalLink } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitFileStatus, DiffStyle } from "../../../shared/types";
-import { changeTypeColorClass } from "../utils/status-badge";
+import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
+import { useTheme } from "../theme/provider";
 
 interface DiffViewerProps {
 	projectId: string;
@@ -14,11 +15,12 @@ interface DiffViewerProps {
 
 export default function DiffViewer({
 	projectId,
-	repoPath,
+	repoPath: _repoPath,
 	selectedFile,
 	diffStyle,
 	onRefresh,
 }: DiffViewerProps) {
+	const { resolved } = useTheme();
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
@@ -48,16 +50,27 @@ export default function DiffViewer({
 
 	if (!selectedFile) {
 		return (
-			<div className="flex flex-1 items-center justify-center text-zinc-500 dark:text-zinc-500">
-				<p>Select a file to view diff</p>
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--text-muted)]">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-secondary)]">
+					<ExternalLink size={24} className="text-[var(--border-primary)]" />
+				</div>
+				<div className="text-center">
+					<p className="text-sm font-medium text-[var(--text-secondary)]">
+						Select a file to view diff
+					</p>
+					<p className="mt-1 text-xs text-[var(--text-subtle)]">
+						Choose a file from the sidebar to see changes
+					</p>
+				</div>
 			</div>
 		);
 	}
 
 	if (loading) {
 		return (
-			<div className="flex flex-1 items-center justify-center text-zinc-500 dark:text-zinc-500">
-				Loading diff...
+			<div className="flex flex-1 flex-col items-center justify-center gap-3">
+				<div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+				<p className="text-sm text-[var(--text-muted)]">Loading diff...</p>
 			</div>
 		);
 	}
@@ -83,41 +96,59 @@ export default function DiffViewer({
 		window.gitagen.repo.openInEditor(projectId, selectedFile.path);
 	};
 
+	const renderToolbar = () => (
+		<div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-secondary)] bg-[var(--bg-panel)] px-4 py-3">
+			<button
+				type="button"
+				onClick={handleStageToggle}
+				className="btn-icon rounded-md p-2"
+				title={isStaged ? "Unstage file" : "Stage file"}
+			>
+				{isStaged ? (
+					<CheckSquare size={18} className="text-[var(--success)]" />
+				) : (
+					<Square size={18} className="text-[var(--text-muted)]" />
+				)}
+			</button>
+			<button
+				type="button"
+				onClick={handleOpenInEditor}
+				className="btn-icon rounded-md p-2"
+				title="Open in editor"
+			>
+				<ExternalLink size={16} />
+			</button>
+			<div className="mx-2 h-4 w-px bg-[var(--border-secondary)]" />
+			<span
+				className={`badge ${changeTypeColorClass(letter)}`}
+				title={changeTypeLabel(letter)}
+			>
+				{letter}
+			</span>
+			<span className="font-mono truncate text-sm text-[var(--text-primary)]">
+				{selectedFile.path}
+			</span>
+			{isStaged && (
+				<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--success)]">
+					Staged
+				</span>
+			)}
+		</div>
+	);
+
 	if (patch === null || patch === "") {
 		return (
-			<div className="flex flex-1 flex-col">
-				<div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 bg-zinc-100 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-					<button
-						type="button"
-						onClick={handleStageToggle}
-						className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-						title={isStaged ? "Unstage" : "Stage"}
-					>
-						{isStaged ? (
-							<CheckSquare size={16} className="text-emerald-600" />
-						) : (
-							<Square size={16} />
-						)}
-					</button>
-					<button
-						type="button"
-						onClick={handleOpenInEditor}
-						className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-						title="Open in editor"
-					>
-						<ExternalLink size={14} />
-					</button>
-					<span
-						className={`flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-bold ${changeTypeColorClass(letter)}`}
-					>
-						{letter}
-					</span>
-					<span className="truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
-						{selectedFile.path}
-					</span>
-				</div>
-				<div className="flex-1 p-4">
-					<p className="text-zinc-500 dark:text-zinc-500">No changes or binary file</p>
+			<div className="flex min-h-0 flex-1 flex-col">
+				{renderToolbar()}
+				<div className="flex flex-1 items-center justify-center">
+					<div className="text-center">
+						<p className="text-sm text-[var(--text-muted)]">
+							No changes or binary file
+						</p>
+						<p className="mt-1 text-xs text-[var(--text-subtle)]">
+							This file has no text diff to display
+						</p>
+					</div>
 				</div>
 			</div>
 		);
@@ -125,42 +156,13 @@ export default function DiffViewer({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 bg-zinc-100 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-				<button
-					type="button"
-					onClick={handleStageToggle}
-					className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-					title={isStaged ? "Unstage" : "Stage"}
-				>
-					{isStaged ? (
-						<CheckSquare size={16} className="text-emerald-600" />
-					) : (
-						<Square size={16} />
-					)}
-				</button>
-				<button
-					type="button"
-					onClick={handleOpenInEditor}
-					className="flex items-center justify-center rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-					title="Open in editor"
-				>
-					<ExternalLink size={14} />
-				</button>
-				<span
-					className={`flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-bold ${changeTypeColorClass(letter)}`}
-				>
-					{letter}
-				</span>
-				<span className="truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
-					{selectedFile.path}
-				</span>
-			</div>
-			<div className="min-h-0 flex-1 overflow-auto">
-				<div className="min-h-full bg-zinc-50 dark:bg-zinc-950 [&_pre]:!bg-transparent">
+			{renderToolbar()}
+			<div className="min-h-0 flex-1 overflow-auto bg-[var(--bg-primary)]">
+				<div className="min-h-full [&_pre]:!bg-transparent [&_pre]:!font-mono [&_pre]:!text-[13px]">
 					<PatchDiff
 						patch={patch}
 						options={{
-							theme: "github-dark",
+							theme: resolved === "dark" ? "github-dark" : "github-light",
 							diffStyle,
 							disableLineNumbers: false,
 						}}

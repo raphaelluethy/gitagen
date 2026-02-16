@@ -1,7 +1,6 @@
 import type {
 	BranchInfo,
 	CommitInfo,
-	ConflictState,
 	RepoStatus,
 	RemoteInfo,
 	StashEntry,

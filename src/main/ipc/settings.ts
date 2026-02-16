@@ -1,12 +1,23 @@
 import { ipcMain, dialog } from "electron";
-import { getAppSettings, setAppSettings } from "../services/settings/store.js";
+import {
+	getAppSettings,
+	setAppSettings,
+	getAppSettingsWithKeys,
+} from "../services/settings/store.js";
 import { validateGitBinary, discoverGitBinaries, getSshAgentInfo } from "../services/git/index.js";
 import {
 	getProjectPrefs,
 	setProjectPrefs,
 	type ProjectPrefsRow,
 } from "../services/cache/queries.js";
-import type { AppSettings, ProjectPrefs } from "../../shared/types.js";
+import { fetchModelsFromProvider, type FetchModelsResult } from "../services/ai/models.js";
+import { getAllProviders } from "../services/ai/index.js";
+import type {
+	AppSettings,
+	ProjectPrefs,
+	AIProviderType,
+	AIProviderDescriptor,
+} from "../../shared/types.js";
 
 function prefsRowToPrefs(row: ProjectPrefsRow): ProjectPrefs {
 	return {
@@ -22,6 +33,10 @@ function prefsRowToPrefs(row: ProjectPrefsRow): ProjectPrefs {
 export function registerSettingsHandlers(): void {
 	ipcMain.handle("settings:getGlobal", async (): Promise<AppSettings> => {
 		return getAppSettings();
+	});
+
+	ipcMain.handle("settings:getGlobalWithKeys", async (): Promise<AppSettings> => {
+		return getAppSettingsWithKeys();
 	});
 
 	ipcMain.handle(
@@ -62,8 +77,7 @@ export function registerSettingsHandlers(): void {
 	ipcMain.handle(
 		"settings:getSshAgentInfo",
 		async (): Promise<{ name: string; path: string | null }> => {
-			const s = getAppSettings();
-			return getSshAgentInfo(s.signing?.use1PasswordAgent ?? false);
+			return getSshAgentInfo();
 		}
 	);
 
@@ -80,5 +94,25 @@ export function registerSettingsHandlers(): void {
 			return path;
 		}
 		return null;
+	});
+
+	ipcMain.handle(
+		"settings:fetchModels",
+		async (
+			_,
+			type: AIProviderType,
+			apiKey: string,
+			baseURL?: string
+		): Promise<FetchModelsResult> => {
+			return fetchModelsFromProvider(type, apiKey, baseURL);
+		}
+	);
+
+	ipcMain.handle("settings:listAIProviders", async (): Promise<AIProviderDescriptor[]> => {
+		return getAllProviders().map((provider) => ({
+			id: provider.id,
+			displayName: provider.displayName,
+			requiresBaseURL: provider.requiresBaseURL,
+		}));
 	});
 }

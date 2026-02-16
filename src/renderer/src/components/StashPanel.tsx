@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Archive } from "lucide-react";
+import { Archive, Inbox, ArrowDownToLine, Trash2 } from "lucide-react";
 import type { StashEntry } from "../../../shared/types";
 
 interface StashPanelProps {
@@ -47,50 +47,64 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 	};
 
 	if (loading) {
-		return <div className="p-2 text-xs text-zinc-500">Loading stash...</div>;
+		return (
+			<div className="flex flex-col items-center justify-center gap-3 p-8">
+				<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--accent-primary)]" />
+				<p className="text-sm text-[var(--text-muted)]">Loading stash...</p>
+			</div>
+		);
 	}
 
 	if (entries.length === 0) {
 		return (
-			<div className="flex items-center gap-2 p-3 text-xs text-zinc-500">
-				<Archive size={14} />
-				No stash entries
+			<div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+				<Archive size={28} className="text-[var(--border-primary)]" />
+				<div>
+					<p className="text-sm font-medium text-[var(--text-muted)]">No stash entries</p>
+					<p className="mt-1 text-xs text-[var(--text-subtle)]">
+						Stash changes to save them for later
+					</p>
+				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="space-y-2 p-2">
+		<div className="p-3">
 			{entries.map((e) => (
 				<div
 					key={e.index}
-					className="rounded border border-zinc-200 p-2 dark:border-zinc-700"
+					className="mb-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-3 transition-colors hover:border-[var(--border-primary)]"
 				>
-					<p className="truncate text-xs font-medium dark:text-zinc-200">{e.message}</p>
-					<p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+					<p className="truncate text-sm font-medium text-[var(--text-primary)]">
+						{e.message}
+					</p>
+					<p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
 						stash@{`{${e.index}}`}
 					</p>
-					<div className="mt-2 flex gap-1">
+					<div className="mt-3 flex gap-2">
 						<button
 							type="button"
 							onClick={() => handlePop(e.index)}
-							className="rounded px-2 py-0.5 text-[10px] bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+							className="btn btn-secondary flex-1 text-xs"
 						>
+							<Inbox size={12} />
 							Pop
 						</button>
 						<button
 							type="button"
 							onClick={() => handleApply(e.index)}
-							className="rounded px-2 py-0.5 text-[10px] bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+							className="btn btn-secondary flex-1 text-xs"
 						>
+							<ArrowDownToLine size={12} />
 							Apply
 						</button>
 						<button
 							type="button"
 							onClick={() => handleDrop(e.index)}
-							className="rounded px-2 py-0.5 text-[10px] text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+							className="btn btn-ghost px-3 text-xs text-[var(--danger)] hover:bg-[var(--danger-bg)]"
 						>
-							Drop
+							<Trash2 size={12} />
 						</button>
 					</div>
 				</div>

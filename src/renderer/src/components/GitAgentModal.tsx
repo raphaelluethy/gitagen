@@ -16,6 +16,7 @@ interface GitAgentModalProps {
 	onClose: () => void;
 	projectId: string;
 	initialPrompt?: string;
+	systemPrompt?: string;
 }
 
 interface PlanGateState {
@@ -104,6 +105,7 @@ export default function GitAgentModal({
 	onClose,
 	projectId,
 	initialPrompt,
+	systemPrompt,
 }: GitAgentModalProps) {
 	const [provider, setProvider] = useState<AIProviderInstance | null>(null);
 	const [initError, setInitError] = useState<string | null>(null);
@@ -296,7 +298,7 @@ export default function GitAgentModal({
 						title="GitAgent"
 						description="AI assistant for practical git workflows"
 						provider={provider}
-						instructions={GIT_AGENT_SYSTEM_PROMPT}
+						instructions={systemPrompt ?? GIT_AGENT_SYSTEM_PROMPT}
 						initialPrompt={initialPrompt}
 						traceKey="git-agent"
 						createTools={toolsFactory}

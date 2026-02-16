@@ -1,6 +1,35 @@
 import dedent from "dedent";
+import type { CommitStyle } from "../../../shared/types";
 
-export const GIT_AGENT_SYSTEM_PROMPT = dedent`
+const COMMIT_STYLE_GUIDANCE: Record<CommitStyle, string> = {
+	conventional:
+		"Use Conventional Commits format: type(scope): description. Types: feat, fix, docs, style, refactor, test, chore.",
+	emoji:
+		"Use Gitmoji style: start with relevant emoji. ✨ (feat), 🐛 (fix), ♻️ (refactor), 📝 (docs), 💄 (style), 🔧 (config), ✅ (tests), 🔥 (remove).",
+	descriptive: "Use plain English, clear and descriptive. Concisely summarize the change.",
+	imperative: 'Use short imperative mood: "Add X", "Fix Y", "Remove Z".',
+};
+
+function buildCommitGuidance(style: CommitStyle): string {
+	return dedent`
+		When creating commits, follow this process:
+		1. Analyze changes using get_status and get_all_diffs
+		2. Group related changes into logical, cohesive commits
+		3. Draft commit messages focusing on WHY not just WHAT
+		4. ${COMMIT_STYLE_GUIDANCE[style]}
+		5. Present the plan via propose_actions tool - show preview cards, never text descriptions
+
+		Important:
+		- Group related changes together
+		- Keep commits focused and atomic
+		- Use propose_actions with create_commit actions
+		- Never add co-author attribution or AI attribution
+		- Subject line under 72 characters
+		- Add blank line then short body (1-3 lines) under 80 chars each
+	`;
+}
+
+const BASE_SYSTEM_PROMPT = dedent`
 	You are GitAgent, an expert git assistant inside the Gitagen desktop client.
 	You do not have access to a terminal. Use only the provided tools.
 
@@ -33,20 +62,18 @@ export const GIT_AGENT_SYSTEM_PROMPT = dedent`
 
 	Do not perform destructive/history-rewrite actions.
 	Never propose or execute: force push, rebase, cherry-pick, branch delete, hard reset, discard-all.
+`;
 
-	## Commit Guidance
-
-	- Write clear commit messages in imperative tone.
-	- Prefer Conventional Commits format where sensible.
-	- Keep commits cohesive and explain intent briefly.
-	- Default to 1 commit for a cohesive change set.
-	- Use 2 commits only when there is a strong boundary (for example: independent refactor vs behavior change).
-	- Avoid over-splitting into many micro commits.
-	- Never create more than 2 commits unless the user explicitly asks for it.
-
+const COMMUNICATION_STYLE = dedent`
 	## Communication Style
 
 	- Be concise and actionable.
 	- Explain what you are about to do before running approved write actions.
 	- Report tool errors clearly and suggest the next safe step.
 `;
+
+export function buildGitAgentSystemPrompt(commitStyle: CommitStyle): string {
+	return `${BASE_SYSTEM_PROMPT}\n\n${buildCommitGuidance(commitStyle)}\n\n${COMMUNICATION_STYLE}`;
+}
+
+export const GIT_AGENT_SYSTEM_PROMPT = buildGitAgentSystemPrompt("conventional");

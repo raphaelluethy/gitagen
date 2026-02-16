@@ -31,14 +31,55 @@ interface GitActionProposalProps {
 	isLoading: boolean;
 }
 
-function summarizeArgs(args: unknown): string | null {
+function summarizeArgs(tool: string, args: unknown): string | null {
 	if (args === undefined) return null;
 	if (typeof args === "string") return args;
-	try {
-		const raw = JSON.stringify(args);
-		return raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
-	} catch {
-		return String(args);
+	if (!args || typeof args !== "object") return null;
+
+	const data = args as Record<string, unknown>;
+
+	switch (tool) {
+		case "stage_files":
+		case "unstage_files": {
+			const paths = Array.isArray(data.paths) ? data.paths : [];
+			if (paths.length === 0) return null;
+			const head = paths.slice(0, 3).join(", ");
+			return paths.length > 3 ? `${head} +${paths.length - 3} more` : head;
+		}
+		case "create_commit": {
+			const message = typeof data.message === "string" ? data.message : "";
+			if (!message) return null;
+			const firstLine = message.split("\n")[0] ?? "";
+			return firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine;
+		}
+		case "switch_branch":
+		case "create_branch": {
+			const name = typeof data.name === "string" ? data.name : "";
+			return name || null;
+		}
+		case "fetch":
+		case "pull":
+		case "push": {
+			const parts: string[] = [];
+			if (typeof data.remote === "string" && data.remote) parts.push(data.remote);
+			if (typeof data.branch === "string" && data.branch) parts.push(data.branch);
+			return parts.length > 0 ? parts.join(" → ") : null;
+		}
+		case "stash_create": {
+			const msg = typeof data.message === "string" ? data.message : "";
+			return msg || "Stash changes";
+		}
+		case "stash_apply":
+		case "stash_pop": {
+			const idx = typeof data.index === "number" ? data.index : null;
+			return idx !== null ? `stash@{${idx}}` : "Latest stash";
+		}
+		case "stage_all":
+			return "Stage all changes";
+		case "unstage_all":
+			return "Unstage all changes";
+		default:
+			return null;
 	}
 }
 
@@ -116,7 +157,7 @@ export default function GitActionProposal({
 
 			<div className="ga-action-list">
 				{actions.map((action, index) => {
-					const argSummary = summarizeArgs(action.args);
+					const argSummary = summarizeArgs(action.tool, action.args);
 					return (
 						<div
 							key={`${action.id ?? action.tool}-${index}`}

@@ -41,7 +41,7 @@ Gitagen is a native Git client designed for speed and simplicity. It features a 
 | UI      | React 19, TypeScript, Tailwind CSS v4 |
 | Git     | simple-git                            |
 | Diffs   | @pierre/diffs                         |
-| Storage | better-sqlite3                        |
+| Storage | @libsql/client, drizzle-orm           |
 | Tooling | pnpm, oxlint, oxfmt, tsgo             |
 
 ## Architecture

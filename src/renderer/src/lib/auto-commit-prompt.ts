@@ -39,7 +39,7 @@ export const AUTO_COMMIT_SYSTEM_PROMPT = dedent`
 	- Never add co-author information or any attribution lines.
 	- Write commit messages as if the user wrote them.
 	- If a file has changes that belong to different logical commits, include it in the most
-	  relevant one. Avoid splitting one file across commits unless there is a very clear separation.
+	  relevant one. Avoid splitting one file across commits unless clearly justified.
 
 	## Important
 

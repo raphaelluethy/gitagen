@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { CircleMinus, CirclePlus, ExternalLink } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitFileStatus, DiffStyle } from "../../../shared/types";
@@ -26,29 +26,42 @@ export default function DiffViewer({
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const requestIdRef = useRef(0);
-	const selectedFileRef = useRef(selectedFile);
-	selectedFileRef.current = selectedFile;
 
 	const filePath = selectedFile?.path ?? null;
+	const isStaged = selectedFile?.status === "staged";
+	const letter = selectedFile?.changeType ?? "M";
+
+	const handleStageToggle = useCallback(async () => {
+		if (!projectId || !onRefresh || !selectedFile) return;
+		try {
+			if (isStaged) {
+				await window.gitagen.repo.unstageFiles(projectId, [selectedFile.path]);
+			} else {
+				await window.gitagen.repo.stageFiles(projectId, [selectedFile.path]);
+			}
+			onRefresh();
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Staging failed", msg);
+		}
+	}, [projectId, onRefresh, selectedFile, isStaged, toast]);
 
 	useEffect(() => {
-		if (!filePath || !projectId) {
+		if (!filePath || !projectId || !selectedFile) {
 			setPatch(null);
 			return;
 		}
-		const file = selectedFileRef.current;
-		if (!file) return;
 		const requestId = requestIdRef.current + 1;
 		requestIdRef.current = requestId;
 		setLoading(true);
 		const scope =
-			file.status === "staged"
+			selectedFile.status === "staged"
 				? "staged"
-				: file.status === "unstaged"
+				: selectedFile.status === "unstaged"
 					? "unstaged"
 					: "untracked";
 		window.gitagen.repo
-			.getPatch(projectId, file.path, scope)
+			.getPatch(projectId, selectedFile.path, scope)
 			.then((diff) => {
 				if (requestIdRef.current !== requestId) return;
 				setPatch(diff ?? "");
@@ -59,7 +72,7 @@ export default function DiffViewer({
 				setPatch(null);
 				setLoading(false);
 			});
-	}, [projectId, filePath]);
+	}, [projectId, filePath, selectedFile]);
 
 	if (!selectedFile) {
 		return (
@@ -88,24 +101,6 @@ export default function DiffViewer({
 		);
 	}
 
-	const isStaged = selectedFile.status === "staged";
-	const letter = selectedFile.changeType ?? "M";
-
-	const handleStageToggle = async () => {
-		if (!projectId || !onRefresh) return;
-		try {
-			if (isStaged) {
-				await window.gitagen.repo.unstageFiles(projectId, [selectedFile.path]);
-			} else {
-				await window.gitagen.repo.stageFiles(projectId, [selectedFile.path]);
-			}
-			onRefresh();
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : "Unknown error";
-			toast.error("Staging failed", msg);
-		}
-	};
-
 	const handleOpenInEditor = () => {
 		window.gitagen.repo.openInEditor(projectId, selectedFile.path);
 	};
@@ -121,6 +116,7 @@ export default function DiffViewer({
 						: "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-(--text-secondary) transition-colors hover:bg-(--success-bg) hover:text-(--success)"
 				}
 				title={isStaged ? "Unstage file" : "Stage file"}
+				aria-label={isStaged ? "Unstage file" : "Stage file"}
 			>
 				{isStaged ? (
 					<>
@@ -139,6 +135,7 @@ export default function DiffViewer({
 				onClick={handleOpenInEditor}
 				className="btn-icon rounded-md p-2"
 				title="Open in editor"
+				aria-label="Open in editor"
 			>
 				<ExternalLink size={16} />
 			</button>

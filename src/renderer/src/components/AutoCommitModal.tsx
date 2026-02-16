@@ -1,42 +1,38 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useChat } from "@ai-sdk/react";
-import {
-	DirectChatTransport,
-	ToolLoopAgent,
-	tool,
-	lastAssistantMessageIsCompleteWithToolCalls,
-} from "ai";
+import { useState, useEffect, useCallback } from "react";
+import { tool } from "ai";
 import { z } from "zod";
-import { Loader2, Check, AlertCircle, Send, FileText, Bot } from "lucide-react";
+import { Loader2, Check, AlertCircle, Send, FileText } from "lucide-react";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { ModalShell } from "./ui/modal-shell";
-import { cn } from "../lib/cn";
-import { createModelFromSettings } from "../lib/create-model";
+import AgentChatModal, {
+	type AgentChatToolHelpers,
+	type AgentToolPartRenderArgs,
+} from "./agent/AgentChatModal";
 import { AUTO_COMMIT_SYSTEM_PROMPT } from "../lib/auto-commit-prompt";
 import type { AIProviderInstance } from "../../../shared/types";
 
-// ---------------------------------------------------------------------------
-// Tool definitions (factory, capturing projectId)
-// ---------------------------------------------------------------------------
+function createAutoCommitTools(projectId: string, helpers: AgentChatToolHelpers) {
+	const { runTool } = helpers;
 
-function createTools(projectId: string) {
 	return {
 		get_status: tool({
 			description:
 				"Get the current repository status including all staged, unstaged, and untracked files",
 			inputSchema: z.object({}),
-			execute: async () => {
-				const status = await window.gitagen.repo.getStatus(projectId);
-				return status ?? { staged: [], unstaged: [], untracked: [] };
-			},
+			execute: async (_, ctx) =>
+				runTool("get_status", ctx ?? {}, async () => {
+					const status = await window.gitagen.repo.getStatus(projectId);
+					return status ?? { staged: [], unstaged: [], untracked: [] };
+				}),
 		}),
 
 		get_all_diffs: tool({
 			description: "Get diffs for all changed files at once",
 			inputSchema: z.object({}),
-			execute: async () => {
-				return await window.gitagen.repo.getAllDiffs(projectId);
-			},
+			execute: async (_, ctx) =>
+				runTool("get_all_diffs", ctx ?? {}, async () => {
+					return await window.gitagen.repo.getAllDiffs(projectId);
+				}),
 		}),
 
 		get_file_diff: tool({
@@ -45,10 +41,11 @@ function createTools(projectId: string) {
 				filePath: z.string(),
 				scope: z.enum(["staged", "unstaged", "untracked"]),
 			}),
-			execute: async ({ filePath, scope }) => {
-				const patch = await window.gitagen.repo.getPatch(projectId, filePath, scope);
-				return patch ?? "";
-			},
+			execute: async ({ filePath, scope }, ctx) =>
+				runTool("get_file_diff", ctx ?? {}, async () => {
+					const patch = await window.gitagen.repo.getPatch(projectId, filePath, scope);
+					return patch ?? "";
+				}),
 		}),
 
 		get_log: tool({
@@ -56,18 +53,20 @@ function createTools(projectId: string) {
 			inputSchema: z.object({
 				limit: z.number().optional(),
 			}),
-			execute: async ({ limit }) => {
-				return await window.gitagen.repo.getLog(projectId, { limit: limit ?? 10 });
-			},
+			execute: async ({ limit }, ctx) =>
+				runTool("get_log", ctx ?? {}, async () => {
+					return await window.gitagen.repo.getLog(projectId, { limit: limit ?? 10 });
+				}),
 		}),
 
 		unstage_all: tool({
 			description: "Unstage all currently staged files, clearing the staging area",
 			inputSchema: z.object({}),
-			execute: async () => {
-				await window.gitagen.repo.unstageAll(projectId);
-				return { success: true };
-			},
+			execute: async (_, ctx) =>
+				runTool("unstage_all", ctx ?? {}, async () => {
+					await window.gitagen.repo.unstageAll(projectId);
+					return { success: true };
+				}),
 		}),
 
 		stage_files: tool({
@@ -75,10 +74,11 @@ function createTools(projectId: string) {
 			inputSchema: z.object({
 				paths: z.array(z.string()),
 			}),
-			execute: async ({ paths }) => {
-				await window.gitagen.repo.stageFiles(projectId, paths);
-				return { success: true, staged: paths };
-			},
+			execute: async ({ paths }, ctx) =>
+				runTool("stage_files", ctx ?? {}, async () => {
+					await window.gitagen.repo.stageFiles(projectId, paths);
+					return { success: true, staged: paths };
+				}),
 		}),
 
 		create_commit: tool({
@@ -86,10 +86,11 @@ function createTools(projectId: string) {
 			inputSchema: z.object({
 				message: z.string(),
 			}),
-			execute: async ({ message }) => {
-				const result = await window.gitagen.repo.commit(projectId, message);
-				return result;
-			},
+			execute: async ({ message }, ctx) =>
+				runTool("create_commit", ctx ?? {}, async () => {
+					const result = await window.gitagen.repo.commit(projectId, message);
+					return result;
+				}),
 		}),
 
 		propose_commits: {
@@ -109,68 +110,6 @@ function createTools(projectId: string) {
 			outputSchema: z.string(),
 		},
 	};
-}
-
-// ---------------------------------------------------------------------------
-// Tool label map
-// ---------------------------------------------------------------------------
-
-const TOOL_LABELS: Record<string, string> = {
-	get_status: "Checking repository status",
-	get_all_diffs: "Reading file diffs",
-	get_file_diff: "Reading file diff",
-	get_log: "Checking commit history",
-	unstage_all: "Clearing staging area",
-	stage_files: "Staging files",
-	create_commit: "Creating commit",
-};
-
-// ---------------------------------------------------------------------------
-// Small sub-components
-// ---------------------------------------------------------------------------
-
-function getToolName(part: { type: string; toolName?: string }): string | null {
-	if (part.type === "dynamic-tool" && part.toolName) return part.toolName;
-	if (part.type.startsWith("tool-")) return part.type.slice(5);
-	return null;
-}
-
-interface ToolStepProps {
-	toolName: string;
-	state: string;
-	input?: Record<string, unknown>;
-	output?: Record<string, unknown>;
-}
-
-function ToolStep({ toolName, state, input, output }: ToolStepProps) {
-	const isLoading = state === "input-streaming" || state === "input-available";
-	const isDone = state === "output-available";
-	const isError = state === "output-error";
-
-	let detail: string | null = null;
-	if (toolName === "stage_files" && !isLoading && input?.paths) {
-		detail = `${(input.paths as string[]).length} files`;
-	}
-	if (toolName === "create_commit" && isDone && output?.oid) {
-		detail = String(output.oid).slice(0, 7);
-	}
-	if (toolName === "create_commit" && !isLoading && input?.message) {
-		detail = String(input.message);
-	}
-
-	return (
-		<div className="ac-tool-step">
-			{isLoading ? (
-				<Loader2 size={14} className="ac-tool-icon animate-spin text-(--accent)" />
-			) : isDone ? (
-				<Check size={14} className="ac-tool-icon text-(--success)" />
-			) : isError ? (
-				<AlertCircle size={14} className="ac-tool-icon text-(--danger)" />
-			) : null}
-			<span className="ac-tool-label">{TOOL_LABELS[toolName] ?? toolName}</span>
-			{detail && <span className="ac-tool-detail">{detail}</span>}
-		</div>
-	);
 }
 
 interface CommitProposalProps {
@@ -310,193 +249,10 @@ function CommitProposal({
 	);
 }
 
-// ---------------------------------------------------------------------------
-// AutoCommitChat — the inner component (rendered once provider is ready)
-// ---------------------------------------------------------------------------
-
-interface AutoCommitChatProps {
-	projectId: string;
-	provider: AIProviderInstance;
-	onClose: () => void;
-}
-
-function AutoCommitChat({ projectId, provider, onClose: _onClose }: AutoCommitChatProps) {
-	const scrollRef = useRef<HTMLDivElement>(null);
-	const sentRef = useRef(false);
-
-	const agent = useMemo(
-		() =>
-			new ToolLoopAgent({
-				model: createModelFromSettings(provider),
-				instructions: AUTO_COMMIT_SYSTEM_PROMPT,
-				tools: createTools(projectId),
-			}),
-		[projectId, provider]
-	);
-
-	const transport = useMemo(() => new DirectChatTransport({ agent }), [agent]);
-
-	const { messages, sendMessage, addToolOutput, status, error } = useChat({
-		transport,
-		sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-	});
-
-	const isLoading = status === "submitted" || status === "streaming";
-
-	// Auto-start analysis on mount
-	useEffect(() => {
-		if (!sentRef.current) {
-			sentRef.current = true;
-			sendMessage({ text: "Analyze all changes and propose atomic commits." });
-		}
-	}, [sendMessage]);
-
-	// Auto-scroll to bottom on new messages
-	useEffect(() => {
-		scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [messages]);
-
-	// Chat input state
-	const [input, setInput] = useState("");
-
-	const handleSend = useCallback(() => {
-		const trimmed = input.trim();
-		if (!trimmed || isLoading) return;
-		sendMessage({ text: trimmed });
-		setInput("");
-	}, [input, isLoading, sendMessage]);
-
-	const handleApprove = useCallback(
-		(toolCallId: string) => {
-			addToolOutput({ tool: "propose_commits", toolCallId, output: "approved" });
-		},
-		[addToolOutput]
-	);
-
-	const handleRevise = useCallback(
-		(toolCallId: string, feedback: string) => {
-			addToolOutput({
-				tool: "propose_commits",
-				toolCallId,
-				output: `revise: ${feedback}`,
-			});
-		},
-		[addToolOutput]
-	);
-
-	// Render a single message part
-	const renderPart = useCallback(
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(part: any, index: number) => {
-			if (part.type === "text" && part.text) {
-				return (
-					<div key={index} className="ac-text">
-						{part.text}
-					</div>
-				);
-			}
-
-			if (part.type === "step-start") {
-				return index > 0 ? <hr key={index} className="ac-step-divider" /> : null;
-			}
-
-			const toolName = getToolName(part);
-			if (!toolName) return null;
-
-			if (toolName === "propose_commits") {
-				return (
-					<CommitProposal
-						key={index}
-						state={part.state}
-						input={part.input}
-						output={part.output}
-						toolCallId={part.toolCallId}
-						onApprove={handleApprove}
-						onRevise={handleRevise}
-					/>
-				);
-			}
-
-			return (
-				<ToolStep
-					key={index}
-					toolName={toolName}
-					state={part.state}
-					input={part.input}
-					output={part.output}
-				/>
-			);
-		},
-		[handleApprove, handleRevise]
-	);
-
-	const footer = (
-		<div className="ac-input-row">
-			<input
-				type="text"
-				className="input flex-1"
-				value={input}
-				onChange={(e) => setInput(e.target.value)}
-				onKeyDown={(e) => {
-					if (e.key === "Enter") handleSend();
-				}}
-				placeholder={isLoading ? "Agent is working..." : "Type feedback or instructions..."}
-				disabled={isLoading}
-			/>
-			<button
-				type="button"
-				className="btn btn-primary"
-				onClick={handleSend}
-				disabled={isLoading || !input.trim()}
-			>
-				<Send size={13} />
-			</button>
-		</div>
-	);
-
-	return (
-		<ModalShell
-			title="Auto-commit"
-			description="AI agent analyzes and commits your changes"
-			bodyClassName="ac-body"
-			footer={footer}
-		>
-			{messages.map((message) => (
-				<div
-					key={message.id}
-					className={cn(
-						"ac-message",
-						message.role === "user" ? "ac-message-user" : "ac-message-assistant"
-					)}
-				>
-					{message.role === "assistant" && (
-						<div className="ac-avatar">
-							<Bot size={14} />
-						</div>
-					)}
-					<div className="ac-message-content">
-						{message.parts.map((part, i) => renderPart(part, i))}
-					</div>
-				</div>
-			))}
-
-			{isLoading && messages.length === 0 && (
-				<div className="ac-loading-initial">
-					<Loader2 size={16} className="animate-spin text-(--accent)" />
-					<span>Starting analysis...</span>
-				</div>
-			)}
-
-			{error && (
-				<div className="ac-error">
-					<AlertCircle size={14} />
-					<span>{error.message}</span>
-				</div>
-			)}
-
-			<div ref={scrollRef} />
-		</ModalShell>
-	);
+function getToolName(part: { type: string; toolName?: string }): string | null {
+	if (part.type === "dynamic-tool" && part.toolName) return part.toolName;
+	if (part.type.startsWith("tool-")) return part.type.slice(5);
+	return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -535,24 +291,31 @@ export default function AutoCommitModal({ open, onClose, projectId }: AutoCommit
 					return;
 				}
 				const instance = providers.find((p) => p.id === activeProviderId);
-				if (!instance) {
-					setInitError("AI provider not found. Reconfigure in Settings.");
+					if (!instance) {
+						setInitError("AI provider not found. Reconfigure in Settings.");
+						setLoading(false);
+						return;
+					}
+					if (!instance.apiKey?.trim()) {
+						setInitError("AI provider missing API key. Add it in Settings.");
+						setLoading(false);
+						return;
+					}
+					if (instance.apiKey.includes("...")) {
+						setInitError(
+							"AI provider API key appears masked. Re-enter the full key in Settings."
+						);
+						setLoading(false);
+						return;
+					}
+					if (!instance.defaultModel?.trim()) {
+						setInitError("No model selected. Select a model in Settings.");
+						setLoading(false);
+						return;
+					}
+					setProvider(instance);
 					setLoading(false);
-					return;
-				}
-				if (!instance.apiKey?.trim()) {
-					setInitError("AI provider missing API key. Add it in Settings.");
-					setLoading(false);
-					return;
-				}
-				if (!instance.defaultModel?.trim()) {
-					setInitError("No model selected. Select a model in Settings.");
-					setLoading(false);
-					return;
-				}
-				setProvider(instance);
-				setLoading(false);
-			})
+				})
 			.catch((err) => {
 				if (cancelled) return;
 				setInitError(err instanceof Error ? err.message : "Failed to load settings");
@@ -564,6 +327,31 @@ export default function AutoCommitModal({ open, onClose, projectId }: AutoCommit
 		};
 	}, [open]);
 
+	const toolsFactory = useCallback(
+		(helpers: AgentChatToolHelpers) => createAutoCommitTools(projectId, helpers),
+		[projectId]
+	);
+
+	const renderAutoCommitTool = useCallback((args: AgentToolPartRenderArgs) => {
+		const toolName = getToolName(args.part);
+		if (toolName !== "propose_commits") return null;
+		const toolCallId = args.part.toolCallId;
+		if (!toolCallId) return null;
+
+		return (
+			<CommitProposal
+				state={args.part.state ?? "input-available"}
+				input={args.part.input as CommitProposalProps["input"]}
+				output={args.part.output}
+				toolCallId={toolCallId}
+				onApprove={(id) => args.onToolOutput("propose_commits", id, "approved")}
+				onRevise={(id, feedback) =>
+					args.onToolOutput("propose_commits", id, `revise: ${feedback}`)
+				}
+			/>
+		);
+	}, []);
+
 	return (
 		<Dialog
 			open={open}
@@ -571,9 +359,12 @@ export default function AutoCommitModal({ open, onClose, projectId }: AutoCommit
 				if (!next) onClose();
 			}}
 		>
-			<DialogContent size="lg" className="p-0">
+			<DialogContent size="lg" className="p-0" aria-describedby={undefined}>
 				{loading ? (
-					<ModalShell title="Auto-commit">
+					<ModalShell
+						title="Auto-commit"
+						description="AI agent analyzes and commits your changes"
+					>
 						<div className="ac-loading-initial">
 							<Loader2 size={16} className="animate-spin text-(--accent)" />
 							<span>Loading AI settings...</span>
@@ -582,6 +373,7 @@ export default function AutoCommitModal({ open, onClose, projectId }: AutoCommit
 				) : initError ? (
 					<ModalShell
 						title="Auto-commit"
+						description="AI agent analyzes and commits your changes"
 						footer={
 							<button type="button" className="btn btn-secondary" onClick={onClose}>
 								Close
@@ -594,7 +386,16 @@ export default function AutoCommitModal({ open, onClose, projectId }: AutoCommit
 						</div>
 					</ModalShell>
 				) : provider ? (
-					<AutoCommitChat projectId={projectId} provider={provider} onClose={onClose} />
+					<AgentChatModal
+						title="Auto-commit"
+						description="AI agent analyzes and commits your changes"
+						provider={provider}
+						instructions={AUTO_COMMIT_SYSTEM_PROMPT}
+						initialPrompt="Analyze all changes and propose atomic commits."
+						traceKey="auto-commit"
+						createTools={toolsFactory}
+						renderToolPart={renderAutoCommitTool}
+					/>
 				) : null}
 			</DialogContent>
 		</Dialog>

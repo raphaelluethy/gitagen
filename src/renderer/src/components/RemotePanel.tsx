@@ -1,47 +1,116 @@
 import { useState, useEffect } from "react";
-import { Upload, Download, RefreshCw, Cloud, Link } from "lucide-react";
+import { Upload, Download, RefreshCw, Cloud, Loader2 } from "lucide-react";
 import type { RemoteInfo } from "../../../shared/types";
+import { useToast } from "../toast/provider";
 
 interface RemotePanelProps {
 	projectId: string;
 	onRefresh: () => void;
 }
 
+function formatFetchToast(r: {
+	branchesUpdated: number;
+	tagsUpdated: number;
+	refsDeleted: number;
+}): { title: string; desc?: string } {
+	const parts: string[] = [];
+	if (r.branchesUpdated > 0)
+		parts.push(`${r.branchesUpdated} branch${r.branchesUpdated === 1 ? "" : "es"}`);
+	if (r.tagsUpdated > 0) parts.push(`${r.tagsUpdated} tag${r.tagsUpdated === 1 ? "" : "s"}`);
+	if (r.refsDeleted > 0)
+		parts.push(`${r.refsDeleted} ref${r.refsDeleted === 1 ? "" : "s"} pruned`);
+	if (parts.length === 0) return { title: "Fetch complete", desc: "Already up to date" };
+	return { title: "Fetched", desc: parts.join(", ") };
+}
+
+function formatPullToast(r: {
+	commitsPulled: number;
+	filesChanged: number;
+	insertions: number;
+	deletions: number;
+}): { title: string; desc?: string } {
+	if (r.commitsPulled > 0) {
+		const desc =
+			r.filesChanged > 0
+				? `${r.filesChanged} file${r.filesChanged === 1 ? "" : "s"} changed (+${r.insertions}/-${r.deletions})`
+				: undefined;
+		return {
+			title: `Pulled ${r.commitsPulled} commit${r.commitsPulled === 1 ? "" : "s"}`,
+			desc,
+		};
+	}
+	if (r.filesChanged > 0) {
+		const desc = `+${r.insertions}/-${r.deletions}`;
+		return { title: `${r.filesChanged} file${r.filesChanged === 1 ? "" : "s"} updated`, desc };
+	}
+	return { title: "Pull complete", desc: "Already up to date" };
+}
+
+function formatPushToast(r: { commitsPushed: number; refsPushed: number; branch?: string }): {
+	title: string;
+	desc?: string;
+} {
+	if (r.commitsPushed > 0)
+		return {
+			title: `Pushed ${r.commitsPushed} commit${r.commitsPushed === 1 ? "" : "s"}`,
+			desc: r.branch ? `to ${r.branch}` : undefined,
+		};
+	return { title: "Push complete", desc: "Nothing to push" };
+}
+
+type LoadingOp = "fetch" | "pull" | "push" | null;
+
 export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) {
+	const { toast } = useToast();
 	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
-	const [loading, setLoading] = useState(false);
+	const [loadingOp, setLoadingOp] = useState<LoadingOp>(null);
+	const loading = loadingOp !== null;
 
 	useEffect(() => {
 		window.gitagen.repo.listRemotes(projectId).then(setRemotes);
 	}, [projectId]);
 
 	const handleFetch = async () => {
-		setLoading(true);
+		setLoadingOp("fetch");
 		try {
-			await window.gitagen.repo.fetch(projectId, { prune: true });
+			const result = await window.gitagen.repo.fetch(projectId, {
+				prune: true,
+			});
 			onRefresh();
+			const { title, desc } = formatFetchToast(result);
+			toast.success(title, desc);
+		} catch (error) {
+			toast.error("Fetch failed", error instanceof Error ? error.message : "Unknown error");
 		} finally {
-			setLoading(false);
+			setLoadingOp(null);
 		}
 	};
 
 	const handlePull = async () => {
-		setLoading(true);
+		setLoadingOp("pull");
 		try {
-			await window.gitagen.repo.pull(projectId);
+			const result = await window.gitagen.repo.pull(projectId);
 			onRefresh();
+			const { title, desc } = formatPullToast(result);
+			toast.success(title, desc);
+		} catch (error) {
+			toast.error("Pull failed", error instanceof Error ? error.message : "Unknown error");
 		} finally {
-			setLoading(false);
+			setLoadingOp(null);
 		}
 	};
 
 	const handlePush = async () => {
-		setLoading(true);
+		setLoadingOp("push");
 		try {
-			await window.gitagen.repo.push(projectId);
+			const result = await window.gitagen.repo.push(projectId);
 			onRefresh();
+			const { title, desc } = formatPushToast(result);
+			toast.success(title, desc);
+		} catch (error) {
+			toast.error("Push failed", error instanceof Error ? error.message : "Unknown error");
 		} finally {
-			setLoading(false);
+			setLoadingOp(null);
 		}
 	};
 
@@ -52,31 +121,36 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 					type="button"
 					onClick={handleFetch}
 					disabled={loading || remotes.length === 0}
-					className="btn btn-secondary flex-1 text-xs"
-					title="Fetch from remote"
+					className="btn btn-secondary flex items-center justify-center p-2"
+					title="Fetch"
 				>
-					<RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-					Fetch
+					<RefreshCw size={14} className={loadingOp === "fetch" ? "animate-spin" : ""} />
 				</button>
 				<button
 					type="button"
 					onClick={handlePull}
 					disabled={loading || remotes.length === 0}
-					className="btn btn-secondary flex-1 text-xs"
-					title="Pull from remote"
+					className="btn btn-secondary flex items-center justify-center p-2"
+					title="Pull"
 				>
-					<Download size={12} />
-					Pull
+					{loadingOp === "pull" ? (
+						<Loader2 size={14} className="animate-spin" />
+					) : (
+						<Download size={14} />
+					)}
 				</button>
 				<button
 					type="button"
 					onClick={handlePush}
 					disabled={loading || remotes.length === 0}
-					className="btn btn-primary flex-1 text-xs"
-					title="Push to remote"
+					className="btn btn-primary flex items-center justify-center p-2"
+					title="Push"
 				>
-					<Upload size={12} />
-					Push
+					{loadingOp === "push" ? (
+						<Loader2 size={14} className="animate-spin" />
+					) : (
+						<Upload size={14} />
+					)}
 				</button>
 			</div>
 			{remotes.length > 0 ? (
@@ -86,15 +160,17 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 							key={r.name}
 							className="rounded-lg border border-(--border-secondary) bg-(--bg-secondary) px-3 py-3 transition-colors hover:bg-(--bg-hover)"
 						>
-							<div className="flex items-center gap-2">
-								<Link size={12} className="text-(--text-muted)" />
-								<p className="text-xs font-semibold text-(--text-primary)">
-									{r.name}
-								</p>
+							<div className="flex gap-2">
+								<Cloud size={14} className="mt-0.5 shrink-0 text-(--text-muted)" />
+								<div className="min-w-0 flex-1">
+									<p className="truncate font-mono text-xs font-semibold text-(--text-primary)">
+										{r.name}
+									</p>
+									<p className="mt-0.5 truncate font-mono text-[10px] text-(--text-muted)">
+										{r.url}
+									</p>
+								</div>
 							</div>
-							<p className="mt-1 truncate font-mono text-[10px] text-(--text-muted)">
-								{r.url}
-							</p>
 						</div>
 					))}
 				</div>

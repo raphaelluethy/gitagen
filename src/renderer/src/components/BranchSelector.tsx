@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { GitBranch, ChevronDown, Check } from "lucide-react";
 import type { BranchInfo } from "../../../shared/types";
+import { useToast } from "../toast/provider";
 
 interface BranchSelectorProps {
 	projectId: string;
@@ -16,6 +17,7 @@ export default function BranchSelector({
 	const [branches, setBranches] = useState<BranchInfo[]>([]);
 	const [open, setOpen] = useState(false);
 	const [loading, setLoading] = useState(false);
+	const { toast } = useToast();
 
 	useEffect(() => {
 		window.gitagen.repo.listBranches(projectId).then(setBranches);
@@ -31,6 +33,10 @@ export default function BranchSelector({
 			await window.gitagen.repo.switchBranch(projectId, name);
 			onBranchChange();
 			setOpen(false);
+			toast.success("Switched to branch", name);
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Branch switch failed", msg);
 		} finally {
 			setLoading(false);
 		}

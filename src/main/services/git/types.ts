@@ -2,6 +2,9 @@ import type {
 	BranchInfo,
 	CommitDetail,
 	CommitInfo,
+	FetchResultSummary,
+	PullResultSummary,
+	PushResultSummary,
 	RepoStatus,
 	RemoteInfo,
 	StashEntry,
@@ -54,6 +57,12 @@ export interface GitProvider {
 	): Promise<CommitInfo[]>;
 	getCommitDetail(cwd: string, oid: string): Promise<CommitDetail | null>;
 
+	/** Returns OIDs of unpushed commits, or null if no upstream tracking branch exists. */
+	getUnpushedOids(cwd: string): Promise<string[] | null>;
+
+	/** Soft-reset the last commit, keeping changes staged. */
+	undoLastCommit(cwd: string): Promise<void>;
+
 	listBranches(cwd: string): Promise<BranchInfo[]>;
 	createBranch(cwd: string, name: string, startPoint?: string): Promise<void>;
 	switchBranch(cwd: string, name: string): Promise<void>;
@@ -65,12 +74,26 @@ export interface GitProvider {
 		opts?: { noFf?: boolean; squash?: boolean; message?: string }
 	): Promise<void>;
 
-	fetch(cwd: string, opts?: { remote?: string; prune?: boolean }): Promise<void>;
-	pull(cwd: string, opts?: { remote?: string; branch?: string; rebase?: boolean }): Promise<void>;
+	fetch(cwd: string, opts?: { remote?: string; prune?: boolean }): Promise<FetchResultSummary>;
+	pull(
+		cwd: string,
+		opts?: {
+			remote?: string;
+			branch?: string;
+			rebase?: boolean;
+			behind?: number;
+		}
+	): Promise<PullResultSummary>;
 	push(
 		cwd: string,
-		opts?: { remote?: string; branch?: string; force?: boolean; setUpstream?: boolean }
-	): Promise<void>;
+		opts?: {
+			remote?: string;
+			branch?: string;
+			force?: boolean;
+			setUpstream?: boolean;
+			ahead?: number;
+		}
+	): Promise<PushResultSummary>;
 	listRemotes(cwd: string): Promise<RemoteInfo[]>;
 	addRemote(cwd: string, name: string, url: string): Promise<void>;
 	removeRemote(cwd: string, name: string): Promise<void>;

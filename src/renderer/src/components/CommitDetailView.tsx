@@ -7,6 +7,7 @@ import { extractLinksFromMessage, type ParsedLink } from "../utils/commit-links"
 import { splitPatchByFile } from "../utils/split-patch";
 import { changeTypeColorClass } from "../utils/status-badge";
 import GravatarAvatar from "./GravatarAvatar";
+import { useToast } from "../toast/provider";
 
 interface CommitDetailViewProps {
 	projectId: string;
@@ -53,6 +54,7 @@ export default function CommitDetailView({
 	onClose,
 }: CommitDetailViewProps) {
 	const { resolved } = useTheme();
+	const { toast } = useToast();
 	const [detail, setDetail] = useState<CommitDetail | null>(null);
 	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -131,7 +133,14 @@ export default function CommitDetailView({
 								<h2 className="text-[15px] font-semibold leading-snug text-(--text-primary)">
 									{detail.message.split("\n")[0]}
 								</h2>
-								<code className="mt-1 inline-block font-mono text-[11px] text-(--text-muted)">
+								<code
+									className="mt-1 inline-block cursor-pointer font-mono text-[11px] text-(--text-muted) transition-colors hover:text-(--text-primary)"
+									title="Copy commit hash"
+								onClick={() => {
+									navigator.clipboard.writeText(detail.oid);
+									toast.success("Copied", detail.oid.slice(0, 7));
+								}}
+								>
 									{detail.oid}
 								</code>
 							</div>

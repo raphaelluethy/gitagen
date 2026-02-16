@@ -92,6 +92,9 @@ import type {
 	BranchInfo,
 	CommitDetail,
 	CommitInfo,
+	FetchResultSummary,
+	PullResultSummary,
+	PushResultSummary,
 	RepoStatus,
 	RemoteInfo,
 	StashEntry,
@@ -450,6 +453,22 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			}
 		},
 
+		async getUnpushedOids(cwd: string): Promise<string[] | null> {
+			const git = createGit(cwd, binary);
+			try {
+				const out = (await git.raw(["log", "@{u}..HEAD", "--format=%H"])) as string;
+				return out.trim().split("\n").filter(Boolean);
+			} catch {
+				// No upstream tracking branch configured
+				return null;
+			}
+		},
+
+		async undoLastCommit(cwd: string): Promise<void> {
+			const git = createGit(cwd, binary);
+			await git.reset(["--soft", "HEAD~1"]);
+		},
+
 		async listBranches(cwd: string): Promise<BranchInfo[]> {
 			const git = createGit(cwd, binary);
 			const [summary, status] = await Promise.all([
@@ -502,39 +521,64 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			await git.merge(args);
 		},
 
-		async fetch(cwd, opts): Promise<void> {
+		async fetch(cwd, opts): Promise<FetchResultSummary> {
 			const git = createGit(cwd, binary);
 			const args: string[] = [];
 			if (opts?.remote) args.push(opts.remote);
 			if (opts?.prune) args.push("--prune");
-			await git.fetch(args);
+			const result = await git.fetch(args);
+			const updated = result.updated ?? [];
+			const deleted = result.deleted ?? [];
+			const branchRefs = updated.filter((u) => u.tracking?.includes("refs/remotes"));
+			const tagRefs = updated.filter((u) => u.tracking?.includes("refs/tags"));
+			return {
+				branchesUpdated: branchRefs.length,
+				tagsUpdated: tagRefs.length,
+				refsDeleted: deleted.length,
+				newBranchRefs: branchRefs.map((u) => u.tracking).filter(Boolean),
+			};
 		},
 
-		async pull(cwd, opts): Promise<void> {
+		async pull(cwd, opts): Promise<PullResultSummary> {
 			const git = createGit(cwd, binary);
 			const args: string[] = opts?.rebase ? ["--rebase"] : [];
 			if (opts?.remote) args.push(opts.remote);
 			if (opts?.branch) args.push(opts.branch);
-			await git.pull(args);
+			const result = await git.pull(args);
+			const summary = result.summary ?? { changes: 0, insertions: 0, deletions: 0 };
+			const behindHint = (opts as { behind?: number })?.behind ?? 0;
+			return {
+				commitsPulled: behindHint,
+				filesChanged: summary.changes ?? 0,
+				insertions: summary.insertions ?? 0,
+				deletions: summary.deletions ?? 0,
+			};
 		},
 
-		async push(cwd, opts): Promise<void> {
+		async push(cwd, opts): Promise<PushResultSummary> {
 			const git = createGit(cwd, binary);
 			const args: string[] = [];
 			if (opts?.force) args.push("--force");
 			if (opts?.setUpstream) args.push("-u");
 			if (opts?.remote) args.push(opts.remote);
 			if (opts?.branch) args.push(opts.branch);
-			await git.push(args);
+			const result = await git.push(args);
+			const aheadHint = (opts as { ahead?: number })?.ahead ?? 0;
+			const refsPushed = result.pushed?.length ?? 0;
+			return {
+				commitsPushed: aheadHint > 0 ? aheadHint : refsPushed,
+				refsPushed,
+				branch: result.branch?.local,
+			};
 		},
 
 		async listRemotes(cwd: string): Promise<RemoteInfo[]> {
 			const git = createGit(cwd, binary);
 			const remotes = await git.getRemotes(true);
-			return Object.entries(remotes).map(([name, r]) => ({
-				name,
-				url: r.refs.fetch ?? "",
-				pushUrl: r.refs.push,
+			return remotes.map((r) => ({
+				name: r.name,
+				url: r.refs?.fetch ?? "",
+				pushUrl: r.refs?.push,
 			}));
 		},
 

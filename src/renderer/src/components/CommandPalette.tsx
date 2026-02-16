@@ -597,6 +597,7 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 																? "true"
 																: "false"
 														}
+														aria-selected={isActive}
 														onMouseMove={() => {
 															setStep((prev) => {
 																if (prev.kind !== "root")
@@ -657,6 +658,7 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 											className="command-palette-item"
 											data-active={index === step.activeIndex}
 											data-disabled={entry.item.disabled ? "true" : "false"}
+											aria-selected={index === step.activeIndex}
 											onMouseMove={() => {
 												setStep((prev) => {
 													if (prev.kind !== "drilldown") return prev;

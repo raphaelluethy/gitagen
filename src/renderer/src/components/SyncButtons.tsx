@@ -133,6 +133,7 @@ export default function SyncButtons({
 				disabled={disabled}
 				className="btn-icon relative rounded-md p-1.5"
 				title="Fetch from remote"
+				aria-label="Fetch from remote"
 			>
 				<RefreshCw size={15} className={loadingOp === "fetch" ? "animate-spin" : ""} />
 			</button>
@@ -142,6 +143,7 @@ export default function SyncButtons({
 				disabled={disabled}
 				className="btn-icon relative rounded-md p-1.5"
 				title={behind > 0 ? `Pull (${behind} behind)` : "Pull from remote"}
+				aria-label={behind > 0 ? `Pull ${behind} commits from remote` : "Pull from remote"}
 			>
 				{loadingOp === "pull" ? (
 					<Loader2 size={15} className="animate-spin" />
@@ -163,6 +165,7 @@ export default function SyncButtons({
 				disabled={disabled}
 				className="btn-icon relative rounded-md p-1.5"
 				title={ahead > 0 ? `Push (${ahead} ahead)` : "Push to remote"}
+				aria-label={ahead > 0 ? `Push ${ahead} commits to remote` : "Push to remote"}
 			>
 				{loadingOp === "push" ? (
 					<Loader2 size={15} className="animate-spin" />

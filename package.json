@@ -25,6 +25,7 @@
 		"@ai-sdk/openai": "^3.0.29",
 		"@ai-sdk/openai-compatible": "^2.0.30",
 		"@pierre/diffs": "^1.0.11",
+		"@tanstack/react-virtual": "^3.13.18",
 		"ai": "^6.0.86",
 		"better-sqlite3": "^12.6.2",
 		"dedent": "^1.7.1",

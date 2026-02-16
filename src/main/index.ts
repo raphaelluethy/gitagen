@@ -99,7 +99,8 @@ async function preloadRecentProjectLogs(): Promise<void> {
 	);
 }
 
-const singleInstanceLock = app.requestSingleInstanceLock();
+const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+const singleInstanceLock = isDev ? true : app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
 	app.quit();
 }
@@ -260,9 +261,10 @@ app.whenReady().then(async () => {
 
 	buildAppMenu();
 
-	if (app.isPackaged) {
-		updateElectronApp();
-	}
+	// TODO: re-enable once Apple Developer signing is set up
+	// if (app.isPackaged) {
+	// 	updateElectronApp();
+	// }
 
 	const win = createWindow();
 	const openPath = parseOpenRepoArg(process.argv);

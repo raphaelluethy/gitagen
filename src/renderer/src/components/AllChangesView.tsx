@@ -1,5 +1,13 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { ChevronRight, CircleMinus, CirclePlus, ExternalLink, FileCode } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import {
+	ChevronRight,
+	UnfoldVertical,
+	FoldVertical,
+	CircleMinus,
+	CirclePlus,
+	ExternalLink,
+	FileCode,
+} from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
@@ -26,6 +34,8 @@ function FileChangeCard({
 	isSelected,
 	onToggleExpand,
 	cardRef,
+	cachedPatch,
+	onPatchLoaded,
 }: {
 	projectId: string;
 	file: GitFileStatus;
@@ -35,9 +45,11 @@ function FileChangeCard({
 	isSelected: boolean;
 	onToggleExpand: () => void;
 	cardRef?: React.Ref<HTMLDivElement>;
+	cachedPatch?: string | null;
+	onPatchLoaded?: (path: string, patch: string) => void;
 }) {
 	const { resolved } = useTheme();
-	const [patch, setPatch] = useState<string | null>(null);
+	const [patch, setPatch] = useState<string | null>(cachedPatch ?? null);
 	const [loading, setLoading] = useState(false);
 	const isStaged = file.status === "staged";
 	const letter = file.changeType ?? "M";
@@ -46,24 +58,35 @@ function FileChangeCard({
 
 	useEffect(() => {
 		if (!projectId || !file) return;
-		setPatch(null);
-		if (!isExpanded) return;
+		if (!isExpanded) {
+			setPatch(null);
+			return;
+		}
+		if (cachedPatch != null) {
+			setPatch(cachedPatch);
+			return;
+		}
 		setLoading(true);
 		window.gitagen.repo
 			.getPatch(projectId, file.path, scope)
 			.then((diff) => {
-				setPatch(diff ?? "");
+				const p = diff ?? "";
+				setPatch(p);
 				setLoading(false);
+				onPatchLoaded?.(file.path, p);
 			})
 			.catch(() => {
 				setPatch(null);
 				setLoading(false);
 			});
-	}, [projectId, file.path, scope, isExpanded]);
+	}, [projectId, file.path, scope, isExpanded, cachedPatch]);
 
 	const handleStageToggle = async () => {
 		if (!projectId) return;
 		try {
+			if (patch != null) {
+				onPatchLoaded?.(file.path, patch);
+			}
 			if (isStaged) {
 				await window.gitagen.repo.unstageFiles(projectId, [file.path]);
 			} else {
@@ -197,6 +220,18 @@ export default function AllChangesView({
 	});
 
 	const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+	const patchCacheRef = useRef<Map<string, string>>(new Map());
+
+	const handlePatchLoaded = useCallback((path: string, patch: string) => {
+		patchCacheRef.current.set(path, patch);
+	}, []);
+
+	useEffect(() => {
+		const currentPaths = new Set(allFiles.map((f) => f.path));
+		for (const key of patchCacheRef.current.keys()) {
+			if (!currentPaths.has(key)) patchCacheRef.current.delete(key);
+		}
+	}, [allFiles]);
 
 	useEffect(() => {
 		setExpandedKeys((prev) => {
@@ -215,7 +250,7 @@ export default function AllChangesView({
 		const el = cardRefs.current.get(key);
 		if (el) {
 			requestAnimationFrame(() => {
-				el.scrollIntoView({ behavior: "smooth", block: "center" });
+				el.scrollIntoView({ behavior: "smooth", block: "start" });
 			});
 		}
 	}, [selectedFile]);
@@ -246,27 +281,92 @@ export default function AllChangesView({
 
 	const selectedKey = selectedFile ? fileKey(selectedFile) : null;
 
+	type SectionKey = "staged" | "unstaged" | "untracked";
+	const sections: { key: SectionKey; title: string; files: GitFileStatus[] }[] = [
+		{ key: "staged", title: "Staged", files: gitStatus.staged },
+		{ key: "unstaged", title: "Unstaged", files: gitStatus.unstaged },
+		{ key: "untracked", title: "Untracked", files: gitStatus.untracked },
+	];
+
+	const expandAllForSection = (sectionFiles: GitFileStatus[]) => {
+		setExpandedKeys((prev) => {
+			const next = new Set(prev);
+			for (const f of sectionFiles) next.add(fileKey(f));
+			return next;
+		});
+	};
+
+	const foldAllForSection = (sectionFiles: GitFileStatus[]) => {
+		setExpandedKeys((prev) => {
+			const next = new Set(prev);
+			for (const f of sectionFiles) next.delete(fileKey(f));
+			return next;
+		});
+	};
+
 	return (
-		<div className="min-h-0 flex-1 overflow-auto">
-			{allFiles.map((file) => {
-				const key = fileKey(file);
-				return (
-					<FileChangeCard
-						key={key}
-						projectId={projectId}
-						file={file}
-						diffStyle={diffStyle}
-						onRefresh={onRefresh}
-						isExpanded={expandedKeys.has(key)}
-						isSelected={key === selectedKey}
-						onToggleExpand={() => toggleExpand(file)}
-						cardRef={(el: HTMLDivElement | null) => {
-							if (el) cardRefs.current.set(key, el);
-							else cardRefs.current.delete(key);
-						}}
-					/>
-				);
-			})}
+		<div className="flex min-h-0 flex-1 flex-col">
+			<div className="min-h-0 flex-1 overflow-auto">
+				{sections.map(({ key, title, files }) => {
+					if (files.length === 0) return null;
+					return (
+						<div
+							key={key}
+							className="border-b border-(--border-secondary) last:border-b-0"
+						>
+							<div className="flex shrink-0 items-center gap-2 bg-(--bg-secondary) px-4 py-2">
+								<h3 className="text-sm font-semibold text-(--text-primary)">
+									{title}
+								</h3>
+								<span className="font-mono text-[10px] text-(--text-muted)">
+									{files.length}
+								</span>
+								<div className="ml-2 flex items-center gap-1">
+									<button
+										type="button"
+										onClick={() => expandAllForSection(files)}
+										className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+										title={`Expand all ${title.toLowerCase()}`}
+									>
+										<UnfoldVertical size={12} strokeWidth={2} />
+										<span>Expand</span>
+									</button>
+									<button
+										type="button"
+										onClick={() => foldAllForSection(files)}
+										className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+										title={`Fold all ${title.toLowerCase()}`}
+									>
+										<FoldVertical size={12} strokeWidth={2} />
+										<span>Fold</span>
+									</button>
+								</div>
+							</div>
+							{files.map((file) => {
+								const key_ = fileKey(file);
+								return (
+									<FileChangeCard
+										key={key_}
+										projectId={projectId}
+										file={file}
+										diffStyle={diffStyle}
+										onRefresh={onRefresh}
+										isExpanded={expandedKeys.has(key_)}
+										isSelected={key_ === selectedKey}
+										onToggleExpand={() => toggleExpand(file)}
+										cardRef={(el: HTMLDivElement | null) => {
+											if (el) cardRefs.current.set(key_, el);
+											else cardRefs.current.delete(key_);
+										}}
+										cachedPatch={patchCacheRef.current.get(file.path) ?? null}
+										onPatchLoaded={handlePatchLoaded}
+									/>
+								);
+							})}
+						</div>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Square, CheckSquare, ExternalLink } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitFileStatus, DiffStyle } from "../../../shared/types";
@@ -23,12 +23,15 @@ export default function DiffViewer({
 	const { resolved } = useTheme();
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const requestIdRef = useRef(0);
 
 	useEffect(() => {
 		if (!selectedFile || !projectId) {
 			setPatch(null);
 			return;
 		}
+		const requestId = requestIdRef.current + 1;
+		requestIdRef.current = requestId;
 		setLoading(true);
 		const scope =
 			selectedFile.status === "staged"
@@ -39,10 +42,12 @@ export default function DiffViewer({
 		window.gitagen.repo
 			.getPatch(projectId, selectedFile.path, scope)
 			.then((diff) => {
+				if (requestIdRef.current !== requestId) return;
 				setPatch(diff ?? "");
 				setLoading(false);
 			})
 			.catch(() => {
+				if (requestIdRef.current !== requestId) return;
 				setPatch(null);
 				setLoading(false);
 			});
@@ -50,15 +55,15 @@ export default function DiffViewer({
 
 	if (!selectedFile) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-(--text-muted)">
-				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--bg-secondary)">
-					<ExternalLink size={24} className="text-(--border-primary)" />
+			<div className="flex flex-1 flex-col items-center justify-center gap-5 px-6">
+				<div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-(--border-secondary) bg-(--bg-secondary)">
+					<ExternalLink size={22} strokeWidth={1.5} className="text-(--text-subtle)" />
 				</div>
 				<div className="text-center">
-					<p className="text-sm font-medium text-(--text-secondary)">
+					<p className="text-[13px] font-medium text-(--text-secondary)">
 						Select a file to view diff
 					</p>
-					<p className="mt-1 text-xs text-(--text-subtle)">
+					<p className="mt-1.5 text-xs leading-relaxed text-(--text-subtle)">
 						Choose a file from the sidebar to see changes
 					</p>
 				</div>

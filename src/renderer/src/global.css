@@ -138,12 +138,16 @@
    ============================================================================ */
 
 .panel-resize-handle {
-	flex: 0 0 4px;
-	background-color: var(--border-secondary);
+	flex: 0 0 3px;
+	background-color: transparent;
 	transition: background-color var(--transition-fast);
 }
 
 .panel-resize-handle:hover {
+	background-color: var(--border-primary);
+}
+
+.panel-resize-handle[data-resize-handle-active] {
 	background-color: var(--accent-primary);
 }
 
@@ -361,7 +365,7 @@ select {
 	.tab-bar {
 		display: flex;
 		align-items: center;
-		gap: 2px;
+		gap: 1px;
 		padding: 2px;
 		border-radius: var(--radius-md);
 		background-color: var(--bg-tertiary);
@@ -371,13 +375,14 @@ select {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: var(--space-1);
-		padding: var(--space-1) var(--space-2);
+		gap: 3px;
+		padding: 3px 7px;
 		font-size: 12px;
 		font-weight: 500;
 		border-radius: var(--radius-sm);
 		color: var(--text-muted);
 		transition: var(--transition-fast);
+		white-space: nowrap;
 	}
 
 	.tab-item:hover {
@@ -387,10 +392,12 @@ select {
 	.tab-item[data-active="true"] {
 		background-color: var(--bg-primary);
 		color: var(--text-primary);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 	}
 
 	.dark .tab-item[data-active="true"] {
 		background-color: var(--bg-tertiary);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 	}
 
 	/* Dropdown */
@@ -613,6 +620,21 @@ select {
 
 	.animate-scale-in {
 		animation: scaleIn 120ms cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	@keyframes startpageCardIn {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.animate-startpage-card {
+		animation: startpageCardIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 	}
 
 	.commit-message-text {

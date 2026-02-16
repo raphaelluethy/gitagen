@@ -22,6 +22,7 @@ export default function WorktreePanel({
 	const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [adding, setAdding] = useState(false);
+	const [pruning, setPruning] = useState(false);
 
 	useEffect(() => {
 		setLoading(true);
@@ -32,7 +33,9 @@ export default function WorktreePanel({
 	}, [projectId, onRefresh]);
 
 	const handleAdd = async () => {
-		const branch = currentBranch || "main";
+		const defaultBranch = currentBranch || "main";
+		const branch = prompt("Create worktree from branch:", defaultBranch)?.trim();
+		if (!branch) return;
 		setAdding(true);
 		try {
 			await window.gitagen.repo.addWorktree(projectId, branch, undefined);
@@ -46,6 +49,19 @@ export default function WorktreePanel({
 			}
 		} finally {
 			setAdding(false);
+		}
+	};
+
+	const handlePrune = async () => {
+		if (!confirm("Clean up stale worktrees?")) return;
+		setPruning(true);
+		try {
+			await window.gitagen.repo.pruneWorktrees(projectId);
+			onRefresh();
+		} catch {
+			// ignore
+		} finally {
+			setPruning(false);
 		}
 	};
 
@@ -64,21 +80,32 @@ export default function WorktreePanel({
 	}
 
 	return (
-		<div className="p-2">
-			<div className="mb-2 flex items-center justify-between px-1">
+		<div className="px-2 py-2">
+			<div className="mb-1.5 flex items-center justify-between px-1">
 				<span className="section-title">Worktrees</span>
-				<button
-					type="button"
-					onClick={handleAdd}
-					disabled={adding}
-					className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-(--text-muted) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) disabled:opacity-50"
-					title="Add worktree"
-				>
-					<GitBranchPlus size={12} />
-					Add
-				</button>
+				<div className="flex items-center gap-1">
+					<button
+						type="button"
+						onClick={handlePrune}
+						disabled={pruning}
+						className="rounded-md px-1.5 py-0.5 text-[10px] font-medium text-(--text-muted) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) disabled:opacity-50"
+						title="Clean up stale worktrees"
+					>
+						Clean
+					</button>
+					<button
+						type="button"
+						onClick={handleAdd}
+						disabled={adding}
+						className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-(--text-muted) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) disabled:opacity-50"
+						title="Add worktree"
+					>
+						<GitBranchPlus size={11} />
+						Add
+					</button>
+				</div>
 			</div>
-			<div className="space-y-1">
+			<div className="space-y-0.5">
 				{worktrees.map((w) => {
 					const name = w.name ?? w.path.split("/").pop();
 					const isActive =
@@ -87,26 +114,24 @@ export default function WorktreePanel({
 					return (
 						<div
 							key={w.path}
-							className={`flex items-center gap-2 rounded-lg border border-(--border-primary) px-2.5 py-2 ${
-								isActive
-									? "border-l-(--text-muted) border-l-2 bg-(--bg-active)"
-									: "hover:bg-(--bg-hover)"
+							className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 ${
+								isActive ? "bg-(--bg-active)" : "hover:bg-(--bg-hover)"
 							}`}
 						>
 							<span
-								className={`shrink-0 ${isActive ? "text-(--text-primary)" : "invisible"}`}
+								className={`shrink-0 ${isActive ? "text-(--text-muted)" : "invisible"}`}
 							>
-								<Check size={12} />
+								<Check size={11} />
 							</span>
 							<div className="min-w-0 flex-1">
-								<p className="truncate text-xs font-medium text-(--text-primary)">
+								<p className="truncate text-[11px] font-medium text-(--text-primary)">
 									{name}
 								</p>
-								<p className="truncate text-[10px] text-(--text-muted)">
+								<p className="truncate text-[10px] text-(--text-subtle)">
 									{w.branch}
 								</p>
 							</div>
-							<div className="flex shrink-0 gap-1">
+							<div className="flex shrink-0 gap-0.5">
 								{!isActive && (
 									<button
 										type="button"
@@ -116,7 +141,7 @@ export default function WorktreePanel({
 											});
 											onRefresh();
 										}}
-										className="rounded-md bg-(--bg-tertiary) px-2 py-0.5 text-[10px] font-medium text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary)"
+										className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) outline-none hover:bg-(--bg-tertiary) hover:text-(--text-primary)"
 									>
 										Switch
 									</button>
@@ -125,10 +150,10 @@ export default function WorktreePanel({
 									<button
 										type="button"
 										onClick={() => handleRemove(w.path)}
-										className="rounded-md p-1 text-(--text-muted) outline-none hover:bg-(--danger-bg) hover:text-(--danger)"
+										className="rounded p-0.5 text-(--text-muted) outline-none hover:bg-(--danger-bg) hover:text-(--danger)"
 										title="Remove worktree"
 									>
-										<Trash2 size={12} />
+										<Trash2 size={11} />
 									</button>
 								)}
 							</div>

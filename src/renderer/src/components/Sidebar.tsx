@@ -8,6 +8,9 @@ import {
 	Folder,
 	FolderOpen,
 	GitBranch,
+	ListMinus,
+	ListPlus,
+	Minus,
 	Plus,
 } from "lucide-react";
 import type { GitStatus, GitFileStatus } from "../../../shared/types";
@@ -15,9 +18,11 @@ import type { Project } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 
 interface SidebarProps {
+	projectId: string;
 	status: GitStatus;
 	selectedFile: GitFileStatus | null;
 	onSelectFile: (file: GitFileStatus) => void;
+	onRefresh: () => void;
 	onBack?: () => void;
 	projects?: Project[];
 	activeProject?: Project | null;
@@ -96,6 +101,12 @@ function buildFileTree(files: GitFileStatus[]): FileTreeNode[] {
 	return toFileTreeNode(root);
 }
 
+function collectFilePaths(node: FileTreeNode): string[] {
+	if (node.type === "file" && node.file) return [node.file.path];
+	if (!node.children) return [];
+	return node.children.flatMap(collectFilePaths);
+}
+
 function statusBarColor(changeType: string): string {
 	switch (changeType) {
 		case "A":
@@ -110,6 +121,9 @@ function statusBarColor(changeType: string): string {
 function TreeItem({
 	node,
 	depth,
+	section,
+	projectId,
+	onRefresh,
 	selectedFile,
 	onSelect,
 	expandedFolders,
@@ -117,6 +131,9 @@ function TreeItem({
 }: {
 	node: FileTreeNode;
 	depth: number;
+	section: "staged" | "unstaged" | "untracked";
+	projectId: string;
+	onRefresh: () => void;
 	selectedFile: GitFileStatus | null;
 	onSelect: (file: GitFileStatus) => void;
 	expandedFolders: Set<string>;
@@ -129,12 +146,24 @@ function TreeItem({
 			selectedFile?.path === node.file.path && selectedFile?.status === node.file.status;
 		const letter = node.file.changeType ?? "M";
 		const barColor = statusBarColor(letter);
+		const canStage = section === "unstaged" || section === "untracked";
+		const handleStage = async (e: React.MouseEvent) => {
+			e.stopPropagation();
+			try {
+				if (canStage) {
+					await window.gitagen.repo.stageFiles(projectId, [node.file!.path]);
+				} else {
+					await window.gitagen.repo.unstageFiles(projectId, [node.file!.path]);
+				}
+				onRefresh();
+			} catch {
+				// ignore
+			}
+		};
 
 		return (
-			<button
-				type="button"
-				onClick={() => onSelect(node.file!)}
-				className={`group flex w-full items-center gap-2 py-1.5 text-left text-[13px] outline-none transition-all ${
+			<div
+				className={`group flex w-full items-center py-1.5 text-left text-[13px] outline-none transition-all ${
 					isSelected
 						? "bg-(--bg-active) text-(--text-primary)"
 						: "text-(--text-primary) hover:bg-(--bg-hover)"
@@ -143,23 +172,43 @@ function TreeItem({
 					paddingLeft,
 					borderLeft: `2px solid ${isSelected ? "var(--text-muted)" : barColor}`,
 				}}
-				title={node.path}
 			>
-				<File
-					size={14}
-					className={`shrink-0 ${isSelected ? "text-(--text-primary)" : "text-(--text-muted)"}`}
-					strokeWidth={2}
-				/>
-				<span
-					className={`badge ${changeTypeColorClass(letter)}`}
-					title={changeTypeLabel(letter)}
+				<button
+					type="button"
+					onClick={() => onSelect(node.file!)}
+					className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
+					title={node.path}
 				>
-					{letter}
-				</span>
-				<span className={`block flex-1 truncate ${isSelected ? "font-medium" : ""}`}>
-					{node.name}
-				</span>
-			</button>
+					<File
+						size={14}
+						className={`shrink-0 ${isSelected ? "text-(--text-primary)" : "text-(--text-muted)"}`}
+						strokeWidth={2}
+					/>
+					<span
+						className={`badge ${changeTypeColorClass(letter)}`}
+						title={changeTypeLabel(letter)}
+					>
+						{letter}
+					</span>
+					<span className={`block flex-1 truncate ${isSelected ? "font-medium" : ""}`}>
+						{node.name}
+					</span>
+				</button>
+				<button
+					type="button"
+					onClick={handleStage}
+					className={`ml-auto shrink-0 rounded p-0.5 opacity-0 transition-all duration-[120ms] group-hover:opacity-100 hover:bg-(--bg-tertiary) text-(--text-muted) ${
+						canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
+					}`}
+					title={canStage ? "Stage file" : "Unstage file"}
+				>
+					{canStage ? (
+						<Plus size={14} strokeWidth={2} />
+					) : (
+						<Minus size={14} strokeWidth={2} />
+					)}
+				</button>
+			</div>
 		);
 	}
 
@@ -302,9 +351,11 @@ function FileTreeSection({
 }
 
 export default function Sidebar({
+	projectId,
 	status,
 	selectedFile,
 	onSelectFile,
+	onRefresh,
 	onBack,
 	projects = [],
 	activeProject,
@@ -331,7 +382,7 @@ export default function Sidebar({
 	const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
 	return (
-		<aside className="flex h-full flex-col bg-(--bg-sidebar)">
+		<aside className="flex h-full min-w-0 flex-1 flex-col bg-(--bg-sidebar)">
 			{projects.length > 0 && activeProject && onProjectChange && (
 				<div className="relative shrink-0 border-b border-(--border-secondary) px-3 py-2">
 					<button
@@ -392,66 +443,73 @@ export default function Sidebar({
 					)}
 				</div>
 			)}
-			<div className="flex items-center gap-3 border-b border-(--border-secondary) px-4 py-3">
+			<div className="flex items-center gap-2 border-b border-(--border-secondary) px-3 py-2.5">
 				{onBack && (
 					<button
 						type="button"
 						onClick={onBack}
-						className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+						className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 						title="Back to projects"
 					>
-						<ChevronLeft size={18} />
+						<ChevronLeft size={16} />
 					</button>
 				)}
 				<div className="min-w-0 flex-1">
-					<div className="flex items-center gap-2">
-						<GitBranch size={14} className="text-(--text-primary)" />
-						<h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-(--text-primary)">
-							Changes
-						</h2>
+					<div className="flex items-center gap-1.5">
+						<GitBranch size={12} className="shrink-0 text-(--text-muted)" />
+						<h2 className="section-title truncate">Changes</h2>
+						{totalChanges > 0 && (
+							<span className="ml-auto shrink-0 rounded-full bg-(--bg-tertiary) px-1.5 py-0.5 font-mono text-[10px] font-medium text-(--text-muted)">
+								{totalChanges}
+							</span>
+						)}
 					</div>
 					<p
-						className="font-mono truncate text-[11px] text-(--text-muted)"
+						className="mt-0.5 truncate font-mono text-[10px] text-(--text-subtle)"
 						title={status.repoPath}
 					>
 						{status.repoPath}
 					</p>
 				</div>
-				{totalChanges > 0 && (
-					<span className="font-mono text-[10px] text-(--text-muted)">
-						{totalChanges}
-					</span>
-				)}
 			</div>
-			<div className="flex-1 overflow-y-auto py-3">
+			<div className="min-w-0 flex-1 overflow-y-auto py-3">
 				<FileTreeSection
+					projectId={projectId}
+					section="staged"
 					title="Staged"
 					count={status.staged.length}
 					files={status.staged}
 					selectedFile={selectedFile}
 					onSelect={onSelectFile}
+					onRefresh={onRefresh}
 					expandedFolders={expandedFolders}
 					onToggleFolder={toggleFolder}
 					onExpandAll={expandAllFolders}
 					onViewAll={onViewAll}
 				/>
 				<FileTreeSection
+					projectId={projectId}
+					section="unstaged"
 					title="Unstaged"
 					count={status.unstaged.length}
 					files={status.unstaged}
 					selectedFile={selectedFile}
 					onSelect={onSelectFile}
+					onRefresh={onRefresh}
 					expandedFolders={expandedFolders}
 					onToggleFolder={toggleFolder}
 					onExpandAll={expandAllFolders}
 					onViewAll={onViewAll}
 				/>
 				<FileTreeSection
+					projectId={projectId}
+					section="untracked"
 					title="Untracked"
 					count={status.untracked.length}
 					files={status.untracked}
 					selectedFile={selectedFile}
 					onSelect={onSelectFile}
+					onRefresh={onRefresh}
 					expandedFolders={expandedFolders}
 					onToggleFolder={toggleFolder}
 					onExpandAll={expandAllFolders}
@@ -460,14 +518,18 @@ export default function Sidebar({
 				{status.staged.length === 0 &&
 					status.unstaged.length === 0 &&
 					status.untracked.length === 0 && (
-						<div className="px-4 py-8 text-center">
-							<div className="mb-3 flex justify-center">
-								<GitBranch size={32} className="text-(--border-primary)" />
+						<div className="flex flex-1 flex-col items-center justify-center gap-3 px-3 py-6">
+							<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-(--bg-tertiary)">
+								<GitBranch size={18} className="text-(--text-muted)" />
 							</div>
-							<p className="text-sm font-medium text-(--text-muted)">No changes</p>
-							<p className="mt-1 text-xs text-(--text-subtle)">
-								Working directory is clean
-							</p>
+							<div className="w-full text-center">
+								<p className="text-xs font-medium text-(--text-muted)">
+									No changes
+								</p>
+								<p className="mt-0.5 text-[11px] text-(--text-subtle)">
+									Clean working directory
+								</p>
+							</div>
 						</div>
 					)}
 			</div>

@@ -3,7 +3,13 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-	main: {},
+	main: {
+		build: {
+			rollupOptions: {
+				external: ["better-sqlite3"],
+			},
+		},
+	},
 	preload: {},
 	renderer: {
 		root: "src/renderer",

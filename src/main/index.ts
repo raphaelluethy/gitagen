@@ -3,7 +3,7 @@ import { join } from "path";
 import { closeDb, getDb } from "./services/cache/sqlite.js";
 import { runRetention } from "./services/cache/retention.js";
 import { getAppSettings, setAppSettings } from "./services/settings/store.js";
-import { validateGitBinary } from "./services/git/index.js";
+import { validateGitBinary, ensureSshAuthSock } from "./services/git/index.js";
 import { registerProjectsHandlers } from "./ipc/projects.js";
 import { registerSettingsHandlers } from "./ipc/settings.js";
 import { registerRepoHandlers } from "./ipc/repo.js";
@@ -35,7 +35,7 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
-	// Initialize DB and run retention
+	ensureSshAuthSock();
 	getDb();
 
 	const appSettings = getAppSettings();

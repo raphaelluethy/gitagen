@@ -130,6 +130,12 @@ function invalidateAndEmit(projectId: string): void {
 	emitRepoUpdated(projectId);
 }
 
+function shouldForceRemoveWorktree(error: unknown): boolean {
+	if (!error) return false;
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("contains modified or untracked files");
+}
+
 async function emitConflictsIfAny(projectId: string, git: GitProvider, cwd: string): Promise<void> {
 	try {
 		const conflictFiles = await git.getConflictFiles(cwd);
@@ -671,7 +677,16 @@ export function registerRepoHandlers(): void {
 			const project = getProject(projectId);
 			if (!project) return;
 			try {
-				await removeWorktreeManager(project.path, worktreePath, getGitProvider(), force);
+				const provider = getGitProvider();
+				try {
+					await removeWorktreeManager(project.path, worktreePath, provider, force);
+				} catch (error) {
+					if (!force && shouldForceRemoveWorktree(error)) {
+						await removeWorktreeManager(project.path, worktreePath, provider, true);
+					} else {
+						throw error;
+					}
+				}
 				emitRepoUpdated(projectId);
 			} catch (error) {
 				emitRepoError(projectId, error);

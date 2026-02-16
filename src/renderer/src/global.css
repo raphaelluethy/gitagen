@@ -566,7 +566,9 @@ select {
 		opacity: 0;
 		visibility: hidden;
 		pointer-events: none;
-		transition: opacity 0.1s, visibility 0.1s;
+		transition:
+			opacity 0.1s,
+			visibility 0.1s;
 		z-index: 50;
 		box-shadow: var(--shadow-md);
 	}

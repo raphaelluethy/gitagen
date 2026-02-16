@@ -58,17 +58,17 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 	};
 
 	return (
-		<div className="shrink-0 border-t border-(--border-primary) bg-(--bg-secondary) px-4 py-3">
-			<div className="mb-2 flex items-center justify-between gap-2">
+		<div className="flex min-h-0 flex-1 flex-col bg-(--bg-secondary)">
+			<div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5">
 				<div className="flex items-center gap-1.5">
-					<GitCommit size={14} className="text-(--text-muted)" />
+					<GitCommit size={13} className="text-(--text-muted)" />
 					<span className="section-title">Commit</span>
 				</div>
 				<button
 					type="button"
 					onClick={handleGenerate}
 					disabled={disabled || generating}
-					className="btn-icon rounded-md p-1.5"
+					className="btn-icon rounded-md p-1"
 					title="Generate commit message with AI"
 				>
 					<Sparkles
@@ -81,20 +81,19 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 				value={message}
 				onChange={(e) => setMessage(e.target.value)}
 				onKeyDown={handleKeyDown}
-				placeholder="Enter commit message... (⌘+Enter to commit)"
-				rows={3}
-				className="input commit-message-text mb-2.5 resize-none rounded-md"
+				placeholder="Commit message… (⌘+Enter)"
+				className="input commit-message-text min-h-0 flex-1 resize-none border-x-0 border-b-0 rounded-none"
 				disabled={disabled}
 				style={{ fontSize: "var(--commit-message-font-size)" }}
 			/>
-			<div className="flex items-center justify-between gap-3">
-				<label className="flex cursor-pointer items-center gap-2 text-xs text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+			<div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5">
+				<label className="flex cursor-pointer items-center gap-1.5 text-xs text-(--text-secondary) transition-colors hover:text-(--text-primary)">
 					<input
 						type="checkbox"
 						checked={amend}
 						onChange={(e) => setAmend(e.target.checked)}
 					/>
-					Amend previous
+					Amend
 				</label>
 				<div className="flex items-center gap-2">
 					{error && (

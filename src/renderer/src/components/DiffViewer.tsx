@@ -24,23 +24,29 @@ export default function DiffViewer({
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const requestIdRef = useRef(0);
+	const selectedFileRef = useRef(selectedFile);
+	selectedFileRef.current = selectedFile;
+
+	const filePath = selectedFile?.path ?? null;
 
 	useEffect(() => {
-		if (!selectedFile || !projectId) {
+		if (!filePath || !projectId) {
 			setPatch(null);
 			return;
 		}
+		const file = selectedFileRef.current;
+		if (!file) return;
 		const requestId = requestIdRef.current + 1;
 		requestIdRef.current = requestId;
 		setLoading(true);
 		const scope =
-			selectedFile.status === "staged"
+			file.status === "staged"
 				? "staged"
-				: selectedFile.status === "unstaged"
+				: file.status === "unstaged"
 					? "unstaged"
 					: "untracked";
 		window.gitagen.repo
-			.getPatch(projectId, selectedFile.path, scope)
+			.getPatch(projectId, file.path, scope)
 			.then((diff) => {
 				if (requestIdRef.current !== requestId) return;
 				setPatch(diff ?? "");
@@ -51,7 +57,7 @@ export default function DiffViewer({
 				setPatch(null);
 				setLoading(false);
 			});
-	}, [projectId, selectedFile]);
+	}, [projectId, filePath]);
 
 	if (!selectedFile) {
 		return (

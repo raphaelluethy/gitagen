@@ -28,6 +28,7 @@ const KEYS = {
 	fontFamily: "fontFamily",
 	gpuAcceleration: "gpuAcceleration",
 	devMode: "devMode",
+	autoExpandSingleFolder: "sidebar.autoExpandSingleFolder",
 } as const;
 
 const DEFAULTS: AppSettings = {
@@ -48,6 +49,7 @@ const DEFAULTS: AppSettings = {
 	fontFamily: "system",
 	gpuAcceleration: true,
 	devMode: false,
+	autoExpandSingleFolder: true,
 };
 
 export function getAppSettings(): AppSettings {
@@ -111,6 +113,10 @@ export function getAppSettings(): AppSettings {
 	const devModeRaw = getAppSetting(KEYS.devMode);
 	const devMode = devModeRaw === "true" ? true : DEFAULTS.devMode;
 
+	const autoExpandSingleFolderRaw = getAppSetting(KEYS.autoExpandSingleFolder);
+	const autoExpandSingleFolder =
+		autoExpandSingleFolderRaw === "false" ? false : DEFAULTS.autoExpandSingleFolder;
+
 	return {
 		gitBinaryPath,
 		theme,
@@ -129,6 +135,7 @@ export function getAppSettings(): AppSettings {
 		fontFamily,
 		gpuAcceleration,
 		devMode,
+		autoExpandSingleFolder,
 	};
 }
 
@@ -184,6 +191,12 @@ export async function setAppSettings(partial: Partial<AppSettings>): Promise<App
 	}
 	if (partial.devMode !== undefined) {
 		setAppSetting(KEYS.devMode, partial.devMode ? "true" : "false");
+	}
+	if (partial.autoExpandSingleFolder !== undefined) {
+		setAppSetting(
+			KEYS.autoExpandSingleFolder,
+			partial.autoExpandSingleFolder ? "true" : "false"
+		);
 	}
 
 	return getAppSettings();

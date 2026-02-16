@@ -1,4 +1,4 @@
-import { ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell, type MessageBoxOptions } from "electron";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
 import { join } from "path";
 import { createGitProvider } from "../services/git/index.js";
@@ -20,7 +20,15 @@ import {
 	pruneWorktrees as pruneWorktreesManager,
 } from "../services/worktree/manager.js";
 import { emitConflictDetected, emitRepoError, emitRepoUpdated } from "./events.js";
-import type { ConflictState, FileChange, RepoStatus, TreeNode } from "../../shared/types.js";
+import type {
+	AddWorktreeOptions,
+	AddWorktreeResult,
+	ConfirmDialogOptions,
+	ConflictState,
+	FileChange,
+	RepoStatus,
+	TreeNode,
+} from "../../shared/types.js";
 
 function migrateRepoStatus(raw: unknown): RepoStatus | null {
 	if (!raw || typeof raw !== "object") return null;
@@ -128,12 +136,6 @@ function setPatchCacheSafe(
 function invalidateAndEmit(projectId: string): void {
 	invalidateProjectCache(projectId);
 	emitRepoUpdated(projectId);
-}
-
-function shouldForceRemoveWorktree(error: unknown): boolean {
-	if (!error) return false;
-	const message = error instanceof Error ? error.message : String(error);
-	return message.includes("contains modified or untracked files");
 }
 
 async function emitConflictsIfAny(projectId: string, git: GitProvider, cwd: string): Promise<void> {
@@ -306,6 +308,31 @@ export function registerRepoHandlers(): void {
 		}
 	);
 
+	ipcMain.handle("app:openExternal", async (_, url: string): Promise<void> => {
+		await shell.openExternal(url);
+	});
+
+	ipcMain.handle(
+		"app:confirm",
+		async (event, options: ConfirmDialogOptions): Promise<boolean> => {
+			const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+			const config: MessageBoxOptions = {
+				type: "question",
+				title: options.title ?? "Confirm",
+				message: options.message,
+				detail: options.detail ?? "",
+				buttons: [options.cancelLabel ?? "Cancel", options.confirmLabel ?? "OK"],
+				defaultId: 1,
+				cancelId: 0,
+				normalizeAccessKeys: true,
+			};
+			const result = win
+				? await dialog.showMessageBox(win, config)
+				: await dialog.showMessageBox(config);
+			return result.response === 1;
+		}
+	);
+
 	// Commit
 	ipcMain.handle(
 		"repo:commit",
@@ -355,6 +382,17 @@ export function registerRepoHandlers(): void {
 			}
 		}
 	);
+
+	ipcMain.handle("repo:getCommitDetail", async (_, projectId: string, oid: string) => {
+		const cwd = getRepoPath(projectId);
+		if (!cwd) return null;
+		try {
+			return await getGitProvider().getCommitDetail(cwd, oid);
+		} catch (error) {
+			emitRepoError(projectId, error);
+			return null;
+		}
+	});
 
 	// Branches
 	ipcMain.handle("repo:listBranches", async (_, projectId: string) => {
@@ -651,19 +689,33 @@ export function registerRepoHandlers(): void {
 
 	ipcMain.handle(
 		"repo:addWorktree",
-		async (_, projectId: string, branch: string, newBranch?: string) => {
+		async (
+			_,
+			projectId: string,
+			branch: string,
+			options?: AddWorktreeOptions
+		): Promise<AddWorktreeResult> => {
 			const project = getProject(projectId);
 			if (!project) throw new Error("Project not found");
 			try {
-				const worktreePath = await addWorktreeManager(
+				const sourceWorktreePath = getRepoPath(projectId) ?? project.path;
+				const result = await addWorktreeManager(
 					project.path,
 					project.name,
 					branch,
-					newBranch,
+					{
+						newBranch: options?.newBranch,
+						copyGitIgnores: options?.copyGitIgnores,
+						sourceWorktreePath,
+					},
 					getGitProvider()
 				);
 				emitRepoUpdated(projectId);
-				return worktreePath;
+				return {
+					path: result.worktreePath,
+					copiedGitignoreCount: result.copiedGitignoreCount,
+					copyGitignoreError: result.copyGitignoreError,
+				};
 			} catch (error) {
 				emitRepoError(projectId, error);
 				throw error;
@@ -678,15 +730,7 @@ export function registerRepoHandlers(): void {
 			if (!project) return;
 			try {
 				const provider = getGitProvider();
-				try {
-					await removeWorktreeManager(project.path, worktreePath, provider, force);
-				} catch (error) {
-					if (!force && shouldForceRemoveWorktree(error)) {
-						await removeWorktreeManager(project.path, worktreePath, provider, true);
-					} else {
-						throw error;
-					}
-				}
+				await removeWorktreeManager(project.path, worktreePath, provider, force);
 				emitRepoUpdated(projectId);
 			} catch (error) {
 				emitRepoError(projectId, error);

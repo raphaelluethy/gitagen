@@ -52,6 +52,7 @@ export interface AppSettings {
 	fontFamily: FontFamily;
 	gpuAcceleration: boolean;
 	devMode: boolean;
+	autoExpandSingleFolder: boolean;
 }
 
 export interface Project {
@@ -76,6 +77,25 @@ export interface WorktreeInfo {
 	head: string;
 	isMainWorktree: boolean;
 	name: string;
+}
+
+export interface AddWorktreeOptions {
+	newBranch?: string;
+	copyGitIgnores?: boolean;
+}
+
+export interface AddWorktreeResult {
+	path: string;
+	copiedGitignoreCount: number;
+	copyGitignoreError?: string;
+}
+
+export interface ConfirmDialogOptions {
+	title?: string;
+	message: string;
+	detail?: string;
+	confirmLabel?: string;
+	cancelLabel?: string;
 }
 
 export interface TreeNode {
@@ -118,6 +138,11 @@ export interface CommitInfo {
 	author: { name: string; email: string; date: string };
 	parents: string[];
 	signed: boolean;
+}
+
+export interface CommitDetail extends CommitInfo {
+	body: string;
+	patch: string;
 }
 
 export interface BranchInfo {

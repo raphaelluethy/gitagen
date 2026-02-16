@@ -1,5 +1,6 @@
 import type {
 	BranchInfo,
+	CommitDetail,
 	CommitInfo,
 	RepoStatus,
 	RemoteInfo,
@@ -51,6 +52,7 @@ export interface GitProvider {
 		cwd: string,
 		opts?: { limit?: number; branch?: string; offset?: number }
 	): Promise<CommitInfo[]>;
+	getCommitDetail(cwd: string, oid: string): Promise<CommitDetail | null>;
 
 	listBranches(cwd: string): Promise<BranchInfo[]>;
 	createBranch(cwd: string, name: string, startPoint?: string): Promise<void>;

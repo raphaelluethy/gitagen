@@ -90,6 +90,7 @@ ${diffLines}${eof}`;
 import type { GetPatchOptions, GitProvider, RepoFingerprint, WorktreeInfo } from "./types.js";
 import type {
 	BranchInfo,
+	CommitDetail,
 	CommitInfo,
 	RepoStatus,
 	RemoteInfo,
@@ -405,6 +406,48 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 				});
 			}
 			return entries;
+		},
+
+		async getCommitDetail(cwd: string, oid: string): Promise<CommitDetail | null> {
+			const git = createGit(cwd, binary);
+			try {
+				const [logOut, patchOut] = await Promise.all([
+					git.raw([
+						"log",
+						"-1",
+						"--format=%H%x00%s%x00%b%x00%an%x00%ae%x00%ai%x00%P%x00%G?",
+						oid,
+					]) as Promise<string>,
+					git.raw(["diff-tree", "-p", "--root", oid]) as Promise<string>,
+				]);
+				const parts = logOut.trim().split("\0");
+				if (parts.length < 8) return null;
+				const [
+					oidVal,
+					message,
+					body,
+					authorName,
+					authorEmail,
+					authorDate,
+					parentsStr,
+					gpgStatus,
+				] = parts;
+				return {
+					oid: oidVal?.trim() ?? oid,
+					message: message ?? "",
+					body: body ?? "",
+					author: {
+						name: authorName ?? "",
+						email: authorEmail ?? "",
+						date: authorDate ?? "",
+					},
+					parents: (parentsStr ?? "").split(/\s+/).filter(Boolean),
+					signed: gpgStatus === "G" || gpgStatus === "S",
+					patch: patchOut?.trim() ?? "",
+				};
+			} catch {
+				return null;
+			}
 		},
 
 		async listBranches(cwd: string): Promise<BranchInfo[]> {

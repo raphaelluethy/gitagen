@@ -6,6 +6,7 @@ import type {
 	ProjectPrefs,
 	RepoStatus,
 	TreeNode,
+	CommitDetail,
 	CommitInfo,
 	BranchInfo,
 	StashEntry,
@@ -15,6 +16,9 @@ import type {
 	WorktreeInfo,
 	ConfigEntry,
 	AIProviderDescriptor,
+	AddWorktreeOptions,
+	AddWorktreeResult,
+	ConfirmDialogOptions,
 } from "../shared/types.js";
 
 const EVENT_REPO_UPDATED = "events:repoUpdated";
@@ -71,6 +75,8 @@ const repo = {
 		projectId: string,
 		opts?: { limit?: number; branch?: string; offset?: number }
 	): Promise<CommitInfo[]> => ipcRenderer.invoke("repo:getLog", projectId, opts),
+	getCommitDetail: (projectId: string, oid: string): Promise<CommitDetail | null> =>
+		ipcRenderer.invoke("repo:getCommitDetail", projectId, oid),
 	listBranches: (projectId: string): Promise<BranchInfo[]> =>
 		ipcRenderer.invoke("repo:listBranches", projectId),
 	createBranch: (projectId: string, name: string, startPoint?: string): Promise<void> =>
@@ -154,8 +160,12 @@ const repo = {
 		ipcRenderer.invoke("repo:testSigning", projectId, key),
 	listWorktrees: (projectId: string): Promise<WorktreeInfo[]> =>
 		ipcRenderer.invoke("repo:listWorktrees", projectId),
-	addWorktree: (projectId: string, branch: string, newBranch?: string): Promise<string> =>
-		ipcRenderer.invoke("repo:addWorktree", projectId, branch, newBranch),
+	addWorktree: (
+		projectId: string,
+		branch: string,
+		options?: AddWorktreeOptions
+	): Promise<AddWorktreeResult> =>
+		ipcRenderer.invoke("repo:addWorktree", projectId, branch, options),
 	removeWorktree: (projectId: string, worktreePath: string, force?: boolean): Promise<void> =>
 		ipcRenderer.invoke("repo:removeWorktree", projectId, worktreePath, force),
 	pruneWorktrees: (projectId: string): Promise<void> =>
@@ -231,11 +241,18 @@ const events = {
 	},
 };
 
+const app = {
+	openExternal: (url: string): Promise<void> => ipcRenderer.invoke("app:openExternal", url),
+	confirm: (options: ConfirmDialogOptions): Promise<boolean> =>
+		ipcRenderer.invoke("app:confirm", options),
+};
+
 const api = {
 	projects,
 	repo,
 	settings,
 	events,
+	app,
 };
 
 export type GitagenApi = typeof api;

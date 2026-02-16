@@ -1,4 +1,4 @@
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, streamText } from "ai";
 import type {
 	AIProvider,
@@ -13,15 +13,15 @@ export class OpenRouterProvider implements AIProvider {
 	readonly id = "openrouter";
 	readonly displayName = "OpenRouter";
 	readonly model: string;
-	private client: ReturnType<typeof createOpenAI>;
+	private client: ReturnType<typeof createOpenRouter>;
 	private apiKey: string;
 
 	constructor(config: AIProviderConfig) {
 		this.model = config.model;
 		this.apiKey = config.apiKey;
-		this.client = createOpenAI({
+		this.client = createOpenRouter({
 			apiKey: config.apiKey,
-			baseURL: "https://openrouter.ai/api/v1",
+			compatibility: "strict",
 		});
 	}
 

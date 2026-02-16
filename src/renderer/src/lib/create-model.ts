@@ -2,6 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createFireworks } from "@ai-sdk/fireworks";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import type { AIProviderInstance } from "../../../shared/types";
 
@@ -10,9 +11,9 @@ export function createModelFromSettings(provider: AIProviderInstance): LanguageM
 		case "openai":
 			return createOpenAI({ apiKey: provider.apiKey })(provider.defaultModel);
 		case "openrouter":
-			return createOpenAI({
+			return createOpenRouter({
 				apiKey: provider.apiKey,
-				baseURL: "https://openrouter.ai/api/v1",
+				compatibility: "strict",
 			})(provider.defaultModel);
 		case "openai-compatible": {
 			if (!provider.baseURL) {

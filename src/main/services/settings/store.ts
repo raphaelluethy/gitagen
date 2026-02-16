@@ -2,6 +2,11 @@ import { getAppSetting, setAppSetting } from "../cache/queries.js";
 import type { AppSettings, AIProviderInstance, CommitStyle } from "../../../shared/types.js";
 import { setAIApiKey, getAllAIApiKeys } from "./keychain.js";
 
+function maskApiKey(key: string): string {
+	if (!key || key.length < 8) return key ? "***" : "";
+	return `${key.slice(0, 4)}...${key.slice(-4)}`;
+}
+
 export async function getAppSettingsWithKeys(): Promise<AppSettings> {
 	const settings = await getAppSettings();
 	const apiKeys = await getAllAIApiKeys();
@@ -9,6 +14,18 @@ export async function getAppSettingsWithKeys(): Promise<AppSettings> {
 	settings.ai.providers = settings.ai.providers.map((p) => ({
 		...p,
 		apiKey: apiKeys[p.id] ?? "",
+	}));
+
+	return settings;
+}
+
+export async function getAppSettingsForRenderer(): Promise<AppSettings> {
+	const settings = await getAppSettings();
+	const apiKeys = await getAllAIApiKeys();
+
+	settings.ai.providers = settings.ai.providers.map((p) => ({
+		...p,
+		apiKey: maskApiKey(apiKeys[p.id] ?? ""),
 	}));
 
 	return settings;

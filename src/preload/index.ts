@@ -19,6 +19,7 @@ import type {
 const EVENT_REPO_UPDATED = "events:repoUpdated";
 const EVENT_REPO_ERROR = "events:repoError";
 const EVENT_CONFLICT_DETECTED = "events:conflictDetected";
+const EVENT_AI_COMMIT_CHUNK = "ai:commitChunk";
 
 const projects = {
 	list: (): Promise<Project[]> => ipcRenderer.invoke("projects:list"),
@@ -62,6 +63,8 @@ const repo = {
 		message: string,
 		opts?: { amend?: boolean; sign?: boolean }
 	): Promise<CommitResult> => ipcRenderer.invoke("repo:commit", projectId, message, opts),
+	generateCommitMessage: (projectId: string): Promise<string> =>
+		ipcRenderer.invoke("repo:generateCommitMessage", projectId),
 	getLog: (
 		projectId: string,
 		opts?: { limit?: number; branch?: string; offset?: number }
@@ -216,6 +219,13 @@ const events = {
 		};
 		ipcRenderer.on(EVENT_CONFLICT_DETECTED, handler);
 		return () => ipcRenderer.removeListener(EVENT_CONFLICT_DETECTED, handler);
+	},
+	onCommitChunk: (callback: (chunk: string) => void) => {
+		const handler = (_: Electron.IpcRendererEvent, chunk: string) => {
+			callback(chunk);
+		};
+		ipcRenderer.on(EVENT_AI_COMMIT_CHUNK, handler);
+		return () => ipcRenderer.removeListener(EVENT_AI_COMMIT_CHUNK, handler);
 	},
 };
 

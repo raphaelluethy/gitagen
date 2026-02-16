@@ -136,8 +136,8 @@ function TreeItem({
 				onClick={() => onSelect(node.file!)}
 				className={`group flex w-full items-center gap-2 py-1.5 text-left text-[13px] outline-none transition-all ${
 					isSelected
-						? "bg-[var(--bg-active)] text-[var(--text-primary)]"
-						: "text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+						? "bg-(--bg-active) text-(--text-primary)"
+						: "text-(--text-primary) hover:bg-(--bg-hover)"
 				}`}
 				style={{
 					paddingLeft,
@@ -147,7 +147,7 @@ function TreeItem({
 			>
 				<File
 					size={14}
-					className={`shrink-0 ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
+					className={`shrink-0 ${isSelected ? "text-(--text-primary)" : "text-(--text-muted)"}`}
 					strokeWidth={2}
 				/>
 				<span
@@ -172,24 +172,24 @@ function TreeItem({
 				<button
 					type="button"
 					onClick={() => onToggleFolder(node.path)}
-					className="group flex w-full items-center gap-2 py-1.5 text-left text-[13px] text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+					className="group flex w-full items-center gap-2 py-1.5 text-left text-[13px] text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 					style={{ paddingLeft }}
 				>
 					<ChevronRight
 						size={14}
-						className={`shrink-0 text-[var(--text-muted)] transition-transform ${isExpanded ? "rotate-90" : ""}`}
+						className={`shrink-0 text-(--text-muted) transition-transform ${isExpanded ? "rotate-90" : ""}`}
 						strokeWidth={2}
 					/>
 					{isExpanded ? (
 						<FolderOpen
 							size={14}
-							className="shrink-0 text-[var(--text-primary)]"
+							className="shrink-0 text-(--text-primary)"
 							strokeWidth={2}
 						/>
 					) : (
 						<Folder
 							size={14}
-							className="shrink-0 text-[var(--text-muted)]"
+							className="shrink-0 text-(--text-muted)"
 							strokeWidth={2}
 						/>
 					)}
@@ -263,12 +263,12 @@ function FileTreeSection({
 			<div className="mb-2 flex items-center justify-between px-3 py-2">
 				<div className="flex items-center gap-2">
 					<h3 className="section-title">{title}</h3>
-					<span className="font-mono text-[10px] text-[var(--text-muted)]">{count}</span>
+					<span className="font-mono text-[10px] text-(--text-muted)">{count}</span>
 					{count > 0 && onViewAll && (
 						<button
 							type="button"
 							onClick={() => onViewAll(viewAllSection)}
-							className="text-[10px] text-[var(--text-muted)] outline-none hover:text-[var(--text-primary)]"
+							className="text-[10px] text-(--text-muted) outline-none hover:text-(--text-primary)"
 						>
 							View all
 						</button>
@@ -278,7 +278,7 @@ function FileTreeSection({
 					type="button"
 					onClick={expandAll}
 					title="Expand all"
-					className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] outline-none hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]"
+					className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary)"
 				>
 					<ChevronsDownUp size={11} strokeWidth={2} />
 					<span>expand</span>
@@ -331,20 +331,20 @@ export default function Sidebar({
 	const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
 
 	return (
-		<aside className="flex h-full flex-col bg-[var(--bg-sidebar)]">
+		<aside className="flex h-full flex-col bg-(--bg-sidebar)">
 			{projects.length > 0 && activeProject && onProjectChange && (
-				<div className="relative shrink-0 border-b border-[var(--border-secondary)] px-3 py-2">
+				<div className="relative shrink-0 border-b border-(--border-secondary) px-3 py-2">
 					<button
 						type="button"
 						onClick={() => setProjectSwitcherOpen(!projectSwitcherOpen)}
-						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-[var(--bg-hover)]"
+						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-(--bg-hover)"
 					>
-						<span className="truncate font-medium text-[var(--text-primary)]">
+						<span className="truncate font-medium text-(--text-primary)">
 							{activeProject.name}
 						</span>
 						<ChevronDown
 							size={14}
-							className={`ml-auto shrink-0 text-[var(--text-muted)] transition-transform ${projectSwitcherOpen ? "rotate-180" : ""}`}
+							className={`ml-auto shrink-0 text-(--text-muted) transition-transform ${projectSwitcherOpen ? "rotate-180" : ""}`}
 						/>
 					</button>
 					{projectSwitcherOpen && (
@@ -362,14 +362,14 @@ export default function Sidebar({
 											onProjectChange(p);
 											setProjectSwitcherOpen(false);
 										}}
-										className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm outline-none transition-colors hover:bg-[var(--bg-hover)] ${
-											activeProject.id === p.id ? "bg-[var(--bg-active)]" : ""
+										className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm outline-none transition-colors hover:bg-(--bg-hover) ${
+											activeProject.id === p.id ? "bg-(--bg-active)" : ""
 										}`}
 									>
-										<span className="truncate font-medium text-[var(--text-primary)]">
+										<span className="truncate font-medium text-(--text-primary)">
 											{p.name}
 										</span>
-										<span className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+										<span className="truncate font-mono text-[10px] text-(--text-muted)">
 											{p.path}
 										</span>
 									</button>
@@ -381,7 +381,7 @@ export default function Sidebar({
 											onAddProject();
 											setProjectSwitcherOpen(false);
 										}}
-										className="flex w-full items-center gap-2 border-t border-[var(--border-secondary)] px-3 py-2.5 text-sm text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+										className="flex w-full items-center gap-2 border-t border-(--border-secondary) px-3 py-2.5 text-sm text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 									>
 										<Plus size={14} />
 										Add repository
@@ -392,12 +392,12 @@ export default function Sidebar({
 					)}
 				</div>
 			)}
-			<div className="flex items-center gap-3 border-b border-[var(--border-secondary)] px-4 py-3">
+			<div className="flex items-center gap-3 border-b border-(--border-secondary) px-4 py-3">
 				{onBack && (
 					<button
 						type="button"
 						onClick={onBack}
-						className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+						className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 						title="Back to projects"
 					>
 						<ChevronLeft size={18} />
@@ -405,20 +405,20 @@ export default function Sidebar({
 				)}
 				<div className="min-w-0 flex-1">
 					<div className="flex items-center gap-2">
-						<GitBranch size={14} className="text-[var(--text-primary)]" />
-						<h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
+						<GitBranch size={14} className="text-(--text-primary)" />
+						<h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-(--text-primary)">
 							Changes
 						</h2>
 					</div>
 					<p
-						className="font-mono truncate text-[11px] text-[var(--text-muted)]"
+						className="font-mono truncate text-[11px] text-(--text-muted)"
 						title={status.repoPath}
 					>
 						{status.repoPath}
 					</p>
 				</div>
 				{totalChanges > 0 && (
-					<span className="font-mono text-[10px] text-[var(--text-muted)]">
+					<span className="font-mono text-[10px] text-(--text-muted)">
 						{totalChanges}
 					</span>
 				)}
@@ -462,12 +462,10 @@ export default function Sidebar({
 					status.untracked.length === 0 && (
 						<div className="px-4 py-8 text-center">
 							<div className="mb-3 flex justify-center">
-								<GitBranch size={32} className="text-[var(--border-primary)]" />
+								<GitBranch size={32} className="text-(--border-primary)" />
 							</div>
-							<p className="text-sm font-medium text-[var(--text-muted)]">
-								No changes
-							</p>
-							<p className="mt-1 text-xs text-[var(--text-subtle)]">
+							<p className="text-sm font-medium text-(--text-muted)">No changes</p>
+							<p className="mt-1 text-xs text-(--text-subtle)">
 								Working directory is clean
 							</p>
 						</div>

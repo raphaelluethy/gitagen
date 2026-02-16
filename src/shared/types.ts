@@ -172,7 +172,10 @@ export interface AIProviderInstance {
 	models: string[];
 }
 
+export type CommitStyle = "conventional" | "emoji" | "descriptive" | "imperative";
+
 export interface AISettings {
 	activeProviderId: string | null;
 	providers: AIProviderInstance[];
+	commitStyle: CommitStyle;
 }

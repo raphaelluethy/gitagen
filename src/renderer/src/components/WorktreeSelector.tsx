@@ -46,21 +46,21 @@ export default function WorktreeSelector({
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] outline-none transition-all hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+				className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-(--text-secondary) outline-none transition-all hover:bg-(--bg-hover) hover:text-(--text-primary)"
 				title="Switch worktree"
 			>
-				<FolderTree size={14} className="text-[var(--text-primary)]" />
+				<FolderTree size={14} className="text-(--text-primary)" />
 				<code className="max-w-[100px] truncate font-mono">{displayName}</code>
 				<ChevronDown
 					size={12}
-					className={`shrink-0 text-[var(--text-muted)] transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+					className={`shrink-0 text-(--text-muted) transition-transform duration-150 ${open ? "rotate-180" : ""}`}
 				/>
 			</button>
 			{open && (
 				<>
 					<div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 					<div className="dropdown animate-scale-in absolute left-0 top-full z-50 mt-1 max-h-72 w-80 overflow-auto">
-						<div className="border-b border-[var(--border-secondary)] px-4 py-2">
+						<div className="border-b border-(--border-secondary) px-4 py-2">
 							<p className="section-title">Worktrees</p>
 						</div>
 						{worktrees.map((w) => {
@@ -73,12 +73,12 @@ export default function WorktreeSelector({
 									onClick={() => handleSwitch(w.path)}
 									className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] outline-none transition-colors ${
 										isActive
-											? "bg-[var(--bg-active)] font-medium text-[var(--text-primary)]"
-											: "hover:bg-[var(--bg-hover)]"
+											? "bg-(--bg-active) font-medium text-(--text-primary)"
+											: "hover:bg-(--bg-hover)"
 									}`}
 								>
 									<span
-										className={`w-4 shrink-0 ${isActive ? "text-[var(--text-primary)]" : "invisible"}`}
+										className={`w-4 shrink-0 ${isActive ? "text-(--text-primary)" : "invisible"}`}
 									>
 										<Check size={14} />
 									</span>
@@ -86,13 +86,13 @@ export default function WorktreeSelector({
 										<p
 											className={`truncate font-mono text-xs ${
 												isActive
-													? "font-medium text-[var(--text-primary)]"
-													: "text-[var(--text-secondary)]"
+													? "font-medium text-(--text-primary)"
+													: "text-(--text-secondary)"
 											}`}
 										>
 											{name}
 										</p>
-										<p className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+										<p className="truncate font-mono text-[10px] text-(--text-muted)">
 											{w.branch}
 										</p>
 									</div>

@@ -25,9 +25,11 @@ yarn-error.log*
 .env.local
 .env.*.local
 
-# IDE
+# IDE & tools
 .idea/
 .vscode/
+.cursor/
+.opencode/
 *.swp
 *.swo
 

@@ -14,11 +14,10 @@
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
 		"jsx": "react-jsx",
-		"baseUrl": ".",
 		"paths": {
-			"@shared/*": ["src/shared/*"]
+			"@shared/*": ["./src/shared/*"],
+			"*": ["./*"]
 		}
 	},
-	"include": ["src/**/*.ts", "src/**/*.tsx"],
-	"references": [{ "path": "./tsconfig.node.json" }]
+	"include": ["src/**/*.ts", "src/**/*.tsx"]
 }

@@ -60,7 +60,7 @@ export default function WorktreePanel({
 	};
 
 	if (loading) {
-		return <div className="p-3 text-xs text-[var(--text-muted)]">Loading worktrees...</div>;
+		return <div className="p-3 text-xs text-(--text-muted)">Loading worktrees...</div>;
 	}
 
 	return (
@@ -71,7 +71,7 @@ export default function WorktreePanel({
 					type="button"
 					onClick={handleAdd}
 					disabled={adding}
-					className="flex items-center gap-1 rounded-[var(--radius-md)] px-2 py-1 text-[10px] font-medium text-[var(--text-muted)] outline-none hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] disabled:opacity-50"
+					className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-(--text-muted) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary) disabled:opacity-50"
 					title="Add worktree"
 				>
 					<GitBranchPlus size={12} />
@@ -87,22 +87,22 @@ export default function WorktreePanel({
 					return (
 						<div
 							key={w.path}
-							className={`flex items-center gap-2 rounded-lg border border-[var(--border-primary)] px-2.5 py-2 ${
+							className={`flex items-center gap-2 rounded-lg border border-(--border-primary) px-2.5 py-2 ${
 								isActive
-									? "border-l-[var(--text-muted)] border-l-2 bg-[var(--bg-active)]"
-									: "hover:bg-[var(--bg-hover)]"
+									? "border-l-(--text-muted) border-l-2 bg-(--bg-active)"
+									: "hover:bg-(--bg-hover)"
 							}`}
 						>
 							<span
-								className={`shrink-0 ${isActive ? "text-[var(--text-primary)]" : "invisible"}`}
+								className={`shrink-0 ${isActive ? "text-(--text-primary)" : "invisible"}`}
 							>
 								<Check size={12} />
 							</span>
 							<div className="min-w-0 flex-1">
-								<p className="truncate text-xs font-medium text-[var(--text-primary)]">
+								<p className="truncate text-xs font-medium text-(--text-primary)">
 									{name}
 								</p>
-								<p className="truncate text-[10px] text-[var(--text-muted)]">
+								<p className="truncate text-[10px] text-(--text-muted)">
 									{w.branch}
 								</p>
 							</div>
@@ -116,7 +116,7 @@ export default function WorktreePanel({
 											});
 											onRefresh();
 										}}
-										className="rounded-[var(--radius-md)] bg-[var(--bg-tertiary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+										className="rounded-md bg-(--bg-tertiary) px-2 py-0.5 text-[10px] font-medium text-(--text-secondary) outline-none hover:bg-(--bg-hover) hover:text-(--text-primary)"
 									>
 										Switch
 									</button>
@@ -125,7 +125,7 @@ export default function WorktreePanel({
 									<button
 										type="button"
 										onClick={() => handleRemove(w.path)}
-										className="rounded-[var(--radius-md)] p-1 text-[var(--text-muted)] outline-none hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]"
+										className="rounded-md p-1 text-(--text-muted) outline-none hover:bg-(--danger-bg) hover:text-(--danger)"
 										title="Remove worktree"
 									>
 										<Trash2 size={12} />

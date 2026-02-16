@@ -49,8 +49,8 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 	if (loading) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 p-8">
-				<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
-				<p className="text-sm text-[var(--text-muted)]">Loading stash...</p>
+				<div className="h-5 w-5 animate-spin rounded-full border-2 border-(--border-primary) border-t-(--text-muted)" />
+				<p className="text-sm text-(--text-muted)">Loading stash...</p>
 			</div>
 		);
 	}
@@ -58,10 +58,10 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 	if (entries.length === 0) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
-				<Archive size={28} className="text-[var(--border-primary)]" />
+				<Archive size={28} className="text-(--border-primary)" />
 				<div>
-					<p className="text-sm font-medium text-[var(--text-muted)]">No stash entries</p>
-					<p className="mt-1 text-xs text-[var(--text-subtle)]">
+					<p className="text-sm font-medium text-(--text-muted)">No stash entries</p>
+					<p className="mt-1 text-xs text-(--text-subtle)">
 						Stash changes to save them for later
 					</p>
 				</div>
@@ -74,12 +74,12 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 			{entries.map((e) => (
 				<div
 					key={e.index}
-					className="mb-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-3 transition-colors hover:bg-[var(--bg-hover)]"
+					className="mb-3 rounded-lg border border-(--border-secondary) bg-(--bg-secondary) p-3 transition-colors hover:bg-(--bg-hover)"
 				>
-					<p className="truncate text-sm font-medium text-[var(--text-primary)]">
+					<p className="truncate text-sm font-medium text-(--text-primary)">
 						{e.message}
 					</p>
-					<p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
+					<p className="mt-1 font-mono text-[11px] text-(--text-muted)">
 						stash@{`{${e.index}}`}
 					</p>
 					<div className="mt-3 flex gap-2">
@@ -102,7 +102,7 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 						<button
 							type="button"
 							onClick={() => handleDrop(e.index)}
-							className="btn btn-ghost px-3 text-xs text-[var(--danger)] hover:bg-[var(--danger-bg)]"
+							className="btn btn-ghost px-3 text-xs text-(--danger) hover:bg-(--danger-bg)"
 						>
 							<Trash2 size={12} />
 						</button>

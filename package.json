@@ -27,6 +27,7 @@
 		"@pierre/diffs": "^1.0.11",
 		"ai": "^6.0.86",
 		"better-sqlite3": "^12.6.2",
+		"dedent": "^1.7.1",
 		"keytar": "^7.9.0",
 		"lucide-react": "^0.564.0",
 		"react": "^19.2.4",

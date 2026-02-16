@@ -1,4 +1,5 @@
 import { ipcMain, shell } from "electron";
+import { generateCommitMessage } from "../services/ai/commit-message.js";
 import { join } from "path";
 import { createGitProvider } from "../services/git/index.js";
 import type { GitProvider } from "../services/git/types.js";
@@ -324,6 +325,10 @@ export function registerRepoHandlers(): void {
 			}
 		}
 	);
+
+	ipcMain.handle("repo:generateCommitMessage", async (event, projectId: string) => {
+		return generateCommitMessage(projectId, event.sender);
+	});
 
 	ipcMain.handle(
 		"repo:getLog",

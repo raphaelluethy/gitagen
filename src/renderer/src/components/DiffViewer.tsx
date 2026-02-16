@@ -50,15 +50,15 @@ export default function DiffViewer({
 
 	if (!selectedFile) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--text-muted)]">
-				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-secondary)]">
-					<ExternalLink size={24} className="text-[var(--border-primary)]" />
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-(--text-muted)">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--bg-secondary)">
+					<ExternalLink size={24} className="text-(--border-primary)" />
 				</div>
 				<div className="text-center">
-					<p className="text-sm font-medium text-[var(--text-secondary)]">
+					<p className="text-sm font-medium text-(--text-secondary)">
 						Select a file to view diff
 					</p>
-					<p className="mt-1 text-xs text-[var(--text-subtle)]">
+					<p className="mt-1 text-xs text-(--text-subtle)">
 						Choose a file from the sidebar to see changes
 					</p>
 				</div>
@@ -69,8 +69,8 @@ export default function DiffViewer({
 	if (loading) {
 		return (
 			<div className="flex flex-1 flex-col items-center justify-center gap-3">
-				<div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
-				<p className="text-sm text-[var(--text-muted)]">Loading diff...</p>
+				<div className="h-6 w-6 animate-spin rounded-full border-2 border-(--border-primary) border-t-(--text-muted)" />
+				<p className="text-sm text-(--text-muted)">Loading diff...</p>
 			</div>
 		);
 	}
@@ -97,7 +97,7 @@ export default function DiffViewer({
 	};
 
 	const renderToolbar = () => (
-		<div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-secondary)] bg-[var(--bg-panel)] px-4 py-3">
+		<div className="flex shrink-0 items-center gap-2 border-b border-(--border-secondary) bg-(--bg-panel) px-4 py-3">
 			<button
 				type="button"
 				onClick={handleStageToggle}
@@ -105,9 +105,9 @@ export default function DiffViewer({
 				title={isStaged ? "Unstage file" : "Stage file"}
 			>
 				{isStaged ? (
-					<CheckSquare size={18} className="text-[var(--text-primary)]" />
+					<CheckSquare size={18} className="text-(--text-primary)" />
 				) : (
-					<Square size={18} className="text-[var(--text-muted)]" />
+					<Square size={18} className="text-(--text-muted)" />
 				)}
 			</button>
 			<button
@@ -118,18 +118,18 @@ export default function DiffViewer({
 			>
 				<ExternalLink size={16} />
 			</button>
-			<div className="mx-2 h-4 w-px bg-[var(--border-secondary)]" />
+			<div className="mx-2 h-4 w-px bg-(--border-secondary)" />
 			<span
 				className={`badge ${changeTypeColorClass(letter)}`}
 				title={changeTypeLabel(letter)}
 			>
 				{letter}
 			</span>
-			<span className="font-mono truncate text-sm text-[var(--text-primary)]">
+			<span className="font-mono truncate text-sm text-(--text-primary)">
 				{selectedFile.path}
 			</span>
 			{isStaged && (
-				<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+				<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-(--text-muted)">
 					Staged
 				</span>
 			)}
@@ -142,10 +142,8 @@ export default function DiffViewer({
 				{renderToolbar()}
 				<div className="flex flex-1 items-center justify-center">
 					<div className="text-center">
-						<p className="text-sm text-[var(--text-muted)]">
-							No changes or binary file
-						</p>
-						<p className="mt-1 text-xs text-[var(--text-subtle)]">
+						<p className="text-sm text-(--text-muted)">No changes or binary file</p>
+						<p className="mt-1 text-xs text-(--text-subtle)">
 							This file has no text diff to display
 						</p>
 					</div>
@@ -157,8 +155,8 @@ export default function DiffViewer({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			{renderToolbar()}
-			<div className="min-h-0 flex-1 overflow-auto bg-[var(--bg-primary)]">
-				<div className="min-h-full [&_pre]:!bg-transparent [&_pre]:!font-mono [&_pre]:!text-[13px]">
+			<div className="min-h-0 flex-1 overflow-auto bg-(--bg-primary)">
+				<div className="min-h-full [&_pre]:bg-transparent! [&_pre]:font-mono! [&_pre]:text-[13px]!">
 					<PatchDiff
 						patch={patch}
 						options={{

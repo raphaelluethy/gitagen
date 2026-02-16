@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
 	Group,
@@ -38,19 +39,84 @@ import RemotePanel from "./components/RemotePanel";
 import ConflictBanner from "./components/ConflictBanner";
 import { ThemeProvider, useTheme } from "./theme/provider";
 import { SettingsProvider, useSettings } from "./settings/provider";
+import { ToastProvider } from "./toast/provider";
 import type {
 	Project,
+	ProjectPrefs,
 	RepoStatus,
 	GitFileStatus,
 	DiffStyle,
 	ConfigEntry,
+	AppSettings,
 	AIProviderDescriptor,
+	CommitStyle,
 	AIProviderInstance,
 	AIProviderType,
+	ConflictState,
 } from "../../shared/types";
 
 type RightPanelTab = "log" | "stash" | "remote";
 type ViewMode = "single" | "all";
+
+const MAIN_LAYOUT_FALLBACK = [20, 80];
+const CONTENT_LAYOUT_FALLBACK = [75, 25];
+
+type Layout = { [id: string]: number };
+
+function sanitizeTwoPanelLayout(
+	layout: unknown,
+	opts: {
+		fallback: number[];
+		firstMin: number;
+		firstMax: number;
+		secondMin: number;
+		secondMax: number;
+		allowSecondCollapse?: boolean;
+		panelIds: [string, string];
+	}
+): Layout {
+	let firstRaw: unknown;
+	let secondRaw: unknown;
+	if (Array.isArray(layout) && layout.length === 2) {
+		[firstRaw, secondRaw] = layout;
+	} else if (
+		layout !== null &&
+		typeof layout === "object" &&
+		opts.panelIds[0] in layout &&
+		opts.panelIds[1] in layout
+	) {
+		firstRaw = (layout as Layout)[opts.panelIds[0]];
+		secondRaw = (layout as Layout)[opts.panelIds[1]];
+	} else {
+		const [a, b] = opts.fallback;
+		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
+	}
+	const first = typeof firstRaw === "number" ? firstRaw : Number.NaN;
+	const second = typeof secondRaw === "number" ? secondRaw : Number.NaN;
+	if (!Number.isFinite(first) || !Number.isFinite(second)) {
+		const [a, b] = opts.fallback;
+		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
+	}
+
+	const total = first + second;
+	if (Math.abs(total - 100) > 0.5) {
+		const [a, b] = opts.fallback;
+		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
+	}
+
+	if (first < opts.firstMin || first > opts.firstMax) {
+		const [a, b] = opts.fallback;
+		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
+	}
+
+	const secondMin = opts.allowSecondCollapse ? 0 : opts.secondMin;
+	if (second < secondMin || second > opts.secondMax) {
+		const [a, b] = opts.fallback;
+		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
+	}
+
+	return { [opts.panelIds[0]]: first, [opts.panelIds[1]]: second };
+}
 
 function repoStatusToGitFileStatus(
 	status: RepoStatus,
@@ -91,13 +157,38 @@ function AppContent() {
 	const rightPanelRef = useRef<PanelImperativeHandle>(null);
 
 	const mainLayout = useDefaultLayout({
-		id: "gitagen-main-layout-v1",
+		id: "gitagen-main-layout-v3",
 		storage: typeof localStorage !== "undefined" ? localStorage : undefined,
 	});
 	const contentLayout = useDefaultLayout({
-		id: "gitagen-content-layout-v1",
+		id: "gitagen-content-layout-v3",
 		storage: typeof localStorage !== "undefined" ? localStorage : undefined,
 	});
+	const sanitizedMainLayout = useMemo(
+		() =>
+			sanitizeTwoPanelLayout(mainLayout.defaultLayout, {
+				fallback: MAIN_LAYOUT_FALLBACK,
+				firstMin: 12,
+				firstMax: 35,
+				secondMin: 65,
+				secondMax: 88,
+				panelIds: ["sidebar", "main"],
+			}),
+		[mainLayout.defaultLayout]
+	);
+	const sanitizedContentLayout = useMemo(
+		() =>
+			sanitizeTwoPanelLayout(contentLayout.defaultLayout, {
+				fallback: CONTENT_LAYOUT_FALLBACK,
+				firstMin: 30,
+				firstMax: 100,
+				secondMin: 15,
+				secondMax: 45,
+				allowSecondCollapse: true,
+				panelIds: ["center", "right"],
+			}),
+		[contentLayout.defaultLayout]
+	);
 
 	const toggleRightPanel = useCallback(() => {
 		const panel = rightPanelRef.current;
@@ -112,15 +203,17 @@ function AppContent() {
 
 	const refreshStatus = useCallback(() => {
 		if (activeProject) {
-			window.gitagen.settings.getProjectPrefs(activeProject.id).then((p) => {
-				setActiveWorktreePath(p?.activeWorktreePath ?? null);
-			});
+			window.gitagen.settings
+				.getProjectPrefs(activeProject.id)
+				.then((p: ProjectPrefs | null) => {
+					setActiveWorktreePath(p?.activeWorktreePath ?? null);
+				});
 			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
 		}
 	}, [activeProject?.id]);
 
 	useEffect(() => {
-		window.gitagen.projects.list().then((list) => {
+		window.gitagen.projects.list().then((list: Project[]) => {
 			setProjects(list);
 			setLoading(false);
 		});
@@ -134,27 +227,35 @@ function AppContent() {
 			return;
 		}
 		window.gitagen.projects.switchTo(activeProject.id).then(() => {
-			window.gitagen.settings.getProjectPrefs(activeProject.id).then((p) => {
-				setActiveWorktreePath(p?.activeWorktreePath ?? null);
-			});
+			window.gitagen.settings
+				.getProjectPrefs(activeProject.id)
+				.then((p: ProjectPrefs | null) => {
+					setActiveWorktreePath(p?.activeWorktreePath ?? null);
+				});
 			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
 		});
 	}, [activeProject?.id]);
 
 	useEffect(() => {
-		const unsubscribeUpdated = window.gitagen.events.onRepoUpdated((payload) => {
-			if (!activeProject || payload.projectId !== activeProject.id) return;
-			refreshStatus();
-		});
-		const unsubscribeConflicts = window.gitagen.events.onConflictDetected((payload) => {
-			if (!activeProject || payload.projectId !== activeProject.id) return;
-			refreshStatus();
-		});
-		const unsubscribeErrors = window.gitagen.events.onRepoError((payload) => {
-			if (!activeProject) return;
-			if (payload.projectId && payload.projectId !== activeProject.id) return;
-			console.error(`[${payload.name}] ${payload.message}`);
-		});
+		const unsubscribeUpdated = window.gitagen.events.onRepoUpdated(
+			(payload: { projectId: string; updatedAt: number }) => {
+				if (!activeProject || payload.projectId !== activeProject.id) return;
+				refreshStatus();
+			}
+		);
+		const unsubscribeConflicts = window.gitagen.events.onConflictDetected(
+			(payload: { projectId: string; state: ConflictState }) => {
+				if (!activeProject || payload.projectId !== activeProject.id) return;
+				refreshStatus();
+			}
+		);
+		const unsubscribeErrors = window.gitagen.events.onRepoError(
+			(payload: { projectId: string | null; message: string; name: string }) => {
+				if (!activeProject) return;
+				if (payload.projectId && payload.projectId !== activeProject.id) return;
+				console.error(`[${payload.name}] ${payload.message}`);
+			}
+		);
 		return () => {
 			unsubscribeUpdated();
 			unsubscribeConflicts();
@@ -173,23 +274,21 @@ function AppContent() {
 
 	if (loading) {
 		return (
-			<div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">
-				<div className="text-sm text-[var(--text-muted)]">Loading...</div>
+			<div className="flex h-screen items-center justify-center bg-(--bg-primary)">
+				<div className="text-sm text-(--text-muted)">Loading...</div>
 			</div>
 		);
 	}
 
 	if (projects.length === 0) {
 		return (
-			<div className="empty-state h-screen bg-[var(--bg-primary)]">
-				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-					<FolderOpen size={32} className="text-[var(--text-muted)]" />
+			<div className="empty-state h-screen bg-(--bg-primary)">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--bg-secondary) border border-(--border-secondary)">
+					<FolderOpen size={32} className="text-(--text-muted)" />
 				</div>
 				<div className="text-center">
-					<p className="text-lg font-semibold text-[var(--text-primary)]">
-						No projects yet
-					</p>
-					<p className="mt-2 text-sm text-[var(--text-muted)] max-w-sm">
+					<p className="text-lg font-semibold text-(--text-primary)">No projects yet</p>
+					<p className="mt-2 text-sm text-(--text-muted) max-w-sm">
 						Add a git repository to get started with Gitagen
 					</p>
 				</div>
@@ -203,14 +302,12 @@ function AppContent() {
 
 	if (!activeProject) {
 		return (
-			<div className="flex h-screen flex-col bg-[var(--bg-primary)]">
-				<div className="flex items-center justify-between border-b border-[var(--border-secondary)] px-6 py-4">
-					<h1 className="font-mono text-sm font-semibold tracking-tight text-[var(--text-primary)]">
+			<div className="flex h-screen flex-col bg-(--bg-primary)">
+				<div className="flex items-center justify-between border-b border-(--border-secondary) px-6 py-4">
+					<h1 className="font-mono text-sm font-semibold tracking-tight text-(--text-primary)">
 						PROJECTS
 					</h1>
-					<span className="font-mono text-xs text-[var(--text-muted)]">
-						{projects.length}
-					</span>
+					<span className="font-mono text-xs text-(--text-muted)">{projects.length}</span>
 				</div>
 				<div className="flex-1 overflow-auto px-6 py-8">
 					<div className="mx-auto w-full max-w-3xl">
@@ -220,19 +317,19 @@ function AppContent() {
 									key={p.id}
 									type="button"
 									onClick={() => setActiveProject(p)}
-									className="group flex items-center gap-4 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-5 py-4 text-left outline-none transition-all hover:border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
+									className="group flex items-center gap-4 rounded-lg border border-(--border-secondary) bg-(--bg-secondary) px-5 py-4 text-left outline-none transition-all hover:border-(--border-primary) hover:bg-(--bg-hover)"
 								>
-									<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--bg-tertiary)]">
+									<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-(--bg-tertiary)">
 										<FolderOpen
 											size={20}
-											className="text-[var(--text-muted)] transition-colors group-hover:text-[var(--accent-primary)]"
+											className="text-(--text-muted) transition-colors group-hover:text-(--accent-primary)"
 										/>
 									</div>
 									<div className="min-w-0 flex-1">
-										<p className="truncate font-medium text-[var(--text-primary)]">
+										<p className="truncate font-medium text-(--text-primary)">
 											{p.name}
 										</p>
-										<p className="font-mono truncate text-xs text-[var(--text-muted)]">
+										<p className="font-mono truncate text-xs text-(--text-muted)">
 											{p.path}
 										</p>
 									</div>
@@ -242,7 +339,7 @@ function AppContent() {
 						<button
 							type="button"
 							onClick={handleAddProject}
-							className="group mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border-primary)] bg-transparent px-5 py-4 text-sm text-[var(--text-muted)] outline-none transition-all hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]"
+							className="group mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-(--border-primary) bg-transparent px-5 py-4 text-sm text-(--text-muted) outline-none transition-all hover:border-(--accent-primary) hover:text-(--accent-primary)"
 						>
 							<Plus
 								size={16}
@@ -267,14 +364,14 @@ function AppContent() {
 
 	if (!gitStatus) {
 		return (
-			<div className="flex h-screen flex-col items-center justify-center gap-4 bg-[var(--bg-primary)]">
-				<p className="text-sm text-[var(--text-muted)]">
+			<div className="flex h-screen flex-col items-center justify-center gap-4 bg-(--bg-primary)">
+				<p className="text-sm text-(--text-muted)">
 					Not a git repository or failed to load status.
 				</p>
 				<button
 					type="button"
 					onClick={() => setActiveProject(null)}
-					className="text-sm text-[var(--accent-primary)] hover:underline"
+					className="text-sm text-(--accent-primary) hover:underline"
 				>
 					Back to projects
 				</button>
@@ -284,7 +381,7 @@ function AppContent() {
 
 	if (showSettings) {
 		return (
-			<div className="flex h-screen flex-col bg-[var(--bg-primary)] animate-fade-in">
+			<div className="flex h-screen flex-col bg-(--bg-primary) animate-fade-in">
 				<SettingsPanel
 					projectId={activeProject.id}
 					onClose={() => setShowSettings(false)}
@@ -294,21 +391,21 @@ function AppContent() {
 	}
 
 	return (
-		<div className="flex h-screen flex-col bg-[var(--bg-primary)]">
+		<div className="flex h-screen flex-col bg-(--bg-primary)">
 			<ConflictBanner projectId={activeProject.id} onResolved={refreshStatus} />
 			<Group
 				className="flex flex-1 min-h-0"
 				id="main-layout"
 				orientation="horizontal"
-				defaultLayout={mainLayout.defaultLayout}
+				defaultLayout={sanitizedMainLayout}
 				onLayoutChanged={mainLayout.onLayoutChanged}
 			>
 				<Panel
 					id="sidebar"
-					className="flex flex-col border-r border-[var(--border-secondary)]"
-					defaultSize={20}
-					minSize={12}
-					maxSize={35}
+					className="flex flex-col border-r border-(--border-secondary)"
+					defaultSize="20%"
+					minSize="12%"
+					maxSize="35%"
 				>
 					<div className="flex min-h-0 flex-1 overflow-hidden">
 						<Sidebar
@@ -320,10 +417,12 @@ function AppContent() {
 							activeProject={activeProject}
 							onProjectChange={setActiveProject}
 							onAddProject={handleAddProject}
-							onViewAll={() => setViewMode("all")}
+							onViewAll={() => {
+								setViewMode("all");
+							}}
 						/>
 					</div>
-					<div className="shrink-0 border-t border-[var(--border-secondary)]">
+					<div className="shrink-0 border-t border-(--border-secondary)">
 						<WorktreePanel
 							projectId={activeProject.id}
 							projectName={activeProject.name}
@@ -335,8 +434,8 @@ function AppContent() {
 					</div>
 				</Panel>
 				<Separator className="panel-resize-handle" />
-				<Panel id="main" className="flex min-w-0 flex-1 flex-col" minSize={40}>
-					<div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-secondary)] bg-[var(--bg-toolbar)] px-3 py-2">
+				<Panel id="main" className="flex min-w-0 flex-1 flex-col" minSize="40%">
+					<div className="flex shrink-0 items-center gap-2 border-b border-(--border-secondary) bg-(--bg-toolbar) px-3 py-2">
 						<div className="flex items-center gap-1">
 							<WorktreeSelector
 								projectId={activeProject.id}
@@ -344,14 +443,14 @@ function AppContent() {
 								mainRepoPath={activeProject.path}
 								onWorktreeChange={refreshStatus}
 							/>
-							<div className="mx-0.5 h-4 w-px bg-[var(--border-primary)]" />
+							<div className="mx-0.5 h-4 w-px bg-(--border-primary)" />
 							<BranchSelector
 								projectId={activeProject.id}
 								currentBranch={status?.branch ?? ""}
 								onBranchChange={refreshStatus}
 							/>
 						</div>
-						<div className="mx-0.5 hidden h-4 w-px bg-[var(--border-primary)] sm:block" />
+						<div className="mx-0.5 hidden h-4 w-px bg-(--border-primary) sm:block" />
 						<div className="hidden items-center tab-bar sm:flex">
 							<button
 								type="button"
@@ -396,7 +495,7 @@ function AppContent() {
 							<button
 								type="button"
 								onClick={toggleRightPanel}
-								className="btn-icon rounded-[var(--radius-md)] p-2"
+								className="btn-icon rounded-md p-2"
 								title={isRightPanelCollapsed ? "Show panel" : "Hide panel"}
 							>
 								{isRightPanelCollapsed ? (
@@ -408,7 +507,7 @@ function AppContent() {
 							<button
 								type="button"
 								onClick={() => setShowSettings(true)}
-								className="btn-icon rounded-[var(--radius-md)] p-2"
+								className="btn-icon rounded-md p-2"
 								title="Settings"
 							>
 								<Settings size={16} />
@@ -419,15 +518,16 @@ function AppContent() {
 						className="flex min-h-0 flex-1"
 						id="content-layout"
 						orientation="horizontal"
-						defaultLayout={contentLayout.defaultLayout}
+						defaultLayout={sanitizedContentLayout}
 						onLayoutChanged={contentLayout.onLayoutChanged}
 					>
-						<Panel id="center" className="flex min-w-0 flex-1 flex-col" minSize={30}>
+						<Panel id="center" className="flex min-w-0 flex-1 flex-col" minSize="30%">
 							{viewMode === "all" ? (
 								<AllChangesView
 									projectId={activeProject.id}
 									gitStatus={gitStatus}
 									diffStyle={diffStyle}
+									selectedFile={selectedFile}
 									onRefresh={refreshStatus}
 								/>
 							) : (
@@ -444,18 +544,18 @@ function AppContent() {
 						<Separator className="panel-resize-handle" />
 						<Panel
 							id="right"
-							className="hidden flex-col border-l border-[var(--border-secondary)] md:flex"
+							className="hidden flex-col border-l border-(--border-secondary) md:flex"
 							collapsible
-							defaultSize={25}
-							minSize={15}
-							maxSize={45}
+							defaultSize="25%"
+							minSize="15%"
+							maxSize="45%"
 							panelRef={rightPanelRef}
 							onResize={(size) => {
 								setIsRightPanelCollapsed(size.asPercentage < 1);
 							}}
 						>
 							<div className="flex flex-col min-h-0 flex-1">
-								<div className="flex tab-bar border-b border-[var(--border-secondary)] m-2 mb-0">
+								<div className="flex tab-bar border-b border-(--border-secondary) m-2 mb-0">
 									<button
 										type="button"
 										onClick={() => setRightTab("log")}
@@ -484,7 +584,7 @@ function AppContent() {
 										<span className="hidden lg:inline">Remote</span>
 									</button>
 								</div>
-								<div className="min-h-0 flex-1 overflow-auto bg-[var(--bg-primary)]">
+								<div className="min-h-0 flex-1 overflow-auto bg-(--bg-primary)">
 									{rightTab === "log" && (
 										<LogPanel projectId={activeProject.id} />
 									)}
@@ -510,10 +610,18 @@ function AppContent() {
 	);
 }
 
+const COMMIT_STYLES: { value: CommitStyle; label: string }[] = [
+	{ value: "conventional", label: "Conventional (feat:, fix:)" },
+	{ value: "emoji", label: "Emoji (Gitmoji)" },
+	{ value: "descriptive", label: "Descriptive" },
+	{ value: "imperative", label: "Imperative" },
+];
+
 function AISettingsSection() {
 	const [providers, setProviders] = useState<AIProviderInstance[]>([]);
 	const [providerTypes, setProviderTypes] = useState<AIProviderDescriptor[]>([]);
 	const [activeProviderId, setActiveProviderId] = useState<string | null>(null);
+	const [commitStyle, setCommitStyle] = useState<CommitStyle>("conventional");
 	const [editingProvider, setEditingProvider] = useState<AIProviderInstance | null>(null);
 	const [showAddForm, setShowAddForm] = useState(false);
 	const [newProviderType, setNewProviderType] = useState<AIProviderType>("openai");
@@ -528,7 +636,9 @@ function AISettingsSection() {
 	const [modelError, setModelError] = useState<string | null>(null);
 
 	const providerById = useMemo(() => {
-		const entries = providerTypes.map((provider) => [provider.id, provider] as const);
+		const entries = providerTypes.map(
+			(provider: AIProviderDescriptor) => [provider.id, provider] as const
+		);
 		return Object.fromEntries(entries);
 	}, [providerTypes]);
 
@@ -553,6 +663,7 @@ function AISettingsSection() {
 		const settings = await window.gitagen.settings.getGlobalWithKeys();
 		setProviders(settings.ai.providers);
 		setActiveProviderId(settings.ai.activeProviderId);
+		setCommitStyle(settings.ai.commitStyle);
 	}, []);
 
 	useEffect(() => {
@@ -671,6 +782,7 @@ function AISettingsSection() {
 			ai: {
 				providers: [...providers, newProvider],
 				activeProviderId: activeProviderId || id,
+				commitStyle,
 			},
 		});
 		setShowAddForm(false);
@@ -684,6 +796,7 @@ function AISettingsSection() {
 			ai: {
 				providers: updatedProviders,
 				activeProviderId,
+				commitStyle,
 			},
 		});
 		setEditingProvider(null);
@@ -698,6 +811,7 @@ function AISettingsSection() {
 			ai: {
 				providers: updatedProviders,
 				activeProviderId: newActiveId,
+				commitStyle,
 			},
 		});
 		void loadProviders();
@@ -705,15 +819,15 @@ function AISettingsSection() {
 
 	const handleSetActive = async (id: string) => {
 		await window.gitagen.settings.setGlobal({
-			ai: { providers, activeProviderId: id },
+			ai: { providers, activeProviderId: id, commitStyle },
 		});
 		setActiveProviderId(id);
 	};
 
 	return (
-		<div className="rounded-lg border border-[var(--border-primary)] p-3">
+		<div className="rounded-lg border border-(--border-primary) p-3">
 			<div className="mb-3 flex items-center justify-between">
-				<p className="text-xs font-medium text-[var(--text-secondary)]">AI Providers</p>
+				<p className="text-xs font-medium text-(--text-secondary)">AI Providers</p>
 				<button
 					type="button"
 					onClick={() => setShowAddForm(true)}
@@ -722,22 +836,40 @@ function AISettingsSection() {
 					+ Add
 				</button>
 			</div>
+			<div className="mb-3 flex items-center gap-2">
+				<p className="text-xs font-medium text-(--text-secondary) shrink-0">Commit style</p>
+				<select
+					value={commitStyle}
+					onChange={async (e) => {
+						const v = (e.target as HTMLSelectElement).value as CommitStyle;
+						setCommitStyle(v);
+						await window.gitagen.settings.setGlobal({
+							ai: { providers, activeProviderId, commitStyle: v },
+						});
+					}}
+					className="input flex-1 text-xs"
+				>
+					{COMMIT_STYLES.map((s) => (
+						<option key={s.value} value={s.value}>
+							{s.label}
+						</option>
+					))}
+				</select>
+			</div>
 
 			{showAddForm && (
-				<div className="mb-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-3 space-y-2">
-					<p className="text-xs font-medium text-[var(--text-secondary)]">
-						Add new provider
-					</p>
+				<div className="mb-3 rounded-lg border border-(--border-primary) bg-(--bg-secondary) p-3 space-y-2">
+					<p className="text-xs font-medium text-(--text-secondary)">Add new provider</p>
 					{providerTypes.length === 0 ? (
-						<p className="text-xs text-[var(--danger)]">
-							No provider types are available.
-						</p>
+						<p className="text-xs text-(--danger)">No provider types are available.</p>
 					) : (
 						<>
 							<select
 								value={newProviderType}
 								onChange={(e) => {
-									setNewProviderType(e.target.value as AIProviderType);
+									setNewProviderType(
+										(e.target as HTMLSelectElement).value as AIProviderType
+									);
 									setNewProviderModels([]);
 									setNewProviderModelSearch("");
 									setNewProviderCustomModelInput("");
@@ -754,14 +886,18 @@ function AISettingsSection() {
 							</select>
 							<input
 								value={newProviderName}
-								onChange={(e) => setNewProviderName(e.target.value)}
+								onChange={(e) =>
+									setNewProviderName((e.target as HTMLInputElement).value)
+								}
 								placeholder="Provider name (optional)"
 								className="input w-full text-xs"
 							/>
 							{requiresBaseURL && (
 								<input
 									value={newProviderBaseURL}
-									onChange={(e) => setNewProviderBaseURL(e.target.value)}
+									onChange={(e) =>
+										setNewProviderBaseURL((e.target as HTMLInputElement).value)
+									}
 									placeholder="Base URL (e.g. https://api.example.com/v1)"
 									className="input w-full text-xs"
 								/>
@@ -769,7 +905,9 @@ function AISettingsSection() {
 							<div className="flex gap-2">
 								<input
 									value={newProviderApiKey}
-									onChange={(e) => setNewProviderApiKey(e.target.value)}
+									onChange={(e) =>
+										setNewProviderApiKey((e.target as HTMLInputElement).value)
+									}
 									placeholder="API Key"
 									type="password"
 									className="input flex-1 text-xs"
@@ -783,18 +921,22 @@ function AISettingsSection() {
 									{loadingModels ? "..." : "Fetch Models"}
 								</button>
 							</div>
-							{modelError && (
-								<p className="text-xs text-[var(--danger)]">{modelError}</p>
-							)}
+							{modelError && <p className="text-xs text-(--danger)">{modelError}</p>}
 							<input
 								value={newProviderModelSearch}
-								onChange={(e) => setNewProviderModelSearch(e.target.value)}
+								onChange={(e) =>
+									setNewProviderModelSearch((e.target as HTMLInputElement).value)
+								}
 								placeholder="Search models"
 								className="input w-full text-xs"
 							/>
 							<select
 								value={newProviderDefaultModel}
-								onChange={(e) => setNewProviderDefaultModel(e.target.value)}
+								onChange={(e) =>
+									setNewProviderDefaultModel(
+										(e.target as HTMLSelectElement).value
+									)
+								}
 								className="input w-full text-xs"
 							>
 								<option value="">
@@ -813,7 +955,11 @@ function AISettingsSection() {
 							<div className="flex gap-2">
 								<input
 									value={newProviderCustomModelInput}
-									onChange={(e) => setNewProviderCustomModelInput(e.target.value)}
+									onChange={(e) =>
+										setNewProviderCustomModelInput(
+											(e.target as HTMLInputElement).value
+										)
+									}
 									onKeyDown={(e) => e.key === "Enter" && handleAddCustomModel()}
 									placeholder="Custom model ID"
 									className="input flex-1 text-xs"
@@ -850,7 +996,7 @@ function AISettingsSection() {
 			)}
 
 			{providers.length === 0 ? (
-				<p className="text-xs text-[var(--text-muted)]">No AI providers configured.</p>
+				<p className="text-xs text-(--text-muted)">No AI providers configured.</p>
 			) : (
 				<div className="space-y-2">
 					{providers.map((provider) => (
@@ -858,8 +1004,8 @@ function AISettingsSection() {
 							key={provider.id}
 							className={`rounded-lg border p-2 ${
 								activeProviderId === provider.id
-									? "border-[var(--border-primary)] bg-[var(--bg-active)]"
-									: "border-[var(--border-primary)]"
+									? "border-(--border-primary) bg-(--bg-active)"
+									: "border-(--border-primary)"
 							}`}
 						>
 							{editingProvider?.id === provider.id ? (
@@ -874,10 +1020,10 @@ function AISettingsSection() {
 							) : (
 								<div className="flex items-center justify-between">
 									<div className="flex-1">
-										<p className="text-xs font-medium text-[var(--text-primary)]">
+										<p className="text-xs font-medium text-(--text-primary)">
 											{provider.name}
 										</p>
-										<p className="text-[10px] text-[var(--text-muted)]">
+										<p className="text-[10px] text-(--text-muted)">
 											{providerById[provider.type]?.displayName ??
 												provider.type}
 											{provider.baseURL && ` - ${provider.baseURL}`}
@@ -888,7 +1034,7 @@ function AISettingsSection() {
 											<button
 												type="button"
 												onClick={() => handleSetActive(provider.id)}
-												className="rounded px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]"
+												className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) hover:bg-(--bg-secondary)"
 											>
 												Set Active
 											</button>
@@ -896,14 +1042,14 @@ function AISettingsSection() {
 										<button
 											type="button"
 											onClick={() => setEditingProvider(provider)}
-											className="rounded px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]"
+											className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) hover:bg-(--bg-secondary)"
 										>
 											Edit
 										</button>
 										<button
 											type="button"
 											onClick={() => handleDeleteProvider(provider.id)}
-											className="rounded px-1.5 py-0.5 text-[10px] text-[var(--danger)] hover:bg-[var(--bg-secondary)]"
+											className="rounded px-1.5 py-0.5 text-[10px] text-(--danger) hover:bg-(--bg-secondary)"
 										>
 											Delete
 										</button>
@@ -1028,14 +1174,14 @@ function ProviderEditForm({
 		<div className="space-y-2">
 			<input
 				value={name}
-				onChange={(e) => setName(e.target.value)}
+				onChange={(e) => setName((e.target as HTMLInputElement).value)}
 				placeholder="Provider name"
 				className="input w-full text-xs"
 			/>
 			<div className="flex gap-2">
 				<input
 					value={apiKey}
-					onChange={(e) => setApiKey(e.target.value)}
+					onChange={(e) => setApiKey((e.target as HTMLInputElement).value)}
 					placeholder="API Key"
 					type="password"
 					className="input flex-1 text-xs"
@@ -1049,24 +1195,24 @@ function ProviderEditForm({
 					{loadingModels ? "Loading..." : "Fetch Models"}
 				</button>
 			</div>
-			{modelError && <p className="text-xs text-[var(--danger)]">{modelError}</p>}
+			{modelError && <p className="text-xs text-(--danger)">{modelError}</p>}
 			{requiresBaseURL && (
 				<input
 					value={baseURL}
-					onChange={(e) => setBaseURL(e.target.value)}
+					onChange={(e) => setBaseURL((e.target as HTMLInputElement).value)}
 					placeholder="Base URL (e.g. https://api.example.com/v1)"
 					className="input w-full text-xs"
 				/>
 			)}
 			<input
 				value={modelSearch}
-				onChange={(e) => setModelSearch(e.target.value)}
+				onChange={(e) => setModelSearch((e.target as HTMLInputElement).value)}
 				placeholder="Search models"
 				className="input w-full text-xs"
 			/>
 			<select
 				value={defaultModel}
-				onChange={(e) => setDefaultModel(e.target.value)}
+				onChange={(e) => setDefaultModel((e.target as HTMLSelectElement).value)}
 				className="input w-full text-xs"
 			>
 				<option value="">
@@ -1085,7 +1231,7 @@ function ProviderEditForm({
 			<div className="flex gap-2">
 				<input
 					value={customModelInput}
-					onChange={(e) => setCustomModelInput(e.target.value)}
+					onChange={(e) => setCustomModelInput((e.target as HTMLInputElement).value)}
 					onKeyDown={(e) => e.key === "Enter" && handleAddCustomModel()}
 					placeholder="Custom model ID"
 					className="input flex-1 text-xs"
@@ -1146,7 +1292,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			setEffectiveConfig([]);
 			return;
 		}
-		window.gitagen.repo.getEffectiveConfig(projectId).then((entries) => {
+		window.gitagen.repo.getEffectiveConfig(projectId).then((entries: ConfigEntry[]) => {
 			setEffectiveConfig(entries);
 			const currentName = getLatestConfigValue(entries, "user.name");
 			const currentEmail = getLatestConfigValue(entries, "user.email");
@@ -1165,7 +1311,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 	}, [projectId]);
 
 	useEffect(() => {
-		window.gitagen.settings.getGlobal().then((s) => {
+		window.gitagen.settings.getGlobal().then((s: AppSettings) => {
 			setGitPath(s.gitBinaryPath);
 			setSignCommits(s.signing?.enabled ?? false);
 			setSigningKey(s.signing?.key ?? "");
@@ -1237,11 +1383,11 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 
 	return (
 		<div className="settings-page flex h-full flex-col">
-			<div className="flex shrink-0 items-center gap-3 border-b border-[var(--border-secondary)] px-4 py-3">
+			<div className="flex shrink-0 items-center gap-3 border-b border-(--border-secondary) px-4 py-3">
 				<button
 					type="button"
 					onClick={onClose}
-					className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+					className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 				>
 					<ArrowLeft size={16} />
 					Back to repo
@@ -1249,7 +1395,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			</div>
 			<div className="flex min-h-0 flex-1">
 				<nav
-					className="flex shrink-0 flex-col gap-0.5 border-r border-[var(--border-secondary)] py-3"
+					className="flex shrink-0 flex-col gap-0.5 border-r border-(--border-secondary) py-3"
 					style={{ width: 180 }}
 				>
 					{tabs.map((tab) => (
@@ -1259,8 +1405,8 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 							onClick={() => setActiveTab(tab.id)}
 							className={`flex items-center gap-3 px-4 py-2.5 text-left text-sm outline-none transition-colors ${
 								activeTab === tab.id
-									? "bg-[var(--bg-active)] font-medium text-[var(--text-primary)]"
-									: "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+									? "bg-(--bg-active) font-medium text-(--text-primary)"
+									: "text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)"
 							}`}
 						>
 							{tab.icon}
@@ -1273,19 +1419,23 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 						{activeTab === "general" && (
 							<div className="space-y-6">
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										Git
 									</h3>
-									<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+									<label className="mb-1.5 block text-xs font-medium text-(--text-secondary)">
 										Git binary
 									</label>
-									<p className="mb-2 text-xs text-[var(--text-muted)]">
+									<p className="mb-2 text-xs text-(--text-muted)">
 										Path to the git executable
 									</p>
 									<div className="flex gap-2">
 										<select
 											value={gitPath ?? ""}
-											onChange={(e) => setGitPath(e.target.value || null)}
+											onChange={(e) =>
+												setGitPath(
+													(e.target as HTMLSelectElement).value || null
+												)
+											}
 											className="input flex-1 text-[13px]"
 										>
 											<option value="">Auto (from PATH)</option>
@@ -1305,17 +1455,17 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 									</div>
 								</div>
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										UI Scale
 									</h3>
-									<p className="mb-2 text-xs text-[var(--text-muted)]">
-										75% — 150%
-									</p>
+									<p className="mb-2 text-xs text-(--text-muted)">75% — 150%</p>
 									<input
 										type="text"
 										value={String(Math.round(uiScale * 100))}
 										onChange={(e) => {
-											const v = parseFloat(e.target.value);
+											const v = parseFloat(
+												(e.target as HTMLInputElement).value
+											);
 											if (!Number.isNaN(v))
 												setUiScale(Math.min(150, Math.max(75, v)) / 100);
 										}}
@@ -1326,20 +1476,21 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										}}
 										className="input w-20 text-[13px]"
 									/>
-									<span className="ml-2 text-xs text-[var(--text-muted)]">%</span>
+									<span className="ml-2 text-xs text-(--text-muted)">%</span>
 								</div>
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										Font Size
 									</h3>
-									<p className="mb-2 text-xs text-[var(--text-muted)]">
-										12px — 18px
-									</p>
+									<p className="mb-2 text-xs text-(--text-muted)">12px — 18px</p>
 									<input
 										type="text"
 										value={String(fontSize)}
 										onChange={(e) => {
-											const v = parseInt(e.target.value, 10);
+											const v = parseInt(
+												(e.target as HTMLInputElement).value,
+												10
+											);
 											if (!Number.isNaN(v))
 												setFontSize(Math.min(18, Math.max(12, v)));
 										}}
@@ -1350,15 +1501,13 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										}}
 										className="input w-20 text-[13px]"
 									/>
-									<span className="ml-2 text-xs text-[var(--text-muted)]">
-										px
-									</span>
+									<span className="ml-2 text-xs text-(--text-muted)">px</span>
 								</div>
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										GPU acceleration
 									</h3>
-									<p className="mb-2 text-xs text-[var(--text-muted)]">
+									<p className="mb-2 text-xs text-(--text-muted)">
 										Use hardware acceleration for smoother rendering. Disable if
 										you see GPU-related errors or graphical glitches.
 									</p>
@@ -1367,14 +1516,14 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 											type="checkbox"
 											checked={gpuAcceleration}
 											onChange={(e) => {
-												const v = e.target.checked;
+												const v = (e.target as HTMLInputElement).checked;
 												setGpuAcceleration(v);
 												window.gitagen.settings.setGlobal({
 													gpuAcceleration: v,
 												});
 											}}
 										/>
-										<span className="text-sm text-[var(--text-secondary)]">
+										<span className="text-sm text-(--text-secondary)">
 											Use GPU acceleration
 										</span>
 									</label>
@@ -1385,51 +1534,57 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 							<div className="space-y-6">
 								{!projectId ? (
 									<div className="panel p-4">
-										<p className="text-sm text-[var(--text-muted)]">
+										<p className="text-sm text-(--text-muted)">
 											Open a project to edit its local git config.
 										</p>
 									</div>
 								) : (
 									<div className="panel p-4">
-										<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 											Project local git config
 										</h3>
-										<p className="mb-3 text-xs text-[var(--text-muted)]">
+										<p className="mb-3 text-xs text-(--text-muted)">
 											user.name, user.email, commit.gpgsign for this
 											repository
 										</p>
 										<div className="grid grid-cols-2 gap-3">
 											<div>
-												<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+												<label className="mb-1 block text-xs font-medium text-(--text-muted)">
 													user.name
 												</label>
 												<input
 													value={localUserName}
 													onChange={(e) =>
-														setLocalUserName(e.target.value)
+														setLocalUserName(
+															(e.target as HTMLInputElement).value
+														)
 													}
 													className="input text-xs"
 												/>
 											</div>
 											<div>
-												<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+												<label className="mb-1 block text-xs font-medium text-(--text-muted)">
 													user.email
 												</label>
 												<input
 													value={localUserEmail}
 													onChange={(e) =>
-														setLocalUserEmail(e.target.value)
+														setLocalUserEmail(
+															(e.target as HTMLInputElement).value
+														)
 													}
 													className="input text-xs"
 												/>
 											</div>
 										</div>
-										<label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]">
+										<label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-(--text-secondary)">
 											<input
 												type="checkbox"
 												checked={localSignEnabled}
 												onChange={(e) =>
-													setLocalSignEnabled(e.target.checked)
+													setLocalSignEnabled(
+														(e.target as HTMLInputElement).checked
+													)
 												}
 											/>
 											commit.gpgsign (local)
@@ -1444,14 +1599,14 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 												Apply to repo
 											</button>
 											{localConfigMessage && (
-												<p className="text-xs text-[var(--text-muted)]">
+												<p className="text-xs text-(--text-muted)">
 													{localConfigMessage}
 												</p>
 											)}
 										</div>
-										<div className="mt-3 max-h-32 overflow-auto rounded-md border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-2">
+										<div className="mt-3 max-h-32 overflow-auto rounded-md border border-(--border-primary) bg-(--bg-secondary) p-2">
 											{effectiveConfig.length === 0 ? (
-												<p className="text-xs text-[var(--text-muted)]">
+												<p className="text-xs text-(--text-muted)">
 													No effective config entries found.
 												</p>
 											) : (
@@ -1460,10 +1615,10 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 														key={`${entry.key}-${idx}`}
 														className="mb-1 text-[10px]"
 													>
-														<span className="font-medium text-[var(--text-primary)]">
+														<span className="font-medium text-(--text-primary)">
 															{entry.key}
 														</span>
-														<span className="text-[var(--text-muted)]">
+														<span className="text-(--text-muted)">
 															{" "}
 															= {entry.value} ({entry.scope},{" "}
 															{entry.origin})
@@ -1479,22 +1634,22 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 						{activeTab === "signing" && (
 							<div className="space-y-6">
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										SSH agent
 									</h3>
-									<div className="rounded-md border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-2 text-[13px]">
-										<p className="font-medium text-[var(--text-primary)]">
+									<div className="rounded-md border border-(--border-primary) bg-(--bg-secondary) px-3 py-2 text-[13px]">
+										<p className="font-medium text-(--text-primary)">
 											{sshAgentInfo.name || "Default"}
 										</p>
 										{sshAgentInfo.path && (
-											<p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
+											<p className="mt-0.5 truncate text-xs text-(--text-muted)">
 												{sshAgentInfo.path}
 											</p>
 										)}
 									</div>
 								</div>
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										Commit signing
 									</h3>
 									<label className="mb-3 flex cursor-pointer items-center gap-2">
@@ -1502,26 +1657,28 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 											type="checkbox"
 											checked={signCommits}
 											onChange={async (e) => {
-												const v = e.target.checked;
+												const v = (e.target as HTMLInputElement).checked;
 												setSignCommits(v);
 												setLocalSignEnabled(v);
 												await updateSigningSettings({ enabled: v });
 											}}
 										/>
-										<span className="text-xs font-medium text-[var(--text-secondary)]">
+										<span className="text-xs font-medium text-(--text-secondary)">
 											Sign commits
 										</span>
 									</label>
-									<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+									<label className="mb-1 block text-xs font-medium text-(--text-muted)">
 										SSH signing key
 									</label>
-									<p className="mb-2 text-[11px] text-[var(--text-muted)]">
+									<p className="mb-2 text-[11px] text-(--text-muted)">
 										Detected from git config when a project is open. Override
 										here to change or set for repos that don&apos;t have it yet.
 									</p>
 									<input
 										value={signingKey}
-										onChange={(e) => setSigningKey(e.target.value)}
+										onChange={(e) =>
+											setSigningKey((e.target as HTMLInputElement).value)
+										}
 										placeholder="e.g. ~/.ssh/id_ed25519.pub or key fingerprint"
 										className="input w-full text-xs"
 									/>
@@ -1536,7 +1693,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										</button>
 										{signingTestResult && (
 											<p
-												className={`text-xs ${signingTestResult.ok ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+												className={`text-xs ${signingTestResult.ok ? "text-(--success)" : "text-(--danger)"}`}
 											>
 												{signingTestResult.message}
 											</p>
@@ -1553,7 +1710,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 						{activeTab === "appearance" && (
 							<div className="space-y-6">
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										Theme
 									</h3>
 									<div className="flex gap-2">
@@ -1572,16 +1729,16 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 									</div>
 								</div>
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										Font family
 									</h3>
-									<p className="mb-2 text-xs text-[var(--text-muted)]">
+									<p className="mb-2 text-xs text-(--text-muted)">
 										System, Geist, or Geist Pixel
 									</p>
 									<select
 										value={fontFamily}
 										onChange={(e) => {
-											const v = e.target.value as
+											const v = (e.target as HTMLSelectElement).value as
 												| "geist"
 												| "geist-pixel"
 												| "system";
@@ -1596,17 +1753,18 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 									</select>
 								</div>
 								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
 										Commit message font size
 									</h3>
-									<p className="mb-2 text-xs text-[var(--text-muted)]">
-										12px — 18px
-									</p>
+									<p className="mb-2 text-xs text-(--text-muted)">12px — 18px</p>
 									<input
 										type="text"
 										value={String(commitMessageFontSize)}
 										onChange={(e) => {
-											const v = parseInt(e.target.value, 10);
+											const v = parseInt(
+												(e.target as HTMLInputElement).value,
+												10
+											);
 											if (!Number.isNaN(v))
 												setCommitMessageFontSize(
 													Math.min(18, Math.max(12, v))
@@ -1624,9 +1782,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										}}
 										className="input w-20 text-[13px]"
 									/>
-									<span className="ml-2 text-xs text-[var(--text-muted)]">
-										px
-									</span>
+									<span className="ml-2 text-xs text-(--text-muted)">px</span>
 								</div>
 							</div>
 						)}
@@ -1678,7 +1834,7 @@ export default function App() {
 	useEffect(() => {
 		window.gitagen?.settings
 			?.getGlobal?.()
-			.then((s) => {
+			.then((s: AppSettings | undefined) => {
 				if (s?.theme) setInitialTheme(s.theme);
 				setInitialSettings({
 					uiScale: s?.uiScale ?? 1.0,
@@ -1693,7 +1849,9 @@ export default function App() {
 	return (
 		<ThemeProvider initialTheme={initialTheme}>
 			<SettingsProvider initialSettings={initialSettings}>
-				<AppContent />
+				<ToastProvider>
+					<AppContent />
+				</ToastProvider>
 			</SettingsProvider>
 		</ThemeProvider>
 	);

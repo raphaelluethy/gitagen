@@ -1,5 +1,5 @@
 import { getAppSetting, setAppSetting } from "../cache/queries.js";
-import type { AppSettings, AIProviderInstance } from "../../../shared/types.js";
+import type { AppSettings, AIProviderInstance, CommitStyle } from "../../../shared/types.js";
 import { setAIApiKey, getAllAIApiKeys } from "./keychain.js";
 
 export async function getAppSettingsWithKeys(): Promise<AppSettings> {
@@ -21,6 +21,7 @@ const KEYS = {
 	signingKey: "signing.key",
 	aiProviders: "ai.providers",
 	aiActiveProvider: "ai.activeProviderId",
+	aiCommitStyle: "ai.commitStyle",
 	uiScale: "uiScale",
 	fontSize: "fontSize",
 	commitMessageFontSize: "commitMessageFontSize",
@@ -38,6 +39,7 @@ const DEFAULTS: AppSettings = {
 	ai: {
 		activeProviderId: null,
 		providers: [],
+		commitStyle: "conventional",
 	},
 	uiScale: 1.0,
 	fontSize: 14,
@@ -71,6 +73,15 @@ export function getAppSettings(): AppSettings {
 		}
 	}
 
+	const aiCommitStyleRaw = getAppSetting(KEYS.aiCommitStyle);
+	const commitStyle: CommitStyle =
+		aiCommitStyleRaw === "conventional" ||
+		aiCommitStyleRaw === "emoji" ||
+		aiCommitStyleRaw === "descriptive" ||
+		aiCommitStyleRaw === "imperative"
+			? aiCommitStyleRaw
+			: DEFAULTS.ai.commitStyle;
+
 	const uiScaleRaw = getAppSetting(KEYS.uiScale);
 	const uiScale = uiScaleRaw ? parseFloat(uiScaleRaw) : DEFAULTS.uiScale;
 
@@ -102,6 +113,7 @@ export function getAppSettings(): AppSettings {
 		ai: {
 			activeProviderId: aiActiveProvider,
 			providers: aiProviders,
+			commitStyle,
 		},
 		uiScale,
 		fontSize,
@@ -141,6 +153,9 @@ export async function setAppSettings(partial: Partial<AppSettings>): Promise<App
 				apiKey: "",
 			}));
 			setAppSetting(KEYS.aiProviders, JSON.stringify(providersWithoutKeys));
+		}
+		if (partial.ai.commitStyle !== undefined) {
+			setAppSetting(KEYS.aiCommitStyle, partial.ai.commitStyle);
 		}
 	}
 	if (partial.uiScale !== undefined) {

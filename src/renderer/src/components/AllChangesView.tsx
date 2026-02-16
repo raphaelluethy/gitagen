@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ChevronRight, Square, CheckSquare, ExternalLink, FileCode } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
@@ -9,6 +9,7 @@ interface AllChangesViewProps {
 	projectId: string;
 	gitStatus: GitStatus;
 	diffStyle: DiffStyle;
+	selectedFile: GitFileStatus | null;
 	onRefresh: () => void;
 }
 
@@ -22,14 +23,18 @@ function FileChangeCard({
 	diffStyle,
 	onRefresh,
 	isExpanded,
+	isSelected,
 	onToggleExpand,
+	cardRef,
 }: {
 	projectId: string;
 	file: GitFileStatus;
 	diffStyle: DiffStyle;
 	onRefresh: () => void;
 	isExpanded: boolean;
+	isSelected: boolean;
 	onToggleExpand: () => void;
+	cardRef?: React.Ref<HTMLDivElement>;
 }) {
 	const { resolved } = useTheme();
 	const [patch, setPatch] = useState<string | null>(null);
@@ -75,8 +80,11 @@ function FileChangeCard({
 	};
 
 	return (
-		<div className="border-b border-[var(--border-secondary)] last:border-b-0">
-			<div className="flex items-center gap-2 bg-[var(--bg-panel)] px-4 py-3">
+		<div
+			ref={cardRef}
+			className={`border-b border-(--border-secondary) last:border-b-0 transition-colors duration-300 ${isSelected ? "ring-2 ring-inset ring-(--accent-primary)" : ""}`}
+		>
+			<div className="flex items-center gap-2 bg-(--bg-panel) px-4 py-3">
 				<button
 					type="button"
 					onClick={onToggleExpand}
@@ -95,9 +103,9 @@ function FileChangeCard({
 					title={isStaged ? "Unstage file" : "Stage file"}
 				>
 					{isStaged ? (
-						<CheckSquare size={18} className="text-[var(--text-primary)]" />
+						<CheckSquare size={18} className="text-(--text-primary)" />
 					) : (
-						<Square size={18} className="text-[var(--text-muted)]" />
+						<Square size={18} className="text-(--text-muted)" />
 					)}
 				</button>
 				<button
@@ -108,30 +116,28 @@ function FileChangeCard({
 				>
 					<ExternalLink size={15} />
 				</button>
-				<div className="mx-2 h-4 w-px bg-[var(--border-secondary)]" />
+				<div className="mx-2 h-4 w-px bg-(--border-secondary)" />
 				<span
 					className={`badge ${changeTypeColorClass(letter)}`}
 					title={changeTypeLabel(letter)}
 				>
 					{letter}
 				</span>
-				<span className="font-mono truncate text-sm text-[var(--text-primary)]">
+				<span className="font-mono truncate text-sm text-(--text-primary)">
 					{file.path}
 				</span>
 				{isStaged && (
-					<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+					<span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider text-(--text-muted)">
 						Staged
 					</span>
 				)}
 			</div>
 			{isExpanded && (
-				<div className="border-t border-[var(--border-secondary)] bg-[var(--bg-primary)] [&_pre]:!bg-transparent [&_pre]:!font-mono [&_pre]:!text-[13px]">
+				<div className="border-t border-(--border-secondary) bg-(--bg-primary) [&_pre]:bg-transparent! [&_pre]:font-mono! [&_pre]:text-[13px]!">
 					{loading ? (
 						<div className="flex items-center gap-3 p-6">
-							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-primary)] border-t-[var(--text-muted)]" />
-							<span className="text-sm text-[var(--text-muted)]">
-								Loading diff...
-							</span>
+							<div className="h-5 w-5 animate-spin rounded-full border-2 border-(--border-primary) border-t-(--text-muted)" />
+							<span className="text-sm text-(--text-muted)">Loading diff...</span>
 						</div>
 					) : patch && patch !== "" ? (
 						<PatchDiff
@@ -145,12 +151,12 @@ function FileChangeCard({
 						/>
 					) : (
 						<div className="flex flex-col items-center gap-3 p-8 text-center">
-							<FileCode size={24} className="text-[var(--border-primary)]" />
+							<FileCode size={24} className="text-(--border-primary)" />
 							<div>
-								<p className="text-sm text-[var(--text-muted)]">
+								<p className="text-sm text-(--text-muted)">
 									No changes or binary file
 								</p>
-								<p className="mt-1 text-xs text-[var(--text-subtle)]">
+								<p className="mt-1 text-xs text-(--text-subtle)">
 									This file has no text diff to display
 								</p>
 							</div>
@@ -166,6 +172,7 @@ export default function AllChangesView({
 	projectId,
 	gitStatus,
 	diffStyle,
+	selectedFile,
 	onRefresh,
 }: AllChangesViewProps) {
 	const allFiles: GitFileStatus[] = useMemo(
@@ -179,6 +186,8 @@ export default function AllChangesView({
 		return keys;
 	});
 
+	const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
 	useEffect(() => {
 		setExpandedKeys((prev) => {
 			const next = new Set(prev);
@@ -189,6 +198,17 @@ export default function AllChangesView({
 			return next;
 		});
 	}, [allFiles]);
+
+	useEffect(() => {
+		if (!selectedFile) return;
+		const key = fileKey(selectedFile);
+		const el = cardRefs.current.get(key);
+		if (el) {
+			requestAnimationFrame(() => {
+				el.scrollIntoView({ behavior: "smooth", block: "center" });
+			});
+		}
+	}, [selectedFile]);
 
 	const toggleExpand = (file: GitFileStatus) => {
 		const k = fileKey(file);
@@ -202,33 +222,41 @@ export default function AllChangesView({
 
 	if (allFiles.length === 0) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--text-muted)]">
-				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-secondary)]">
-					<FileCode size={24} className="text-[var(--border-primary)]" />
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 text-(--text-muted)">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--bg-secondary)">
+					<FileCode size={24} className="text-(--border-primary)" />
 				</div>
 				<div className="text-center">
-					<p className="text-sm font-medium text-[var(--text-secondary)]">No changes</p>
-					<p className="mt-1 text-xs text-[var(--text-subtle)]">
-						All files are committed
-					</p>
+					<p className="text-sm font-medium text-(--text-secondary)">No changes</p>
+					<p className="mt-1 text-xs text-(--text-subtle)">All files are committed</p>
 				</div>
 			</div>
 		);
 	}
 
+	const selectedKey = selectedFile ? fileKey(selectedFile) : null;
+
 	return (
 		<div className="min-h-0 flex-1 overflow-auto">
-			{allFiles.map((file) => (
-				<FileChangeCard
-					key={fileKey(file)}
-					projectId={projectId}
-					file={file}
-					diffStyle={diffStyle}
-					onRefresh={onRefresh}
-					isExpanded={expandedKeys.has(fileKey(file))}
-					onToggleExpand={() => toggleExpand(file)}
-				/>
-			))}
+			{allFiles.map((file) => {
+				const key = fileKey(file);
+				return (
+					<FileChangeCard
+						key={key}
+						projectId={projectId}
+						file={file}
+						diffStyle={diffStyle}
+						onRefresh={onRefresh}
+						isExpanded={expandedKeys.has(key)}
+						isSelected={key === selectedKey}
+						onToggleExpand={() => toggleExpand(file)}
+						cardRef={(el: HTMLDivElement | null) => {
+							if (el) cardRefs.current.set(key, el);
+							else cardRefs.current.delete(key);
+						}}
+					/>
+				);
+			})}
 		</div>
 	);
 }

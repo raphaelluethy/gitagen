@@ -36,10 +36,15 @@ export function validateGitBinary(binaryPath: string | null): boolean {
 	}
 }
 
+export function resolveGitBinary(binaryPath: string | null): string | null {
+	if (!binaryPath) return null;
+	return validateGitBinary(binaryPath) ? binaryPath : null;
+}
+
 export function createGitProvider(settings: Partial<AppSettings> = {}): GitProvider {
 	const use1Password = settings.signing?.use1PasswordAgent ?? false;
 	const env: NodeJS.ProcessEnv = buildGitEnv(use1Password);
-	const binary = settings.gitBinaryPath ?? null;
+	const binary = resolveGitBinary(settings.gitBinaryPath ?? null);
 	return createSimpleGitProvider(binary, env);
 }
 

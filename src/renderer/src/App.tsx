@@ -1,7 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
-import { Rows3, Columns, Plus, FolderOpen, Settings, History, Archive, Cloud } from "lucide-react";
+import {
+	Rows3,
+	Columns,
+	Plus,
+	FolderOpen,
+	Settings,
+	History,
+	Archive,
+	Cloud,
+	FileStack,
+	FileText,
+} from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import DiffViewer from "./components/DiffViewer";
+import AllChangesView from "./components/AllChangesView";
 import CommitPanel from "./components/CommitPanel";
 import BranchSelector from "./components/BranchSelector";
 import WorktreeSelector from "./components/WorktreeSelector";
@@ -11,21 +23,39 @@ import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
 import ConflictBanner from "./components/ConflictBanner";
 import { ThemeProvider, useTheme } from "./theme/provider";
-import type { Project, RepoStatus, GitFileStatus, DiffStyle } from "../../shared/types";
+import type {
+	Project,
+	RepoStatus,
+	GitFileStatus,
+	DiffStyle,
+	ConfigEntry,
+} from "../../shared/types";
 
 type RightPanelTab = "log" | "stash" | "remote";
+type ViewMode = "single" | "all";
 
 function repoStatusToGitFileStatus(
 	status: RepoStatus,
 	type: "staged" | "unstaged" | "untracked"
 ): GitFileStatus[] {
-	const paths =
+	const items =
 		type === "staged"
 			? status.staged
 			: type === "unstaged"
 				? status.unstaged
 				: status.untracked;
-	return paths.map((path) => ({ path, status: type }));
+	return items.map((item) => ({
+		path: typeof item === "string" ? item : item.path,
+		status: type,
+		changeType: typeof item === "string" ? "M" : item.changeType,
+	}));
+}
+
+function getLatestConfigValue(entries: ConfigEntry[], key: string): string {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		if (entries[i]?.key === key) return entries[i]?.value ?? "";
+	}
+	return "";
 }
 
 function AppContent() {
@@ -35,6 +65,7 @@ function AppContent() {
 	const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
 	const [selectedFile, setSelectedFile] = useState<GitFileStatus | null>(null);
 	const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
+	const [viewMode, setViewMode] = useState<ViewMode>("single");
 	const [showSettings, setShowSettings] = useState(false);
 	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
 	const [loading, setLoading] = useState(true);
@@ -69,6 +100,27 @@ function AppContent() {
 			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
 		});
 	}, [activeProject?.id]);
+
+	useEffect(() => {
+		const unsubscribeUpdated = window.gitagen.events.onRepoUpdated((payload) => {
+			if (!activeProject || payload.projectId !== activeProject.id) return;
+			refreshStatus();
+		});
+		const unsubscribeConflicts = window.gitagen.events.onConflictDetected((payload) => {
+			if (!activeProject || payload.projectId !== activeProject.id) return;
+			refreshStatus();
+		});
+		const unsubscribeErrors = window.gitagen.events.onRepoError((payload) => {
+			if (!activeProject) return;
+			if (payload.projectId && payload.projectId !== activeProject.id) return;
+			console.error(`[${payload.name}] ${payload.message}`);
+		});
+		return () => {
+			unsubscribeUpdated();
+			unsubscribeConflicts();
+			unsubscribeErrors();
+		};
+	}, [activeProject?.id, refreshStatus]);
 
 	const handleAddProject = async () => {
 		const path: string | null = await window.gitagen.settings.selectFolder();
@@ -203,6 +255,30 @@ function AppContent() {
 							/>
 							<button
 								type="button"
+								onClick={() => setViewMode("single")}
+								title="Single file"
+								className={`flex items-center gap-2 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
+									viewMode === "single"
+										? "bg-zinc-300 text-zinc-900 dark:bg-zinc-700 dark:text-white"
+										: "text-zinc-500 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+								}`}
+							>
+								<FileText size={14} />
+							</button>
+							<button
+								type="button"
+								onClick={() => setViewMode("all")}
+								title="All changes"
+								className={`flex items-center gap-2 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
+									viewMode === "all"
+										? "bg-zinc-300 text-zinc-900 dark:bg-zinc-700 dark:text-white"
+										: "text-zinc-500 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+								}`}
+							>
+								<FileStack size={14} />
+							</button>
+							<button
+								type="button"
 								onClick={() => setDiffStyle("unified")}
 								title="Stacked"
 								className={`flex items-center gap-2 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
@@ -212,7 +288,6 @@ function AppContent() {
 								}`}
 							>
 								<Rows3 size={14} />
-								Stacked
 							</button>
 							<button
 								type="button"
@@ -225,7 +300,6 @@ function AppContent() {
 								}`}
 							>
 								<Columns size={14} />
-								Side by side
 							</button>
 						</div>
 						<button
@@ -239,12 +313,22 @@ function AppContent() {
 					</div>
 					<div className="flex min-h-0 flex-1">
 						<div className="flex min-w-0 flex-1 flex-col">
-							<DiffViewer
-								projectId={activeProject.id}
-								repoPath={gitStatus.repoPath}
-								selectedFile={selectedFile}
-								diffStyle={diffStyle}
-							/>
+							{viewMode === "all" ? (
+								<AllChangesView
+									projectId={activeProject.id}
+									gitStatus={gitStatus}
+									diffStyle={diffStyle}
+									onRefresh={refreshStatus}
+								/>
+							) : (
+								<DiffViewer
+									projectId={activeProject.id}
+									repoPath={gitStatus.repoPath}
+									selectedFile={selectedFile}
+									diffStyle={diffStyle}
+									onRefresh={refreshStatus}
+								/>
+							)}
 							<CommitPanel projectId={activeProject.id} onCommit={refreshStatus} />
 						</div>
 						<div className="w-64 shrink-0 flex flex-col border-l border-zinc-200 dark:border-zinc-800">
@@ -302,35 +386,90 @@ function AppContent() {
 					</div>
 				</main>
 			</div>
-			{showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+			{showSettings && (
+				<SettingsPanel
+					projectId={activeProject.id}
+					onClose={() => setShowSettings(false)}
+				/>
+			)}
 		</div>
 	);
 }
 
-function SettingsPanel({ onClose }: { onClose: () => void }) {
+function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClose: () => void }) {
 	const [gitPath, setGitPath] = useState<string | null>(null);
 	const [gitBinaries, setGitBinaries] = useState<string[]>([]);
 	const [signCommits, setSignCommits] = useState(false);
+	const [signingFormat, setSigningFormat] = useState<"ssh" | "gpg">("ssh");
+	const [signingKey, setSigningKey] = useState("");
 	const [use1PasswordAgent, setUse1PasswordAgent] = useState(false);
+	const [effectiveConfig, setEffectiveConfig] = useState<ConfigEntry[]>([]);
+	const [localUserName, setLocalUserName] = useState("");
+	const [localUserEmail, setLocalUserEmail] = useState("");
+	const [localSignEnabled, setLocalSignEnabled] = useState(false);
+	const [savingLocalConfig, setSavingLocalConfig] = useState(false);
+	const [localConfigMessage, setLocalConfigMessage] = useState<string | null>(null);
+	const [signingTestResult, setSigningTestResult] = useState<{
+		ok: boolean;
+		message: string;
+	} | null>(null);
 	const [sshAgentInfo, setSshAgentInfo] = useState<{
 		name: string;
 		path: string | null;
 	}>({ name: "", path: null });
 	const { theme, setTheme } = useTheme();
 
+	const loadEffectiveConfig = useCallback(() => {
+		if (!projectId) {
+			setEffectiveConfig([]);
+			return;
+		}
+		window.gitagen.repo.getEffectiveConfig(projectId).then((entries) => {
+			setEffectiveConfig(entries);
+			const currentName = getLatestConfigValue(entries, "user.name");
+			const currentEmail = getLatestConfigValue(entries, "user.email");
+			const currentSign = getLatestConfigValue(entries, "commit.gpgsign").toLowerCase();
+			setLocalUserName(currentName);
+			setLocalUserEmail(currentEmail);
+			setLocalSignEnabled(
+				currentSign === "1" ||
+					currentSign === "true" ||
+					currentSign === "yes" ||
+					currentSign === "on"
+			);
+		});
+	}, [projectId]);
+
 	useEffect(() => {
 		window.gitagen.settings.getGlobal().then((s) => {
 			setGitPath(s.gitBinaryPath);
 			setSignCommits(s.signing?.enabled ?? false);
+			setSigningFormat(s.signing?.format ?? "ssh");
+			setSigningKey(s.signing?.key ?? "");
 			setUse1PasswordAgent(s.signing?.use1PasswordAgent ?? false);
 		});
 		window.gitagen.settings.discoverGitBinaries().then(setGitBinaries);
 		window.gitagen.settings.getSshAgentInfo().then(setSshAgentInfo);
-	}, []);
+		loadEffectiveConfig();
+	}, [loadEffectiveConfig]);
 
 	useEffect(() => {
 		window.gitagen.settings.getSshAgentInfo().then(setSshAgentInfo);
 	}, [use1PasswordAgent]);
+
+	const updateSigningSettings = async (
+		partial: Partial<{
+			enabled: boolean;
+			format: "ssh" | "gpg";
+			key: string;
+			use1PasswordAgent: boolean;
+		}>
+	) => {
+		const settings = await window.gitagen.settings.getGlobal();
+		await window.gitagen.settings.setGlobal({
+			signing: { ...settings.signing, ...partial },
+		});
+	};
 
 	const handleGitBinaryChange = (value: string) => {
 		const path = value === "" ? null : value;
@@ -346,17 +485,48 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 		}
 	};
 
+	const handleTestSigning = async () => {
+		if (!projectId) return;
+		const result = await window.gitagen.repo.testSigning(projectId, signingFormat, signingKey);
+		setSigningTestResult(result);
+	};
+
+	const handleSaveLocalConfig = async () => {
+		if (!projectId) return;
+		setSavingLocalConfig(true);
+		setLocalConfigMessage(null);
+		try {
+			await window.gitagen.repo.setLocalConfig(projectId, "user.name", localUserName);
+			await window.gitagen.repo.setLocalConfig(projectId, "user.email", localUserEmail);
+			await window.gitagen.repo.setLocalConfig(
+				projectId,
+				"commit.gpgsign",
+				localSignEnabled ? "true" : "false"
+			);
+			await window.gitagen.repo.setLocalConfig(projectId, "gpg.format", signingFormat);
+			await window.gitagen.repo.setLocalConfig(projectId, "user.signingkey", signingKey);
+			setLocalConfigMessage("Saved local git config.");
+			loadEffectiveConfig();
+		} catch (error) {
+			setLocalConfigMessage(
+				error instanceof Error ? error.message : "Failed to save local config."
+			);
+		} finally {
+			setSavingLocalConfig(false);
+		}
+	};
+
 	return (
 		<div
 			className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 			onClick={onClose}
 		>
 			<div
-				className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900 dark:text-zinc-100"
+				className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900 dark:text-zinc-100"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<h2 className="mb-4 text-lg font-semibold">Settings</h2>
-				<div className="space-y-4">
+				<div className="space-y-5">
 					<div>
 						<label className="mb-1 block text-sm font-medium">Git binary</label>
 						<div className="flex gap-2">
@@ -398,10 +568,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 								onChange={async (e) => {
 									const v = e.target.checked;
 									setUse1PasswordAgent(v);
-									const s = await window.gitagen.settings.getGlobal();
-									await window.gitagen.settings.setGlobal({
-										signing: { ...s.signing, use1PasswordAgent: v },
-									});
+									await updateSigningSettings({ use1PasswordAgent: v });
 									window.gitagen.settings.getSshAgentInfo().then(setSshAgentInfo);
 								}}
 								className="rounded"
@@ -419,18 +586,130 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 								onChange={async (e) => {
 									const v = e.target.checked;
 									setSignCommits(v);
-									const s = await window.gitagen.settings.getGlobal();
-									await window.gitagen.settings.setGlobal({
-										signing: { ...s.signing, enabled: v },
-									});
+									setLocalSignEnabled(v);
+									await updateSigningSettings({ enabled: v });
 								}}
 								className="rounded"
 							/>
 							<span className="text-sm font-medium">Sign commits</span>
 						</label>
-						<p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-							Uses SSH key from git config (all projects)
-						</p>
+						<div className="mt-2 grid grid-cols-2 gap-3">
+							<div>
+								<label className="mb-1 block text-xs font-medium">
+									Signing format
+								</label>
+								<select
+									value={signingFormat}
+									onChange={async (e) => {
+										const next = e.target.value as "ssh" | "gpg";
+										setSigningFormat(next);
+										await updateSigningSettings({ format: next });
+									}}
+									className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+								>
+									<option value="ssh">SSH</option>
+									<option value="gpg">GPG</option>
+								</select>
+							</div>
+							<div>
+								<label className="mb-1 block text-xs font-medium">
+									Signing key
+								</label>
+								<input
+									value={signingKey}
+									onChange={async (e) => {
+										const next = e.target.value;
+										setSigningKey(next);
+										await updateSigningSettings({ key: next });
+									}}
+									placeholder="key id or ssh key path"
+									className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+								/>
+							</div>
+						</div>
+						<div className="mt-2 flex items-center gap-2">
+							<button
+								type="button"
+								onClick={handleTestSigning}
+								disabled={!projectId}
+								className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+							>
+								Test signing
+							</button>
+							{signingTestResult && (
+								<p
+									className={`text-xs ${
+										signingTestResult.ok
+											? "text-emerald-600 dark:text-emerald-400"
+											: "text-red-600 dark:text-red-400"
+									}`}
+								>
+									{signingTestResult.message}
+								</p>
+							)}
+						</div>
+					</div>
+					<div className="rounded border border-zinc-200 p-3 dark:border-zinc-700">
+						<p className="mb-2 text-sm font-medium">Project local git config</p>
+						<div className="grid grid-cols-2 gap-3">
+							<div>
+								<label className="mb-1 block text-xs font-medium">user.name</label>
+								<input
+									value={localUserName}
+									onChange={(e) => setLocalUserName(e.target.value)}
+									className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+								/>
+							</div>
+							<div>
+								<label className="mb-1 block text-xs font-medium">user.email</label>
+								<input
+									value={localUserEmail}
+									onChange={(e) => setLocalUserEmail(e.target.value)}
+									className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+								/>
+							</div>
+						</div>
+						<label className="mt-2 flex items-center gap-2 text-xs">
+							<input
+								type="checkbox"
+								checked={localSignEnabled}
+								onChange={(e) => setLocalSignEnabled(e.target.checked)}
+								className="rounded"
+							/>
+							commit.gpgsign (local)
+						</label>
+						<div className="mt-2 flex items-center gap-2">
+							<button
+								type="button"
+								onClick={handleSaveLocalConfig}
+								disabled={!projectId || savingLocalConfig}
+								className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+							>
+								Apply to repo
+							</button>
+							{localConfigMessage && (
+								<p className="text-xs text-zinc-500 dark:text-zinc-400">
+									{localConfigMessage}
+								</p>
+							)}
+						</div>
+						<div className="mt-3 max-h-32 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800">
+							{effectiveConfig.length === 0 ? (
+								<p className="text-xs text-zinc-500 dark:text-zinc-400">
+									No effective config entries found.
+								</p>
+							) : (
+								effectiveConfig.slice(-20).map((entry, idx) => (
+									<div key={`${entry.key}-${idx}`} className="mb-1 text-[10px]">
+										<span className="font-medium">{entry.key}</span>
+										<span className="text-zinc-500 dark:text-zinc-400">
+											{" "}
+											= {entry.value} ({entry.scope}, {entry.origin})
+										</span>
+									</div>
+								))
+							)}
+						</div>
 					</div>
 					<div>
 						<label className="mb-1 block text-sm font-medium">Theme</label>

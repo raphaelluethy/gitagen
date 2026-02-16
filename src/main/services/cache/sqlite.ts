@@ -101,9 +101,7 @@ function runMigrations(database: Database.Database): void {
 					DROP TABLE IF EXISTS project_prefs;
 				`);
 			}
-			database
-				.prepare("INSERT OR IGNORE INTO schema_version (version) VALUES (?)")
-				.run(v);
+			database.prepare("INSERT OR IGNORE INTO schema_version (version) VALUES (?)").run(v);
 		}
 	}
 }

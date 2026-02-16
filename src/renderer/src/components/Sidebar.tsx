@@ -9,6 +9,7 @@ import {
 	FolderOpen,
 } from "lucide-react";
 import type { GitStatus, GitFileStatus } from "../../../shared/types";
+import { changeTypeColorClass } from "../utils/status-badge";
 
 interface SidebarProps {
 	status: GitStatus;
@@ -107,6 +108,7 @@ function TreeItem({
 	if (node.type === "file" && node.file) {
 		const isSelected =
 			selectedFile?.path === node.file.path && selectedFile?.status === node.file.status;
+		const letter = node.file.changeType ?? "M";
 		return (
 			<button
 				type="button"
@@ -117,7 +119,13 @@ function TreeItem({
 			>
 				<File size={14} className="shrink-0 text-zinc-500" strokeWidth={2} />
 				<span
-					className={`block truncate ${isSelected ? "bg-zinc-700 text-white" : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"}`}
+					className={`flex h-4 min-w-4 items-center justify-center rounded px-1 text-[10px] font-bold ${changeTypeColorClass(letter)}`}
+					title={letter === "M" ? "modified" : letter === "A" ? "added" : letter === "D" ? "deleted" : letter === "R" ? "renamed" : "untracked"}
+				>
+					{letter}
+				</span>
+				<span
+					className={`block flex-1 truncate ${isSelected ? "bg-zinc-700 text-white" : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"}`}
 				>
 					{node.name}
 				</span>

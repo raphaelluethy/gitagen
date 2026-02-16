@@ -1,11 +1,16 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow } from "electron";
 import { join } from "path";
 import { closeDb, getDb } from "./services/cache/sqlite.js";
 import { runRetention } from "./services/cache/retention.js";
+import { getAppSettings, setAppSettings } from "./services/settings/store.js";
+import { validateGitBinary } from "./services/git/index.js";
 import { registerProjectsHandlers } from "./ipc/projects.js";
 import { registerSettingsHandlers } from "./ipc/settings.js";
 import { registerRepoHandlers } from "./ipc/repo.js";
 import { registerEventsHandlers } from "./ipc/events.js";
+
+const RETENTION_INTERVAL_MS = 30 * 60 * 1000;
+let retentionInterval: NodeJS.Timeout | null = null;
 
 function createWindow(): BrowserWindow {
 	const win = new BrowserWindow({
@@ -32,7 +37,15 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
 	// Initialize DB and run retention
 	getDb();
+
+	const appSettings = getAppSettings();
+	if (appSettings.gitBinaryPath && !validateGitBinary(appSettings.gitBinaryPath)) {
+		setAppSettings({ gitBinaryPath: null });
+	}
+
 	runRetention();
+	retentionInterval = setInterval(runRetention, RETENTION_INTERVAL_MS);
+	retentionInterval.unref();
 
 	registerProjectsHandlers();
 	registerSettingsHandlers();
@@ -51,5 +64,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("quit", () => {
+	if (retentionInterval) {
+		clearInterval(retentionInterval);
+		retentionInterval = null;
+	}
 	closeDb();
 });

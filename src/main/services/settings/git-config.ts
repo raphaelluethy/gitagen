@@ -39,9 +39,49 @@ export function getEffectiveConfig(cwd: string): ConfigEntry[] {
 }
 
 export function setLocalConfig(cwd: string, key: string, value: string): void {
-	spawnSync("git", ["config", "--local", key, value], {
+	const result = spawnSync("git", ["config", "--local", key, value], {
 		cwd,
 		encoding: "utf-8",
 		env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
 	});
+	if (result.status !== 0) {
+		throw new Error(
+			result.stderr?.trim() || result.stdout?.trim() || "Failed to set local config"
+		);
+	}
+}
+
+export function testSigningConfig(
+	cwd: string,
+	format: "ssh" | "gpg",
+	key: string
+): { ok: boolean; message: string } {
+	if (!key.trim()) {
+		return { ok: false, message: "Signing key is required." };
+	}
+	const result = spawnSync(
+		"git",
+		[
+			"-c",
+			`gpg.format=${format}`,
+			"-c",
+			`user.signingkey=${key}`,
+			"config",
+			"--get",
+			"user.signingkey",
+		],
+		{
+			cwd,
+			encoding: "utf-8",
+			env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+		}
+	);
+	if (result.status === 0 && result.stdout.trim() === key.trim()) {
+		return { ok: true, message: "Signing configuration looks valid." };
+	}
+	return {
+		ok: false,
+		message:
+			result.stderr?.trim() || result.stdout?.trim() || "Could not validate signing setup.",
+	};
 }

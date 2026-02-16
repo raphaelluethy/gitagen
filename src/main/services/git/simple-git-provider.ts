@@ -166,15 +166,25 @@ export function createSimpleGitProvider(
 				if (!status) return null;
 				const headOid = (head as { value?: string })?.value?.trim() ?? "";
 				const currentBranch = (branch as { current?: string })?.current ?? "";
-				const staged: string[] = [];
-				const unstaged: string[] = [];
-				const untracked: string[] = [];
+				const stagedPaths = new Set<string>();
+				const unstagedPaths = new Set<string>();
+				const staged: { path: string; changeType: string }[] = [];
+				const unstaged: { path: string; changeType: string }[] = [];
+				const untracked: { path: string; changeType: string }[] = [];
 				for (const f of status.files) {
-					if (f.index !== " " && f.index !== "?") staged.push(f.path);
-					if (f.working_dir !== " " && f.working_dir !== "?") unstaged.push(f.path);
+					if (f.index !== " " && f.index !== "?") {
+						stagedPaths.add(f.path);
+						staged.push({ path: f.path, changeType: f.index });
+					}
+					if (f.working_dir !== " " && f.working_dir !== "?") {
+						unstagedPaths.add(f.path);
+						unstaged.push({ path: f.path, changeType: f.working_dir });
+					}
 				}
 				for (const p of status.not_added) {
-					if (!staged.includes(p) && !unstaged.includes(p)) untracked.push(p);
+					if (!stagedPaths.has(p) && !unstagedPaths.has(p)) {
+						untracked.push({ path: p, changeType: "?" });
+					}
 				}
 				return { headOid, branch: currentBranch, staged, unstaged, untracked };
 			} catch {

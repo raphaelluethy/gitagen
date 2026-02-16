@@ -1,11 +1,14 @@
 # Gitagen v1 Plan: Fast Electron Git Client (Tailwind + SQLite Cache)
 
 ## Summary
+
 Build a macOS-first Electron app with a two-pane layout:
+
 - Left sidebar: `Projects` section on top, collapsible repository file tree, worktree panel.
 - Center panel: diff viewer using `@pierre/diffs` (`PatchDiff`) with `unstaged` and `staged` toggle, plus commit panel, branch selector, and full git workflow controls.
 
 Core goals:
+
 - Very fast startup (interactive under 500ms).
 - Fast project switching and diff loading via SQLite-backed cache.
 - Use `simple-git` first, with a pluggable git adapter layer for fallback/custom git commands when needed.
@@ -61,11 +64,11 @@ Worktrees are stored under `~/.gitagen/<project-name>/<5-random-words-joined-by-
 
 - **Naming**: Generate names from a built-in word list (e.g., 2048 common English words). Example: `brave-ocean-swift-morning-delta`.
 - **Service** (`src/main/services/worktree/`):
-  - `listWorktrees(repoPath)` — `git worktree list --porcelain`
-  - `addWorktree(repoPath, branch, newBranch?)` — creates worktree at the conventional path
-  - `removeWorktree(repoPath, worktreePath)` — `git worktree remove`
-  - `pruneWorktrees(repoPath)` — `git worktree prune`
-  - Ensure `~/.gitagen/<project>/` directory structure is created/cleaned up.
+    - `listWorktrees(repoPath)` — `git worktree list --porcelain`
+    - `addWorktree(repoPath, branch, newBranch?)` — creates worktree at the conventional path
+    - `removeWorktree(repoPath, worktreePath)` — `git worktree remove`
+    - `pruneWorktrees(repoPath)` — `git worktree prune`
+    - Ensure `~/.gitagen/<project>/` directory structure is created/cleaned up.
 - **UI**: Worktree panel in sidebar showing all worktrees for the current project. Actions: add (with branch picker), switch (opens worktree as active context), remove.
 - **Project model change**: `Project` gains `worktrees: WorktreeInfo[]` and `activeWorktreePath?: string`.
 
@@ -88,9 +91,9 @@ Minimal for now — full theming deferred to a later iteration.
 - **Dependency**: Add `better-sqlite3` + `@types/better-sqlite3`.
 - **DB location**: `app.getPath('userData')/gitagen.db`.
 - **Service** (`src/main/services/cache/`):
-  - `sqlite.ts` — DB init, schema creation, migrations via a `schema_version` table.
-  - `queries.ts` — typed query functions for each table.
-  - `retention.ts` — LRU (500MB cap) + TTL (30 days) cleanup, runs on startup and every 30 minutes.
+    - `sqlite.ts` — DB init, schema creation, migrations via a `schema_version` table.
+    - `queries.ts` — typed query functions for each table.
+    - `retention.ts` — LRU (500MB cap) + TTL (30 days) cleanup, runs on startup and every 30 minutes.
 
 **Schema (6 tables)**:
 
@@ -119,6 +122,7 @@ Minimal for now — full theming deferred to a later iteration.
 ## 7. Full Git Workflow
 
 ### Staging Area
+
 - `repo.stageFiles(projectId, paths[])` — `git add`
 - `repo.unstageFiles(projectId, paths[])` — `git restore --staged`
 - `repo.stageAll(projectId)` — `git add -A`
@@ -127,10 +131,12 @@ Minimal for now — full theming deferred to a later iteration.
 - `repo.discardAllUnstaged(projectId)` — `git restore .`
 
 ### Commit
+
 - `repo.commit(projectId, { message, amend?, sign? })` — `git commit`
 - `repo.getLog(projectId, { limit?, branch?, offset? })` — `git log` with parsed output
 
 ### Branches
+
 - `repo.listBranches(projectId)` — local + remote branches with tracking info
 - `repo.createBranch(projectId, name, startPoint?)` — `git branch` or `git checkout -b`
 - `repo.switchBranch(projectId, name)` — `git switch`
@@ -139,6 +145,7 @@ Minimal for now — full theming deferred to a later iteration.
 - `repo.mergeBranch(projectId, source, { noFf?, squash?, message? })` — `git merge`
 
 ### Remote Operations
+
 - `repo.fetch(projectId, { remote?, prune? })` — `git fetch`
 - `repo.pull(projectId, { remote?, branch?, rebase? })` — `git pull`
 - `repo.push(projectId, { remote?, branch?, force?, setUpstream? })` — `git push`
@@ -146,6 +153,7 @@ Minimal for now — full theming deferred to a later iteration.
 - `repo.addRemote(projectId, name, url)` / `repo.removeRemote(projectId, name)`
 
 ### Stash
+
 - `repo.stash(projectId, { message?, includeUntracked? })` — `git stash`
 - `repo.stashPop(projectId, index?)` — `git stash pop`
 - `repo.stashApply(projectId, index?)` — `git stash apply`
@@ -153,22 +161,26 @@ Minimal for now — full theming deferred to a later iteration.
 - `repo.stashDrop(projectId, index?)` — `git stash drop`
 
 ### Tags
+
 - `repo.listTags(projectId)` — `git tag -l`
 - `repo.createTag(projectId, name, { message?, ref?, sign? })` — `git tag`
 - `repo.deleteTag(projectId, name)` — `git tag -d`
 
 ### Rebase
+
 - `repo.rebase(projectId, { onto })` — `git rebase` (non-interactive only for v1)
 - `repo.rebaseAbort(projectId)` — `git rebase --abort`
 - `repo.rebaseContinue(projectId)` — `git rebase --continue`
 - `repo.rebaseSkip(projectId)` — `git rebase --skip`
 
 ### Cherry-pick
+
 - `repo.cherryPick(projectId, refs[])` — `git cherry-pick`
 - `repo.cherryPickAbort(projectId)` — `git cherry-pick --abort`
 - `repo.cherryPickContinue(projectId)` — `git cherry-pick --continue`
 
 ### Conflict Resolution
+
 - `repo.getConflictFiles(projectId)` — files with merge conflicts
 - `repo.markResolved(projectId, paths[])` — `git add` resolved files
 - Diff panel shows conflict markers for conflicted files
@@ -237,35 +249,68 @@ src/
 
 ```typescript
 window.gitagen = {
-  // Projects
-  projects: { list, add, remove, switchTo },
+	// Projects
+	projects: { list, add, remove, switchTo },
 
-  // Repo operations (full workflow)
-  repo: {
-    getTree, getStatus, getPatch, refresh,
-    stageFiles, unstageFiles, stageAll, unstageAll,
-    discardFiles, discardAllUnstaged,
-    commit, getLog,
-    listBranches, createBranch, switchBranch, deleteBranch,
-    renameBranch, mergeBranch,
-    fetch, pull, push, listRemotes, addRemote, removeRemote,
-    stash, stashPop, stashApply, stashList, stashDrop,
-    listTags, createTag, deleteTag,
-    rebase, rebaseAbort, rebaseContinue, rebaseSkip,
-    cherryPick, cherryPickAbort, cherryPickContinue,
-    getConflictFiles, markResolved,
-    getEffectiveConfig,
-    listWorktrees, addWorktree, removeWorktree,
-  },
+	// Repo operations (full workflow)
+	repo: {
+		getTree,
+		getStatus,
+		getPatch,
+		refresh,
+		stageFiles,
+		unstageFiles,
+		stageAll,
+		unstageAll,
+		discardFiles,
+		discardAllUnstaged,
+		commit,
+		getLog,
+		listBranches,
+		createBranch,
+		switchBranch,
+		deleteBranch,
+		renameBranch,
+		mergeBranch,
+		fetch,
+		pull,
+		push,
+		listRemotes,
+		addRemote,
+		removeRemote,
+		stash,
+		stashPop,
+		stashApply,
+		stashList,
+		stashDrop,
+		listTags,
+		createTag,
+		deleteTag,
+		rebase,
+		rebaseAbort,
+		rebaseContinue,
+		rebaseSkip,
+		cherryPick,
+		cherryPickAbort,
+		cherryPickContinue,
+		getConflictFiles,
+		markResolved,
+		getEffectiveConfig,
+		listWorktrees,
+		addWorktree,
+		removeWorktree,
+	},
 
-  // Settings
-  settings: {
-    getGlobal, setGlobal,
-    getProjectPrefs, setProjectPrefs,
-  },
+	// Settings
+	settings: {
+		getGlobal,
+		setGlobal,
+		getProjectPrefs,
+		setProjectPrefs,
+	},
 
-  // Events
-  events: { onRepoUpdated, onRepoError, onConflictDetected },
+	// Events
+	events: { onRepoUpdated, onRepoError, onConflictDetected },
 };
 ```
 
@@ -275,88 +320,88 @@ window.gitagen = {
 
 ```typescript
 interface AppSettings {
-  gitBinaryPath: string | null;     // null = auto-detect from PATH
-  theme: "dark" | "light" | "system";
-  signing: {
-    enabled: boolean;
-    format: "ssh" | "gpg";
-    key: string;                     // key path or fingerprint
-    use1PasswordAgent: boolean;
-  };
+	gitBinaryPath: string | null; // null = auto-detect from PATH
+	theme: "dark" | "light" | "system";
+	signing: {
+		enabled: boolean;
+		format: "ssh" | "gpg";
+		key: string; // key path or fingerprint
+		use1PasswordAgent: boolean;
+	};
 }
 
 interface Project {
-  id: string;
-  name: string;
-  path: string;
-  lastOpenedAt: number;
-  createdAt: number;
-  worktrees?: WorktreeInfo[];
-  activeWorktreePath?: string;
+	id: string;
+	name: string;
+	path: string;
+	lastOpenedAt: number;
+	createdAt: number;
+	worktrees?: WorktreeInfo[];
+	activeWorktreePath?: string;
 }
 
 interface WorktreeInfo {
-  path: string;
-  branch: string;
-  head: string;
-  isMainWorktree: boolean;
-  name: string;                      // the 5-word generated name
+	path: string;
+	branch: string;
+	head: string;
+	isMainWorktree: boolean;
+	name: string; // the 5-word generated name
 }
 
 interface TreeNode {
-  path: string;
-  name: string;
-  kind: "file" | "dir";
-  depth: number;
-  hasChildren: boolean;
-  gitStatus?: string;
+	path: string;
+	name: string;
+	kind: "file" | "dir";
+	depth: number;
+	hasChildren: boolean;
+	gitStatus?: string;
 }
 
 interface RepoStatus {
-  headOid: string;
-  branch: string;
-  staged: string[];
-  unstaged: string[];
-  untracked: string[];
+	headOid: string;
+	branch: string;
+	staged: string[];
+	unstaged: string[];
+	untracked: string[];
 }
 
 interface PatchResult {
-  filePath: string;
-  scope: "staged" | "unstaged";
-  patch: string;
-  fromCache: boolean;
-  fingerprint: string;
+	filePath: string;
+	scope: "staged" | "unstaged";
+	patch: string;
+	fromCache: boolean;
+	fingerprint: string;
 }
 
 interface ProjectPrefs {
-  includeIgnored: boolean;
-  changedOnly: boolean;
-  expandedDirs: string[];
-  selectedFilePath: string | null;
-  sidebarScrollTop: number;
+	includeIgnored: boolean;
+	changedOnly: boolean;
+	expandedDirs: string[];
+	selectedFilePath: string | null;
+	sidebarScrollTop: number;
 }
 
 interface CommitInfo {
-  oid: string;
-  message: string;
-  author: { name: string; email: string; date: string };
-  parents: string[];
-  signed: boolean;
+	oid: string;
+	message: string;
+	author: { name: string; email: string; date: string };
+	parents: string[];
+	signed: boolean;
 }
 
 interface BranchInfo {
-  name: string;
-  current: boolean;
-  tracking?: string;
-  ahead: number;
-  behind: number;
+	name: string;
+	current: boolean;
+	tracking?: string;
+	ahead: number;
+	behind: number;
 }
 
 interface ConflictState {
-  type: "merge" | "rebase" | "cherry-pick";
-  conflictFiles: string[];
-  currentStep?: number;
-  totalSteps?: number;
+	type: "merge" | "rebase" | "cherry-pick";
+	conflictFiles: string[];
+	currentStep?: number;
+	totalSteps?: number;
 }
 ```
 
@@ -372,6 +417,7 @@ In `src/main/services/git/types.ts`:
 - Provider factory accepts `binary` path and `env` object (SSH_AUTH_SOCK, etc.).
 
 Resolver policy:
+
 - Default `simple-git` provider.
 - Use `rawGitProvider` for operations where `simple-git` is limiting or too slow.
 
@@ -417,6 +463,7 @@ sequenceDiagram
 ## Performance Plan (Startup and Interaction)
 
 Startup path:
+
 1. Launch window immediately with lightweight shell.
 2. Initialize preload API and renderer state.
 3. Load project list from SQLite only.
@@ -425,6 +472,7 @@ Startup path:
 6. Prefetch first changed file patch in background after tree load.
 
 Runtime optimizations:
+
 - Virtualized tree rendering.
 - Memoized flattened tree model per project+filter.
 - Debounced refresh actions.
@@ -461,6 +509,7 @@ Runtime optimizations:
 ## Test Cases and Scenarios
 
 Unit tests:
+
 - Cache key/fingerprint correctness.
 - Git status parsing and tree building.
 - Changed-only filter logic.
@@ -468,12 +517,14 @@ Unit tests:
 - Worktree naming generator (determinism, uniqueness).
 
 Integration tests:
+
 - `simpleGitProvider` against fixture repos: clean repo, unstaged changes, staged changes, untracked files, rename/delete cases.
 - SQLite cache hits/misses and invalidation on repo changes.
 - Git binary selection and validation.
 - SSH signing flow with mocked agent.
 
 E2E (Electron):
+
 - Launch with no active project: project list visible, no auto-open.
 - Launch with CLI repo path: that project opens directly.
 - Switch projects: state restored per project.
@@ -482,6 +533,7 @@ E2E (Electron):
 - Theme toggle persists and applies.
 
 Performance acceptance:
+
 - Interactive under `500ms` cold launch (target machine: local macOS dev environment).
 - Warm project switch under `150ms`.
 - Warm cached patch display under `100ms`.

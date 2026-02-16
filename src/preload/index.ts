@@ -15,6 +15,10 @@ import type {
 	ConfigEntry,
 } from "../shared/types.js";
 
+const EVENT_REPO_UPDATED = "events:repoUpdated";
+const EVENT_REPO_ERROR = "events:repoError";
+const EVENT_CONFLICT_DETECTED = "events:conflictDetected";
+
 const projects = {
 	list: (): Promise<Project[]> => ipcRenderer.invoke("projects:list"),
 	add: (name: string, path: string): Promise<Project> =>
@@ -38,6 +42,8 @@ const repo = {
 		filePath: string,
 		scope: "staged" | "unstaged" | "untracked"
 	): Promise<string | null> => ipcRenderer.invoke("repo:getPatch", projectId, filePath, scope),
+	openInEditor: (projectId: string, filePath: string): Promise<void> =>
+		ipcRenderer.invoke("repo:openInEditor", projectId, filePath),
 	refresh: (projectId: string): Promise<void> => ipcRenderer.invoke("repo:refresh", projectId),
 	stageFiles: (projectId: string, paths: string[]): Promise<void> =>
 		ipcRenderer.invoke("repo:stageFiles", projectId, paths),
@@ -136,12 +142,22 @@ const repo = {
 		ipcRenderer.invoke("repo:markResolved", projectId, paths),
 	getEffectiveConfig: (projectId: string): Promise<ConfigEntry[]> =>
 		ipcRenderer.invoke("repo:getEffectiveConfig", projectId),
+	setLocalConfig: (projectId: string, key: string, value: string): Promise<void> =>
+		ipcRenderer.invoke("repo:setLocalConfig", projectId, key, value),
+	testSigning: (
+		projectId: string,
+		format: "ssh" | "gpg",
+		key: string
+	): Promise<{ ok: boolean; message: string }> =>
+		ipcRenderer.invoke("repo:testSigning", projectId, format, key),
 	listWorktrees: (projectId: string): Promise<WorktreeInfo[]> =>
 		ipcRenderer.invoke("repo:listWorktrees", projectId),
 	addWorktree: (projectId: string, branch: string, newBranch?: string): Promise<string> =>
 		ipcRenderer.invoke("repo:addWorktree", projectId, branch, newBranch),
 	removeWorktree: (projectId: string, worktreePath: string): Promise<void> =>
 		ipcRenderer.invoke("repo:removeWorktree", projectId, worktreePath),
+	pruneWorktrees: (projectId: string): Promise<void> =>
+		ipcRenderer.invoke("repo:pruneWorktrees", projectId),
 };
 
 const settings = {
@@ -161,15 +177,39 @@ const settings = {
 };
 
 const events = {
-	onRepoUpdated: (callback: () => void) => {
-		// Placeholder - would use ipcRenderer.on
-		return () => {};
+	onRepoUpdated: (callback: (payload: { projectId: string; updatedAt: number }) => void) => {
+		const handler = (
+			_: Electron.IpcRendererEvent,
+			payload: { projectId: string; updatedAt: number }
+		) => {
+			callback(payload);
+		};
+		ipcRenderer.on(EVENT_REPO_UPDATED, handler);
+		return () => ipcRenderer.removeListener(EVENT_REPO_UPDATED, handler);
 	},
-	onRepoError: (callback: (err: Error) => void) => {
-		return () => {};
+	onRepoError: (
+		callback: (payload: { projectId: string | null; message: string; name: string }) => void
+	) => {
+		const handler = (
+			_: Electron.IpcRendererEvent,
+			payload: { projectId: string | null; message: string; name: string }
+		) => {
+			callback(payload);
+		};
+		ipcRenderer.on(EVENT_REPO_ERROR, handler);
+		return () => ipcRenderer.removeListener(EVENT_REPO_ERROR, handler);
 	},
-	onConflictDetected: (callback: (state: ConflictState) => void) => {
-		return () => {};
+	onConflictDetected: (
+		callback: (payload: { projectId: string; state: ConflictState }) => void
+	) => {
+		const handler = (
+			_: Electron.IpcRendererEvent,
+			payload: { projectId: string; state: ConflictState }
+		) => {
+			callback(payload);
+		};
+		ipcRenderer.on(EVENT_CONFLICT_DETECTED, handler);
+		return () => ipcRenderer.removeListener(EVENT_CONFLICT_DETECTED, handler);
 	},
 };
 

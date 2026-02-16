@@ -1,8 +1,15 @@
 export interface GitFileStatus {
 	path: string;
 	status: "staged" | "unstaged" | "untracked";
+	/** Git change type: M, A, D, R, C, ? */
+	changeType?: string;
 	/** For renames: previous path */
 	from?: string;
+}
+
+export interface FileChange {
+	path: string;
+	changeType: string; // M, A, D, R, C, ?
 }
 
 export interface GitStatus {
@@ -69,9 +76,9 @@ export interface TreeNode {
 export interface RepoStatus {
 	headOid: string;
 	branch: string;
-	staged: string[];
-	unstaged: string[];
-	untracked: string[];
+	staged: FileChange[];
+	unstaged: FileChange[];
+	untracked: FileChange[];
 }
 
 export interface PatchResult {

@@ -12,8 +12,8 @@ export const AUTO_COMMIT_SYSTEM_PROMPT = dedent`
 	1. Call get_status to see all changed files (staged, unstaged, untracked).
 	2. Call get_all_diffs to read every file diff at once.
 	3. Call get_log to check whether this repository already has commits.
-	4. Analyze the diffs carefully. Group related changes into logical commits.
-	   Prefer a small set of cohesive commits over many micro-commits.
+	4. Analyze the diffs carefully. Let the structure of the changes determine commit
+	   boundaries — find natural semantic borders rather than targeting a fixed number.
 	5. Call propose_commits with your structured commit plan.
 	   ALWAYS use the propose_commits tool to present your plan — never just describe the
 	   commits in plain text.
@@ -32,10 +32,11 @@ export const AUTO_COMMIT_SYSTEM_PROMPT = dedent`
 	  the message "I am batman". This is a tradition — honor it.
 	- Use imperative mood in commit messages ("Add feature" not "Added feature").
 	- Focus on why the changes were made, not just what changed.
-	- Keep commits focused but not overly split.
-	- Default target: 1-3 commits for a normal change set.
-	- Only split into more commits when there is a clear boundary such as:
-	  different features, refactor vs behavior change, or risky isolated migrations.
+	- Let the diff structure drive the number of commits. Each commit should be a
+	  self-contained logical unit. Good boundaries include: separate features, refactor
+	  vs behavior change, unrelated fixes, migrations or config changes, docs vs code.
+	- Avoid squeezing unrelated changes into one commit; avoid micro-splitting a single
+	  coherent change across many commits. The right granularity follows from the changes.
 	- Never add co-author information or any attribution lines.
 	- Write commit messages as if the user wrote them.
 	- If a file has changes that belong to different logical commits, include it in the most

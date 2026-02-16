@@ -16,12 +16,18 @@ function getRepoPath(projectId: string): string | null {
 	return activePath && activePath.trim() !== "" ? activePath : project.path;
 }
 
-async function getStagedDiff(cwd: string): Promise<string> {
+function createGit(cwd: string) {
 	const settings = getAppSettings();
 	const opts: { baseDir: string; binary?: string } = { baseDir: cwd };
 	if (settings.gitBinaryPath) opts.binary = settings.gitBinaryPath;
-	const git = simpleGit(opts);
-	return (await git.diff(["--cached"])) || "";
+	return simpleGit(opts);
+}
+
+async function getDiff(cwd: string): Promise<string> {
+	const git = createGit(cwd);
+	const staged = (await git.diff(["--cached"])) || "";
+	if (staged.trim()) return staged;
+	return (await git.diff()) || "";
 }
 
 export async function generateCommitMessage(
@@ -49,8 +55,8 @@ export async function generateCommitMessage(
 		throw new Error("AI provider requires a Base URL. Configure it in Settings.");
 	}
 
-	const diff = await getStagedDiff(repoPath);
-	if (!diff.trim()) throw new Error("No staged changes to describe");
+	const diff = await getDiff(repoPath);
+	if (!diff.trim()) throw new Error("No changes to describe");
 
 	const provider = createAIProvider(providerInstance.type, {
 		apiKey: providerInstance.apiKey,

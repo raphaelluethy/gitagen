@@ -4,6 +4,7 @@ import { PatchDiff } from "@pierre/diffs/react";
 import type { GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 import { useTheme } from "../theme/provider";
+import { useToast } from "../toast/provider";
 
 interface DiffViewerProps {
 	projectId: string;
@@ -21,6 +22,7 @@ export default function DiffViewer({
 	onRefresh,
 }: DiffViewerProps) {
 	const { resolved } = useTheme();
+	const { toast } = useToast();
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const requestIdRef = useRef(0);
@@ -98,8 +100,9 @@ export default function DiffViewer({
 				await window.gitagen.repo.stageFiles(projectId, [selectedFile.path]);
 			}
 			onRefresh();
-		} catch {
-			// ignore
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Staging failed", msg);
 		}
 	};
 

@@ -22,7 +22,7 @@ export function FpsMonitor({ enabled }: FpsMonitorProps) {
 				backgroundColor: "var(--bg-panel)",
 				border: "1px solid var(--border-secondary)",
 				borderRadius: "var(--radius-lg)",
-			padding: "4px 8px",
+				padding: "4px 8px",
 				gap: "3px",
 				minWidth: "80px",
 				fontSize: "10px",

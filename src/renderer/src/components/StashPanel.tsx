@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { Archive, Inbox, ArrowDownToLine, Trash2 } from "lucide-react";
 import type { StashEntry } from "../../../shared/types";
+import { useToast } from "../toast/provider";
+
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	if (typeof error === "string") return error;
+	return "Unknown error";
+}
 
 interface StashPanelProps {
 	projectId: string;
@@ -10,6 +17,7 @@ interface StashPanelProps {
 export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 	const [entries, setEntries] = useState<StashEntry[]>([]);
 	const [loading, setLoading] = useState(true);
+	const { toast } = useToast();
 
 	useEffect(() => {
 		setLoading(true);
@@ -23,8 +31,9 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 		try {
 			await window.gitagen.repo.stashPop(projectId, index);
 			onRefresh();
-		} catch {
-			// ignore
+			toast.success("Stash popped");
+		} catch (error) {
+			toast.error("Stash pop failed", getErrorMessage(error));
 		}
 	};
 
@@ -32,8 +41,9 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 		try {
 			await window.gitagen.repo.stashApply(projectId, index);
 			onRefresh();
-		} catch {
-			// ignore
+			toast.success("Stash applied");
+		} catch (error) {
+			toast.error("Stash apply failed", getErrorMessage(error));
 		}
 	};
 
@@ -41,8 +51,9 @@ export default function StashPanel({ projectId, onRefresh }: StashPanelProps) {
 		try {
 			await window.gitagen.repo.stashDrop(projectId, index);
 			onRefresh();
-		} catch {
-			// ignore
+			toast.success("Stash entry dropped");
+		} catch (error) {
+			toast.error("Stash drop failed", getErrorMessage(error));
 		}
 	};
 

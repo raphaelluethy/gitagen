@@ -17,6 +17,7 @@ import type { GitStatus, GitFileStatus } from "../../../shared/types";
 import type { Project } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 import { useSettings } from "../settings/provider";
+import { useToast } from "../toast/provider";
 
 interface SidebarProps {
 	projectId: string;
@@ -140,6 +141,7 @@ function TreeItem({
 	expandedFolders: Set<string>;
 	onToggleFolder: (path: string) => void;
 }) {
+	const { toast } = useToast();
 	const paddingLeft = depth * 16 + 12;
 
 	if (node.type === "file" && node.file) {
@@ -157,8 +159,9 @@ function TreeItem({
 					await window.gitagen.repo.unstageFiles(projectId, [node.file!.path]);
 				}
 				onRefresh();
-			} catch {
-				// ignore
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : "Unknown error";
+				toast.error("Staging failed", msg);
 			}
 		};
 
@@ -229,8 +232,9 @@ function TreeItem({
 					await window.gitagen.repo.unstageFiles(projectId, paths);
 				}
 				onRefresh();
-			} catch {
-				// ignore
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : "Unknown error";
+				toast.error("Staging failed", msg);
 			}
 		};
 
@@ -337,6 +341,7 @@ function FileTreeSection({
 	onViewAll?: (section: "staged" | "unstaged" | "untracked") => void;
 }) {
 	const { settings } = useSettings();
+	const { toast } = useToast();
 	const tree = useMemo(() => buildFileTree(files), [files]);
 
 	function getAutoExpandPaths(nodes: FileTreeNode[]): string[] {
@@ -385,8 +390,9 @@ function FileTreeSection({
 				);
 			}
 			onRefresh();
-		} catch {
-			// ignore
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Staging failed", msg);
 		}
 	};
 

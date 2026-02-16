@@ -76,7 +76,7 @@ export default function WorktreePanel({
 			const next = await window.gitagen.repo.listWorktrees(projectId);
 			setWorktrees(next);
 		} catch (error) {
-			toast(`Failed to load worktrees: ${getErrorMessage(error, "Unknown error.")}`);
+			toast.error("Failed to load worktrees", getErrorMessage(error, "Unknown error."));
 		} finally {
 			setLoading(false);
 		}
@@ -96,7 +96,7 @@ export default function WorktreePanel({
 	const handleAdd = async () => {
 		const requestedBranch = addBranch.trim();
 		if (!requestedBranch) {
-			toast("Enter a branch name.");
+			toast.info("Enter a branch name");
 			return;
 		}
 		setAdding(true);
@@ -117,7 +117,6 @@ export default function WorktreePanel({
 					cancelLabel: "Cancel",
 				});
 				if (!shouldCreate) {
-					toast("Worktree creation canceled.");
 					return;
 				}
 				baseBranch = currentLocalBranch;
@@ -144,7 +143,6 @@ export default function WorktreePanel({
 						cancelLabel: "Cancel",
 					});
 					if (!shouldUseSuggested) {
-						toast("Worktree creation canceled.");
 						return;
 					}
 					result = await window.gitagen.repo.addWorktree(projectId, requestedBranch, {
@@ -163,20 +161,22 @@ export default function WorktreePanel({
 			const checkedOutBranch = newBranch ?? requestedBranch;
 			if (copyGitIgnores) {
 				if (result.copyGitignoreError) {
-					toast(
-						`Worktree "${checkedOutBranch}" created, but .gitignore copy failed: ${result.copyGitignoreError}`
+					toast.info(
+						"Worktree created",
+						`.gitignore copy failed: ${result.copyGitignoreError}`
 					);
 				} else {
 					const count = result.copiedGitignoreCount;
-					toast(
-						`Worktree "${checkedOutBranch}" created. Copied ${count} .gitignore file${count === 1 ? "" : "s"}.`
+					toast.success(
+						"Worktree created",
+						`Copied ${count} .gitignore file${count === 1 ? "" : "s"} into ${checkedOutBranch}`
 					);
 				}
 			} else {
-				toast(`Worktree "${checkedOutBranch}" created.`);
+				toast.success("Worktree created", checkedOutBranch);
 			}
 		} catch (error) {
-			toast(`Failed to add worktree: ${getErrorMessage(error, "Unknown error.")}`);
+			toast.error("Failed to add worktree", getErrorMessage(error, "Unknown error."));
 		} finally {
 			setAdding(false);
 		}
@@ -195,9 +195,9 @@ export default function WorktreePanel({
 			await window.gitagen.repo.pruneWorktrees(projectId);
 			await loadWorktrees();
 			onRefresh();
-			toast("Stale worktrees cleaned up.");
+			toast.success("Stale worktrees cleaned up");
 		} catch (error) {
-			toast(`Failed to clean worktrees: ${getErrorMessage(error, "Unknown error.")}`);
+			toast.error("Failed to clean worktrees", getErrorMessage(error, "Unknown error."));
 		} finally {
 			setPruning(false);
 		}
@@ -218,7 +218,7 @@ export default function WorktreePanel({
 			await window.gitagen.repo.removeWorktree(projectId, path);
 			setWorktrees((prev) => prev.filter((w) => w.path !== path));
 			onRefresh();
-			toast("Worktree removed.");
+			toast.success("Worktree removed");
 		} catch (error) {
 			if (isModifiedWorktreeError(error)) {
 				const message = getErrorMessage(error, "Worktree contains local changes.");
@@ -230,24 +230,24 @@ export default function WorktreePanel({
 					cancelLabel: "Cancel",
 				});
 				if (!shouldForce) {
-					toast("Worktree removal canceled.");
 					return;
 				}
 				try {
 					await window.gitagen.repo.removeWorktree(projectId, path, true);
 					setWorktrees((prev) => prev.filter((w) => w.path !== path));
 					onRefresh();
-					toast("Worktree removed (forced).");
+					toast.success("Worktree removed", "Forced removal");
 					return;
 				} catch (forceError) {
-					toast(
-						`Failed to force remove worktree: ${getErrorMessage(forceError, "Unknown error.")}`
+					toast.error(
+						"Failed to remove worktree",
+						getErrorMessage(forceError, "Unknown error.")
 					);
 					return;
 				}
 			}
 
-			toast(`Failed to remove worktree: ${getErrorMessage(error, "Unknown error.")}`);
+			toast.error("Failed to remove worktree", getErrorMessage(error, "Unknown error."));
 		} finally {
 			setRemovingPath(null);
 		}

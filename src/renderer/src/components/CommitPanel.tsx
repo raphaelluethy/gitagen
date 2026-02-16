@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Send, GitCommit, Sparkles } from "lucide-react";
+import { Send, GitCommit, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "../toast/provider";
 
 interface CommitPanelProps {
@@ -27,7 +27,7 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 			await window.gitagen.repo.generateCommitMessage(projectId);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Failed to generate";
-			toast(msg);
+			toast.error("Commit message generation failed", msg);
 		} finally {
 			unsub();
 			setGenerating(false);
@@ -43,8 +43,11 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 			await window.gitagen.repo.commit(projectId, trimmed, { amend });
 			setMessage("");
 			onCommit();
+			toast.success("Changes committed");
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Commit failed");
+			const msg = e instanceof Error ? e.message : "Commit failed";
+			setError(msg);
+			toast.error("Commit failed", msg);
 		} finally {
 			setLoading(false);
 		}
@@ -71,10 +74,11 @@ export default function CommitPanel({ projectId, onCommit, disabled }: CommitPan
 					className="btn-icon rounded-md p-1"
 					title="Generate commit message with AI"
 				>
-					<Sparkles
-						size={13}
-						className={generating ? "animate-pulse text-(--accent)" : ""}
-					/>
+					{generating ? (
+						<Loader2 size={13} className="animate-spin text-(--accent)" />
+					) : (
+						<Sparkles size={13} />
+					)}
 				</button>
 			</div>
 			<textarea

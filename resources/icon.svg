@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+	<!-- macOS squircle background -->
+	<path d="M 512,0 C 734,0 800,0 882,36 Q 952,68 988,142 C 1024,224 1024,290 1024,512 C 1024,734 1024,800 988,882 Q 956,952 882,988 C 800,1024 734,1024 512,1024 C 290,1024 224,1024 142,988 Q 72,956 36,882 C 0,800 0,734 0,512 C 0,290 0,224 36,142 Q 68,72 142,36 C 224,0 290,0 512,0 Z" fill="#1B1D27"/>
+
+	<!-- Top branch line (coral-red) -->
+	<path
+		d="M 148,512 C 240,510 320,330 512,330 C 704,330 784,510 876,512"
+		stroke="#FF6154"
+		stroke-width="52"
+		fill="none"
+		stroke-linecap="round"
+	/>
+
+	<!-- Bottom branch line (teal) -->
+	<path
+		d="M 148,512 C 240,514 320,694 512,694 C 704,694 784,514 876,512"
+		stroke="#4ECDC4"
+		stroke-width="52"
+		fill="none"
+		stroke-linecap="round"
+	/>
+
+	<!-- Shared left endpoint -->
+	<circle cx="148" cy="512" r="32" fill="#FFFFFF"/>
+
+	<!-- Commit nodes on top branch -->
+	<circle cx="330" cy="398" r="24" fill="#FFFFFF"/>
+	<circle cx="512" cy="330" r="24" fill="#FFFFFF"/>
+	<circle cx="694" cy="398" r="24" fill="#FFFFFF"/>
+
+	<!-- Commit nodes on bottom branch -->
+	<circle cx="330" cy="626" r="24" fill="#FFFFFF"/>
+	<circle cx="512" cy="694" r="24" fill="#FFFFFF"/>
+	<circle cx="694" cy="626" r="24" fill="#FFFFFF"/>
+
+	<!-- Shared right endpoint -->
+	<circle cx="876" cy="512" r="32" fill="#FFFFFF"/>
+
+	<!-- Center pupil -->
+	<circle cx="512" cy="512" r="58" fill="#FFFFFF"/>
+</svg>

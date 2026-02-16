@@ -12,6 +12,7 @@ import { PatchDiff } from "@pierre/diffs/react";
 import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
 import { useTheme } from "../theme/provider";
+import { useToast } from "../toast/provider";
 
 interface AllChangesViewProps {
 	projectId: string;
@@ -49,6 +50,7 @@ function FileChangeCard({
 	onPatchLoaded?: (path: string, patch: string) => void;
 }) {
 	const { resolved } = useTheme();
+	const { toast } = useToast();
 	const [patch, setPatch] = useState<string | null>(cachedPatch ?? null);
 	const [loading, setLoading] = useState(false);
 	const isStaged = file.status === "staged";
@@ -93,8 +95,9 @@ function FileChangeCard({
 				await window.gitagen.repo.stageFiles(projectId, [file.path]);
 			}
 			onRefresh();
-		} catch {
-			// ignore
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : "Unknown error";
+			toast.error("Staging failed", msg);
 		}
 	};
 

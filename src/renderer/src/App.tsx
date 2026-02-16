@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+	Group,
+	Panel,
+	Separator,
+	useDefaultLayout,
+	type PanelImperativeHandle,
+} from "react-resizable-panels";
 import {
 	Rows3,
 	Columns,
@@ -12,6 +19,11 @@ import {
 	FileText,
 	PanelRightClose,
 	PanelRight,
+	ArrowLeft,
+	GitBranch,
+	Key,
+	Sparkles,
+	Palette,
 } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import DiffViewer from "./components/DiffViewer";
@@ -25,7 +37,7 @@ import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
 import ConflictBanner from "./components/ConflictBanner";
 import { ThemeProvider, useTheme } from "./theme/provider";
-import { SettingsProvider } from "./settings/provider";
+import { SettingsProvider, useSettings } from "./settings/provider";
 import type {
 	Project,
 	RepoStatus,
@@ -74,8 +86,29 @@ function AppContent() {
 	const [viewMode, setViewMode] = useState<ViewMode>("single");
 	const [showSettings, setShowSettings] = useState(false);
 	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
-	const [showRightPanel, setShowRightPanel] = useState(true);
 	const [loading, setLoading] = useState(true);
+	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
+	const rightPanelRef = useRef<PanelImperativeHandle>(null);
+
+	const mainLayout = useDefaultLayout({
+		id: "gitagen-main-layout-v1",
+		storage: typeof localStorage !== "undefined" ? localStorage : undefined,
+	});
+	const contentLayout = useDefaultLayout({
+		id: "gitagen-content-layout-v1",
+		storage: typeof localStorage !== "undefined" ? localStorage : undefined,
+	});
+
+	const toggleRightPanel = useCallback(() => {
+		const panel = rightPanelRef.current;
+		if (panel?.isCollapsed()) {
+			panel.expand();
+			setIsRightPanelCollapsed(false);
+		} else {
+			panel?.collapse();
+			setIsRightPanelCollapsed(true);
+		}
+	}, []);
 
 	const refreshStatus = useCallback(() => {
 		if (activeProject) {
@@ -249,20 +282,45 @@ function AppContent() {
 		);
 	}
 
+	if (showSettings) {
+		return (
+			<div className="flex h-screen flex-col bg-[var(--bg-primary)] animate-fade-in">
+				<SettingsPanel
+					projectId={activeProject.id}
+					onClose={() => setShowSettings(false)}
+				/>
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-screen flex-col bg-[var(--bg-primary)]">
 			<ConflictBanner projectId={activeProject.id} onResolved={refreshStatus} />
-			<div className="flex flex-1 min-h-0">
-				<div
-					className="flex shrink-0 flex-col border-r border-[var(--border-secondary)]"
-					style={{ width: "var(--sidebar-width)" }}
+			<Group
+				className="flex flex-1 min-h-0"
+				id="main-layout"
+				orientation="horizontal"
+				defaultLayout={mainLayout.defaultLayout}
+				onLayoutChanged={mainLayout.onLayoutChanged}
+			>
+				<Panel
+					id="sidebar"
+					className="flex flex-col border-r border-[var(--border-secondary)]"
+					defaultSize={20}
+					minSize={12}
+					maxSize={35}
 				>
-					<div className="flex-1 min-h-0 overflow-hidden">
+					<div className="flex min-h-0 flex-1 overflow-hidden">
 						<Sidebar
 							status={gitStatus}
 							selectedFile={selectedFile}
 							onSelectFile={setSelectedFile}
 							onBack={() => setActiveProject(null)}
+							projects={projects}
+							activeProject={activeProject}
+							onProjectChange={setActiveProject}
+							onAddProject={handleAddProject}
+							onViewAll={() => setViewMode("all")}
 						/>
 					</div>
 					<div className="shrink-0 border-t border-[var(--border-secondary)]">
@@ -275,8 +333,9 @@ function AppContent() {
 							onRefresh={refreshStatus}
 						/>
 					</div>
-				</div>
-				<main className="flex min-w-0 flex-1 flex-col">
+				</Panel>
+				<Separator className="panel-resize-handle" />
+				<Panel id="main" className="flex min-w-0 flex-1 flex-col" minSize={40}>
 					<div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-secondary)] bg-[var(--bg-toolbar)] px-3 py-2">
 						<div className="flex items-center gap-1">
 							<WorktreeSelector
@@ -293,73 +352,57 @@ function AppContent() {
 							/>
 						</div>
 						<div className="mx-0.5 hidden h-4 w-px bg-[var(--border-primary)] sm:block" />
-						<div className="hidden items-center rounded-lg bg-[var(--bg-tertiary)] p-0.5 sm:flex">
+						<div className="hidden items-center tab-bar sm:flex">
 							<button
 								type="button"
 								onClick={() => setViewMode("single")}
 								title="Single file view"
-								className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium outline-none ${
-									viewMode === "single"
-										? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
-										: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-								}`}
+								className="tab-item"
+								data-active={viewMode === "single"}
 							>
-								<FileText size={13} />
-								<span className="hidden lg:inline">File</span>
+								<FileText size={14} />
 							</button>
 							<button
 								type="button"
 								onClick={() => setViewMode("all")}
 								title="All changes view"
-								className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium outline-none ${
-									viewMode === "all"
-										? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
-										: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-								}`}
+								className="tab-item"
+								data-active={viewMode === "all"}
 							>
-								<FileStack size={13} />
-								<span className="hidden lg:inline">All</span>
+								<FileStack size={14} />
 							</button>
 						</div>
-						<div className="hidden items-center rounded-lg bg-[var(--bg-tertiary)] p-0.5 md:flex">
+						<div className="hidden items-center tab-bar md:flex">
 							<button
 								type="button"
 								onClick={() => setDiffStyle("unified")}
 								title="Unified diff"
-								className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium outline-none ${
-									diffStyle === "unified"
-										? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
-										: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-								}`}
+								className="tab-item"
+								data-active={diffStyle === "unified"}
 							>
-								<Rows3 size={13} />
-								<span className="hidden lg:inline">Stacked</span>
+								<Rows3 size={14} />
 							</button>
 							<button
 								type="button"
 								onClick={() => setDiffStyle("split")}
 								title="Split diff"
-								className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium outline-none ${
-									diffStyle === "split"
-										? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
-										: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-								}`}
+								className="tab-item"
+								data-active={diffStyle === "split"}
 							>
-								<Columns size={13} />
-								<span className="hidden lg:inline">Split</span>
+								<Columns size={14} />
 							</button>
 						</div>
 						<div className="ml-auto flex items-center gap-1">
 							<button
 								type="button"
-								onClick={() => setShowRightPanel(!showRightPanel)}
+								onClick={toggleRightPanel}
 								className="btn-icon rounded-[var(--radius-md)] p-2"
-								title={showRightPanel ? "Hide panel" : "Show panel"}
+								title={isRightPanelCollapsed ? "Show panel" : "Hide panel"}
 							>
-								{showRightPanel ? (
-									<PanelRightClose size={16} />
-								) : (
+								{isRightPanelCollapsed ? (
 									<PanelRight size={16} />
+								) : (
+									<PanelRightClose size={16} />
 								)}
 							</button>
 							<button
@@ -372,8 +415,14 @@ function AppContent() {
 							</button>
 						</div>
 					</div>
-					<div className="flex min-h-0 flex-1">
-						<div className="flex min-w-0 flex-1 flex-col">
+					<Group
+						className="flex min-h-0 flex-1"
+						id="content-layout"
+						orientation="horizontal"
+						defaultLayout={contentLayout.defaultLayout}
+						onLayoutChanged={contentLayout.onLayoutChanged}
+					>
+						<Panel id="center" className="flex min-w-0 flex-1 flex-col" minSize={30}>
 							{viewMode === "all" ? (
 								<AllChangesView
 									projectId={activeProject.id}
@@ -391,21 +440,27 @@ function AppContent() {
 								/>
 							)}
 							<CommitPanel projectId={activeProject.id} onCommit={refreshStatus} />
-						</div>
-						{showRightPanel && (
-							<div
-								className="hidden shrink-0 flex-col border-l border-[var(--border-secondary)] md:flex"
-								style={{ width: "var(--right-panel-width)" }}
-							>
-								<div className="flex border-b border-[var(--border-secondary)]">
+						</Panel>
+						<Separator className="panel-resize-handle" />
+						<Panel
+							id="right"
+							className="hidden flex-col border-l border-[var(--border-secondary)] md:flex"
+							collapsible
+							defaultSize={25}
+							minSize={15}
+							maxSize={45}
+							panelRef={rightPanelRef}
+							onResize={(size) => {
+								setIsRightPanelCollapsed(size.asPercentage < 1);
+							}}
+						>
+							<div className="flex flex-col min-h-0 flex-1">
+								<div className="flex tab-bar border-b border-[var(--border-secondary)] m-2 mb-0">
 									<button
 										type="button"
 										onClick={() => setRightTab("log")}
-										className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 text-xs font-medium outline-none ${
-											rightTab === "log"
-												? "border-b-2 border-[var(--accent-primary)] text-[var(--accent-primary)]"
-												: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-										}`}
+										className="tab-item flex-1"
+										data-active={rightTab === "log"}
 									>
 										<History size={14} />
 										<span className="hidden lg:inline">Log</span>
@@ -413,11 +468,8 @@ function AppContent() {
 									<button
 										type="button"
 										onClick={() => setRightTab("stash")}
-										className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 text-xs font-medium outline-none ${
-											rightTab === "stash"
-												? "border-b-2 border-[var(--accent-primary)] text-[var(--accent-primary)]"
-												: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-										}`}
+										className="tab-item flex-1"
+										data-active={rightTab === "stash"}
 									>
 										<Archive size={14} />
 										<span className="hidden lg:inline">Stash</span>
@@ -425,11 +477,8 @@ function AppContent() {
 									<button
 										type="button"
 										onClick={() => setRightTab("remote")}
-										className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 text-xs font-medium outline-none ${
-											rightTab === "remote"
-												? "border-b-2 border-[var(--accent-primary)] text-[var(--accent-primary)]"
-												: "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-										}`}
+										className="tab-item flex-1"
+										data-active={rightTab === "remote"}
 									>
 										<Cloud size={14} />
 										<span className="hidden lg:inline">Remote</span>
@@ -453,16 +502,10 @@ function AppContent() {
 									)}
 								</div>
 							</div>
-						)}
-					</div>
-				</main>
-			</div>
-			{showSettings && (
-				<SettingsPanel
-					projectId={activeProject.id}
-					onClose={() => setShowSettings(false)}
-				/>
-			)}
+						</Panel>
+					</Group>
+				</Panel>
+			</Group>
 		</div>
 	);
 }
@@ -815,7 +858,7 @@ function AISettingsSection() {
 							key={provider.id}
 							className={`rounded-lg border p-2 ${
 								activeProviderId === provider.id
-									? "border-[var(--accent)] bg-[var(--accent)]/5"
+									? "border-[var(--border-primary)] bg-[var(--bg-active)]"
 									: "border-[var(--border-primary)]"
 							}`}
 						>
@@ -1068,7 +1111,10 @@ function ProviderEditForm({
 	);
 }
 
+type SettingsTab = "general" | "git" | "signing" | "ai" | "appearance";
+
 function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClose: () => void }) {
+	const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 	const [gitPath, setGitPath] = useState<string | null>(null);
 	const [gitBinaries, setGitBinaries] = useState<string[]>([]);
 	const [signCommits, setSignCommits] = useState(false);
@@ -1088,9 +1134,12 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 		path: string | null;
 	}>({ name: "", path: null });
 	const { theme, setTheme } = useTheme();
+	const { updateSettings } = useSettings();
 	const [uiScale, setUiScale] = useState(1.0);
 	const [fontSize, setFontSize] = useState(14);
 	const [commitMessageFontSize, setCommitMessageFontSize] = useState(14);
+	const [fontFamily, setFontFamily] = useState<"geist" | "geist-pixel" | "system">("geist");
+	const [gpuAcceleration, setGpuAcceleration] = useState(true);
 
 	const loadEffectiveConfig = useCallback(() => {
 		if (!projectId) {
@@ -1102,6 +1151,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			const currentName = getLatestConfigValue(entries, "user.name");
 			const currentEmail = getLatestConfigValue(entries, "user.email");
 			const currentSign = getLatestConfigValue(entries, "commit.gpgsign").toLowerCase();
+			const currentSigningKey = getLatestConfigValue(entries, "user.signingkey");
 			setLocalUserName(currentName);
 			setLocalUserEmail(currentEmail);
 			setLocalSignEnabled(
@@ -1110,6 +1160,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 					currentSign === "yes" ||
 					currentSign === "on"
 			);
+			if (currentSigningKey) setSigningKey(currentSigningKey);
 		});
 	}, [projectId]);
 
@@ -1121,25 +1172,19 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			setUiScale(s.uiScale ?? 1.0);
 			setFontSize(s.fontSize ?? 14);
 			setCommitMessageFontSize(s.commitMessageFontSize ?? 14);
+			setFontFamily(s.fontFamily ?? "geist");
+			setGpuAcceleration(s.gpuAcceleration ?? true);
 		});
 		window.gitagen.settings.discoverGitBinaries().then(setGitBinaries);
 		window.gitagen.settings.getSshAgentInfo().then(setSshAgentInfo);
 		loadEffectiveConfig();
 	}, [loadEffectiveConfig]);
 
-	const updateSigningSettings = async (
-		partial: Partial<{ enabled: boolean; key: string }>
-	) => {
+	const updateSigningSettings = async (partial: Partial<{ enabled: boolean; key: string }>) => {
 		const settings = await window.gitagen.settings.getGlobal();
 		await window.gitagen.settings.setGlobal({
 			signing: { ...settings.signing, ...partial },
 		});
-	};
-
-	const handleGitBinaryChange = (value: string) => {
-		const path = value === "" ? null : value;
-		setGitPath(path);
-		window.gitagen.settings.setGlobal({ gitBinaryPath: path });
 	};
 
 	const handleSelectGitBinary = async () => {
@@ -1170,6 +1215,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			);
 			await window.gitagen.repo.setLocalConfig(projectId, "gpg.format", "ssh");
 			await window.gitagen.repo.setLocalConfig(projectId, "user.signingkey", signingKey);
+			await updateSigningSettings({ key: signingKey });
 			setLocalConfigMessage("Saved local git config.");
 			loadEffectiveConfig();
 		} catch (error) {
@@ -1181,273 +1227,435 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 		}
 	};
 
+	const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+		{ id: "general", label: "General", icon: <Settings size={16} /> },
+		{ id: "git", label: "Git", icon: <GitBranch size={16} /> },
+		{ id: "signing", label: "Signing", icon: <Key size={16} /> },
+		{ id: "ai", label: "AI", icon: <Sparkles size={16} /> },
+		{ id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
+	];
+
 	return (
-		<div
-			className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-			onClick={onClose}
-		>
-			<div
-				className="w-full max-w-2xl rounded-lg bg-[var(--bg-primary)] p-6 shadow-xl"
-				onClick={(e) => e.stopPropagation()}
-			>
-				<h2 className="mb-5 text-lg font-semibold text-[var(--text-primary)]">Settings</h2>
-				<div className="space-y-5">
-					<div>
-						<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-							Git binary
-						</label>
-						<div className="flex gap-2">
-							<select
-								value={gitPath ?? ""}
-								onChange={(e) => handleGitBinaryChange(e.target.value)}
-								className="input flex-1 text-[13px]"
-							>
-								<option value="">Auto (from PATH)</option>
-								{gitBinaries.map((p) => (
-									<option key={p} value={p}>
-										{p}
-									</option>
-								))}
-							</select>
-							<button
-								type="button"
-								onClick={handleSelectGitBinary}
-								className="btn btn-secondary"
-							>
-								Browse
-							</button>
-						</div>
-					</div>
-					<div>
-						<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-							SSH agent
-						</label>
-						<div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-2 text-[13px]">
-							<p className="font-medium text-[var(--text-primary)]">
-								{sshAgentInfo.name || "Default"}
-							</p>
-							{sshAgentInfo.path && (
-								<p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
-									{sshAgentInfo.path}
-								</p>
-							)}
-						</div>
-					</div>
-					<div>
-						<label className="mb-1.5 flex cursor-pointer items-center gap-2">
-							<input
-								type="checkbox"
-								checked={signCommits}
-								onChange={async (e) => {
-									const v = e.target.checked;
-									setSignCommits(v);
-									setLocalSignEnabled(v);
-									await updateSigningSettings({ enabled: v });
-								}}
-							/>
-							<span className="text-xs font-medium text-[var(--text-secondary)]">
-								Sign commits
-							</span>
-						</label>
-						<div className="mt-2">
-							<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
-								SSH signing key
-							</label>
-							<input
-								value={signingKey}
-								onChange={async (e) => {
-									const next = e.target.value;
-									setSigningKey(next);
-									await updateSigningSettings({ key: next });
-								}}
-								placeholder="key id or path"
-								className="input w-full text-xs"
-							/>
-						</div>
-						<div className="mt-2 flex items-center gap-2">
-							<button
-								type="button"
-								onClick={handleTestSigning}
-								disabled={!projectId}
-								className="btn btn-secondary text-xs"
-							>
-								Test signing
-							</button>
-							{signingTestResult && (
-								<p
-									className={`text-xs ${signingTestResult.ok ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-								>
-									{signingTestResult.message}
-								</p>
-							)}
-						</div>
-					</div>
-					<div className="rounded-lg border border-[var(--border-primary)] p-3">
-						<p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
-							Project local git config
-						</p>
-						<div className="grid grid-cols-2 gap-3">
-							<div>
-								<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
-									user.name
-								</label>
-								<input
-									value={localUserName}
-									onChange={(e) => setLocalUserName(e.target.value)}
-									className="input text-xs"
-								/>
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
-									user.email
-								</label>
-								<input
-									value={localUserEmail}
-									onChange={(e) => setLocalUserEmail(e.target.value)}
-									className="input text-xs"
-								/>
-							</div>
-						</div>
-						<label className="mt-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-							<input
-								type="checkbox"
-								checked={localSignEnabled}
-								onChange={(e) => setLocalSignEnabled(e.target.checked)}
-							/>
-							commit.gpgsign (local)
-						</label>
-						<div className="mt-2 flex items-center gap-2">
-							<button
-								type="button"
-								onClick={handleSaveLocalConfig}
-								disabled={!projectId || savingLocalConfig}
-								className="btn btn-secondary text-xs"
-							>
-								Apply to repo
-							</button>
-							{localConfigMessage && (
-								<p className="text-xs text-[var(--text-muted)]">
-									{localConfigMessage}
-								</p>
-							)}
-						</div>
-						<div className="mt-3 max-h-32 overflow-auto rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-2">
-							{effectiveConfig.length === 0 ? (
-								<p className="text-xs text-[var(--text-muted)]">
-									No effective config entries found.
-								</p>
-							) : (
-								effectiveConfig.slice(-20).map((entry, idx) => (
-									<div key={`${entry.key}-${idx}`} className="mb-1 text-[10px]">
-										<span className="font-medium text-[var(--text-primary)]">
-											{entry.key}
-										</span>
-										<span className="text-[var(--text-muted)]">
-											{" "}
-											= {entry.value} ({entry.scope}, {entry.origin})
-										</span>
-									</div>
-								))
-							)}
-						</div>
-					</div>
-					<div className="space-y-4">
-						<div>
-							<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-								UI Scale
-							</label>
-							<div className="flex items-center gap-3">
-								<input
-									type="range"
-									min="0.75"
-									max="1.5"
-									step="0.25"
-									value={uiScale}
-									onChange={(e) => {
-										const v = parseFloat(e.target.value);
-										setUiScale(v);
-										window.gitagen.settings.setGlobal({ uiScale: v });
-									}}
-									className="flex-1"
-								/>
-								<span className="font-mono text-xs text-[var(--text-muted)] w-12 text-right">
-									{Math.round(uiScale * 100)}%
-								</span>
-							</div>
-						</div>
-						<div>
-							<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-								Font Size
-							</label>
-							<div className="flex items-center gap-3">
-								<input
-									type="range"
-									min="12"
-									max="18"
-									step="1"
-									value={fontSize}
-									onChange={(e) => {
-										const v = parseInt(e.target.value, 10);
-										setFontSize(v);
-										window.gitagen.settings.setGlobal({ fontSize: v });
-									}}
-									className="flex-1"
-								/>
-								<span className="font-mono text-xs text-[var(--text-muted)] w-12 text-right">
-									{fontSize}px
-								</span>
-							</div>
-						</div>
-						<div>
-							<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-								Commit Message Font Size
-							</label>
-							<div className="flex items-center gap-3">
-								<input
-									type="range"
-									min="12"
-									max="18"
-									step="1"
-									value={commitMessageFontSize}
-									onChange={(e) => {
-										const v = parseInt(e.target.value, 10);
-										setCommitMessageFontSize(v);
-										window.gitagen.settings.setGlobal({
-											commitMessageFontSize: v,
-										});
-									}}
-									className="flex-1"
-								/>
-								<span className="font-mono text-xs text-[var(--text-muted)] w-12 text-right">
-									{commitMessageFontSize}px
-								</span>
-							</div>
-						</div>
-					</div>
-					<div>
-						<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-							Theme
-						</label>
-						<div className="flex gap-2">
-							{(["light", "dark", "system"] as const).map((t) => (
-								<button
-									key={t}
-									type="button"
-									onClick={() => setTheme(t)}
-									className={`btn capitalize ${
-										theme === t ? "btn-primary" : "btn-secondary"
-									}`}
-								>
-									{t}
-								</button>
-							))}
-						</div>
-					</div>
-					<AISettingsSection />
-				</div>
-				<button type="button" onClick={onClose} className="btn btn-secondary mt-6 w-full">
-					Close
+		<div className="settings-page flex h-full flex-col">
+			<div className="flex shrink-0 items-center gap-3 border-b border-[var(--border-secondary)] px-4 py-3">
+				<button
+					type="button"
+					onClick={onClose}
+					className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+				>
+					<ArrowLeft size={16} />
+					Back to repo
 				</button>
+			</div>
+			<div className="flex min-h-0 flex-1">
+				<nav
+					className="flex shrink-0 flex-col gap-0.5 border-r border-[var(--border-secondary)] py-3"
+					style={{ width: 180 }}
+				>
+					{tabs.map((tab) => (
+						<button
+							key={tab.id}
+							type="button"
+							onClick={() => setActiveTab(tab.id)}
+							className={`flex items-center gap-3 px-4 py-2.5 text-left text-sm outline-none transition-colors ${
+								activeTab === tab.id
+									? "bg-[var(--bg-active)] font-medium text-[var(--text-primary)]"
+									: "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+							}`}
+						>
+							{tab.icon}
+							{tab.label}
+						</button>
+					))}
+				</nav>
+				<div className="min-w-0 flex-1 overflow-auto">
+					<div className="mx-auto max-w-[600px] px-6 py-6">
+						{activeTab === "general" && (
+							<div className="space-y-6">
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										Git
+									</h3>
+									<label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+										Git binary
+									</label>
+									<p className="mb-2 text-xs text-[var(--text-muted)]">
+										Path to the git executable
+									</p>
+									<div className="flex gap-2">
+										<select
+											value={gitPath ?? ""}
+											onChange={(e) => setGitPath(e.target.value || null)}
+											className="input flex-1 text-[13px]"
+										>
+											<option value="">Auto (from PATH)</option>
+											{gitBinaries.map((p) => (
+												<option key={p} value={p}>
+													{p}
+												</option>
+											))}
+										</select>
+										<button
+											type="button"
+											onClick={handleSelectGitBinary}
+											className="btn btn-secondary"
+										>
+											Browse
+										</button>
+									</div>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										UI Scale
+									</h3>
+									<p className="mb-2 text-xs text-[var(--text-muted)]">
+										75% — 150%
+									</p>
+									<input
+										type="text"
+										value={String(Math.round(uiScale * 100))}
+										onChange={(e) => {
+											const v = parseFloat(e.target.value);
+											if (!Number.isNaN(v))
+												setUiScale(Math.min(150, Math.max(75, v)) / 100);
+										}}
+										onBlur={() => {
+											const v = Math.min(1.5, Math.max(0.75, uiScale));
+											setUiScale(v);
+											void updateSettings({ uiScale: v });
+										}}
+										className="input w-20 text-[13px]"
+									/>
+									<span className="ml-2 text-xs text-[var(--text-muted)]">%</span>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										Font Size
+									</h3>
+									<p className="mb-2 text-xs text-[var(--text-muted)]">
+										12px — 18px
+									</p>
+									<input
+										type="text"
+										value={String(fontSize)}
+										onChange={(e) => {
+											const v = parseInt(e.target.value, 10);
+											if (!Number.isNaN(v))
+												setFontSize(Math.min(18, Math.max(12, v)));
+										}}
+										onBlur={() => {
+											const v = Math.min(18, Math.max(12, fontSize));
+											setFontSize(v);
+											void updateSettings({ fontSize: v });
+										}}
+										className="input w-20 text-[13px]"
+									/>
+									<span className="ml-2 text-xs text-[var(--text-muted)]">
+										px
+									</span>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										GPU acceleration
+									</h3>
+									<p className="mb-2 text-xs text-[var(--text-muted)]">
+										Use hardware acceleration for smoother rendering. Disable if
+										you see GPU-related errors or graphical glitches.
+									</p>
+									<label className="flex cursor-pointer items-center gap-2">
+										<input
+											type="checkbox"
+											checked={gpuAcceleration}
+											onChange={(e) => {
+												const v = e.target.checked;
+												setGpuAcceleration(v);
+												window.gitagen.settings.setGlobal({
+													gpuAcceleration: v,
+												});
+											}}
+										/>
+										<span className="text-sm text-[var(--text-secondary)]">
+											Use GPU acceleration
+										</span>
+									</label>
+								</div>
+							</div>
+						)}
+						{activeTab === "git" && (
+							<div className="space-y-6">
+								{!projectId ? (
+									<div className="panel p-4">
+										<p className="text-sm text-[var(--text-muted)]">
+											Open a project to edit its local git config.
+										</p>
+									</div>
+								) : (
+									<div className="panel p-4">
+										<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+											Project local git config
+										</h3>
+										<p className="mb-3 text-xs text-[var(--text-muted)]">
+											user.name, user.email, commit.gpgsign for this
+											repository
+										</p>
+										<div className="grid grid-cols-2 gap-3">
+											<div>
+												<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+													user.name
+												</label>
+												<input
+													value={localUserName}
+													onChange={(e) =>
+														setLocalUserName(e.target.value)
+													}
+													className="input text-xs"
+												/>
+											</div>
+											<div>
+												<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+													user.email
+												</label>
+												<input
+													value={localUserEmail}
+													onChange={(e) =>
+														setLocalUserEmail(e.target.value)
+													}
+													className="input text-xs"
+												/>
+											</div>
+										</div>
+										<label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]">
+											<input
+												type="checkbox"
+												checked={localSignEnabled}
+												onChange={(e) =>
+													setLocalSignEnabled(e.target.checked)
+												}
+											/>
+											commit.gpgsign (local)
+										</label>
+										<div className="mt-3 flex items-center gap-2">
+											<button
+												type="button"
+												onClick={handleSaveLocalConfig}
+												disabled={!projectId || savingLocalConfig}
+												className="btn btn-secondary text-xs"
+											>
+												Apply to repo
+											</button>
+											{localConfigMessage && (
+												<p className="text-xs text-[var(--text-muted)]">
+													{localConfigMessage}
+												</p>
+											)}
+										</div>
+										<div className="mt-3 max-h-32 overflow-auto rounded-md border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-2">
+											{effectiveConfig.length === 0 ? (
+												<p className="text-xs text-[var(--text-muted)]">
+													No effective config entries found.
+												</p>
+											) : (
+												effectiveConfig.slice(-20).map((entry, idx) => (
+													<div
+														key={`${entry.key}-${idx}`}
+														className="mb-1 text-[10px]"
+													>
+														<span className="font-medium text-[var(--text-primary)]">
+															{entry.key}
+														</span>
+														<span className="text-[var(--text-muted)]">
+															{" "}
+															= {entry.value} ({entry.scope},{" "}
+															{entry.origin})
+														</span>
+													</div>
+												))
+											)}
+										</div>
+									</div>
+								)}
+							</div>
+						)}
+						{activeTab === "signing" && (
+							<div className="space-y-6">
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										SSH agent
+									</h3>
+									<div className="rounded-md border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-2 text-[13px]">
+										<p className="font-medium text-[var(--text-primary)]">
+											{sshAgentInfo.name || "Default"}
+										</p>
+										{sshAgentInfo.path && (
+											<p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
+												{sshAgentInfo.path}
+											</p>
+										)}
+									</div>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										Commit signing
+									</h3>
+									<label className="mb-3 flex cursor-pointer items-center gap-2">
+										<input
+											type="checkbox"
+											checked={signCommits}
+											onChange={async (e) => {
+												const v = e.target.checked;
+												setSignCommits(v);
+												setLocalSignEnabled(v);
+												await updateSigningSettings({ enabled: v });
+											}}
+										/>
+										<span className="text-xs font-medium text-[var(--text-secondary)]">
+											Sign commits
+										</span>
+									</label>
+									<label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+										SSH signing key
+									</label>
+									<p className="mb-2 text-[11px] text-[var(--text-muted)]">
+										Detected from git config when a project is open. Override
+										here to change or set for repos that don&apos;t have it yet.
+									</p>
+									<input
+										value={signingKey}
+										onChange={(e) => setSigningKey(e.target.value)}
+										placeholder="e.g. ~/.ssh/id_ed25519.pub or key fingerprint"
+										className="input w-full text-xs"
+									/>
+									<div className="mt-2 flex items-center gap-2">
+										<button
+											type="button"
+											onClick={handleTestSigning}
+											disabled={!projectId}
+											className="btn btn-secondary text-xs"
+										>
+											Test signing
+										</button>
+										{signingTestResult && (
+											<p
+												className={`text-xs ${signingTestResult.ok ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+											>
+												{signingTestResult.message}
+											</p>
+										)}
+									</div>
+								</div>
+							</div>
+						)}
+						{activeTab === "ai" && (
+							<div className="space-y-6">
+								<AISettingsSection />
+							</div>
+						)}
+						{activeTab === "appearance" && (
+							<div className="space-y-6">
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										Theme
+									</h3>
+									<div className="flex gap-2">
+										{(["light", "dark", "system"] as const).map((t) => (
+											<button
+												key={t}
+												type="button"
+												onClick={() => setTheme(t)}
+												className={`btn capitalize ${
+													theme === t ? "btn-primary" : "btn-secondary"
+												}`}
+											>
+												{t}
+											</button>
+										))}
+									</div>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										Font family
+									</h3>
+									<p className="mb-2 text-xs text-[var(--text-muted)]">
+										System, Geist, or Geist Pixel
+									</p>
+									<select
+										value={fontFamily}
+										onChange={(e) => {
+											const v = e.target.value as
+												| "geist"
+												| "geist-pixel"
+												| "system";
+											setFontFamily(v);
+											void updateSettings({ fontFamily: v });
+										}}
+										className="input w-full text-[13px]"
+									>
+										<option value="geist">Geist</option>
+										<option value="geist-pixel">Geist Pixel</option>
+										<option value="system">System</option>
+									</select>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+										Commit message font size
+									</h3>
+									<p className="mb-2 text-xs text-[var(--text-muted)]">
+										12px — 18px
+									</p>
+									<input
+										type="text"
+										value={String(commitMessageFontSize)}
+										onChange={(e) => {
+											const v = parseInt(e.target.value, 10);
+											if (!Number.isNaN(v))
+												setCommitMessageFontSize(
+													Math.min(18, Math.max(12, v))
+												);
+										}}
+										onBlur={() => {
+											const v = Math.min(
+												18,
+												Math.max(12, commitMessageFontSize)
+											);
+											setCommitMessageFontSize(v);
+											void updateSettings({
+												commitMessageFontSize: v,
+											});
+										}}
+										className="input w-20 text-[13px]"
+									/>
+									<span className="ml-2 text-xs text-[var(--text-muted)]">
+										px
+									</span>
+								</div>
+							</div>
+						)}
+						<div className="mt-8 flex gap-3">
+							<button
+								type="button"
+								onClick={async () => {
+									await window.gitagen.settings.setGlobal({
+										gitBinaryPath: gitPath,
+										gpuAcceleration,
+									});
+									await updateSettings({
+										uiScale,
+										fontSize,
+										commitMessageFontSize,
+										fontFamily,
+									});
+									onClose();
+								}}
+								className="btn btn-primary"
+							>
+								Save
+							</button>
+							<button type="button" onClick={onClose} className="btn btn-secondary">
+								Discard
+							</button>
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	);
@@ -1455,10 +1663,16 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 
 export default function App() {
 	const [initialTheme, setInitialTheme] = useState<"dark" | "light" | "system">("system");
-	const [initialSettings, setInitialSettings] = useState({
+	const [initialSettings, setInitialSettings] = useState<{
+		uiScale: number;
+		fontSize: number;
+		commitMessageFontSize: number;
+		fontFamily: "geist" | "geist-pixel" | "system";
+	}>({
 		uiScale: 1.0,
 		fontSize: 14,
 		commitMessageFontSize: 14,
+		fontFamily: "system",
 	});
 
 	useEffect(() => {
@@ -1470,6 +1684,7 @@ export default function App() {
 					uiScale: s?.uiScale ?? 1.0,
 					fontSize: s?.fontSize ?? 14,
 					commitMessageFontSize: s?.commitMessageFontSize ?? 14,
+					fontFamily: s?.fontFamily ?? "system",
 				});
 			})
 			.catch(() => {});

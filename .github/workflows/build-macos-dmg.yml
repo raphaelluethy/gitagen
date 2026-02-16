@@ -28,10 +28,59 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build app and package DMG
-        run: pnpm dist:mac
+      - name: Derive app version from tag
+        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Build app
+        run: pnpm build
+
+      - name: Prepare production runtime dependencies
+        run: pnpm prepare:runtime-deps
+
+      - name: Package DMG
+        run: pnpm exec electron-builder --mac dmg --publish never --config.extraMetadata.version="${APP_VERSION}"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify runtime dependency resolution
+        run: |
+          APP_RESOURCES_DIR="$(find release -type d -path '*/Gitagen.app/Contents/Resources' | head -n1)"
+          if [ -z "$APP_RESOURCES_DIR" ]; then
+            echo "Could not locate packaged app resources directory."
+            exit 1
+          fi
+
+          VERIFY_ROOT="$(mktemp -d)"
+          mkdir -p "$VERIFY_ROOT/Applications/Gitagen.app/Contents/Resources"
+          ln -s "$APP_RESOURCES_DIR/node_modules" "$VERIFY_ROOT/Applications/Gitagen.app/Contents/Resources/node_modules"
+          export VERIFY_ENTRY="$VERIFY_ROOT/Applications/Gitagen.app/Contents/Resources/app.asar/node_modules/@ai-sdk/provider-utils/dist/index.js"
+
+          node - <<'NODE'
+          const { createRequire } = require("node:module");
+          const req = createRequire(
+            process.env.VERIFY_ENTRY ||
+              "/tmp/placeholder/Applications/Gitagen.app/Contents/Resources/app.asar/node_modules/@ai-sdk/provider-utils/dist/index.js",
+          );
+          const required = [
+            "eventsource-parser/stream",
+            "ms",
+            "simple-git",
+            "@ai-sdk/openai",
+          ];
+          const missing = [];
+          for (const id of required) {
+            try {
+              req.resolve(id);
+            } catch {
+              missing.push(id);
+            }
+          }
+          if (missing.length) {
+            console.error("Missing runtime modules:", missing.join(", "));
+            process.exit(1);
+          }
+          console.log("Runtime dependency resolution check passed.");
+          NODE
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -45,3 +94,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release/*.dmg
+          overwrite_files: true

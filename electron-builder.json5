@@ -7,6 +7,11 @@
 	files: ["out/**/*"],
 	extraResources: [
 		{
+			from: ".runtime-deploy/node_modules",
+			to: "node_modules",
+			filter: ["**/*"],
+		},
+		{
 			from: "resources/cli",
 			to: "cli",
 			filter: ["**/*"],

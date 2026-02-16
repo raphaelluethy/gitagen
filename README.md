@@ -89,7 +89,7 @@ pnpm build
 pnpm dist:mac
 ```
 
-GitHub Actions also builds a macOS `.dmg` via `.github/workflows/build-macos-dmg.yml` when a `v*` tag is pushed. Download it from the workflow run artifacts (`gitagen-macos-dmg-<ref>`).
+GitHub Actions also builds a macOS `.dmg` via `.github/workflows/build-macos-dmg.yml` when a `v*` tag is pushed. The DMG version is derived from the tag (for example, `v0.0.3` produces `Gitagen-0.0.3-<arch>.dmg`). Download it from the workflow run artifacts or release assets.
 
 ### Other Commands
 

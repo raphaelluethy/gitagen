@@ -145,14 +145,21 @@ function TreeItem({
 	const { toast } = useToast();
 	const paddingLeft = depth * 16 + 12;
 
-	if (node.type === "file" && node.file) {
-		const isSelected =
-			selectedFile?.path === node.file.path && selectedFile?.status === node.file.status;
-		const letter = node.file.changeType ?? "M";
-		const barColor = statusBarColor(letter);
-		const canStage = section === "unstaged" || section === "untracked";
-		const handleStage = async (e: React.MouseEvent) => {
+	const isFile = node.type === "file" && node.file;
+	const isFolder = node.type === "folder" && node.children;
+	const isSelected =
+		isFile && selectedFile?.path === node.file!.path && selectedFile?.status === node.file!.status;
+	const letter = isFile ? (node.file!.changeType ?? "M") : "M";
+	const barColor = statusBarColor(letter);
+	const canStage = section === "unstaged" || section === "untracked";
+	const isExpanded = isFolder && expandedFolders.has(node.path);
+	const childNodes = isFolder ? (node.children as FileTreeNode[]) : [];
+	const paths = isFolder ? collectFilePaths(node) : [];
+
+	const handleStage = useCallback(
+		async (e: React.MouseEvent) => {
 			e.stopPropagation();
+			if (!isFile) return;
 			try {
 				if (canStage) {
 					await window.gitagen.repo.stageFiles(projectId, [node.file!.path]);
@@ -164,7 +171,30 @@ function TreeItem({
 				const msg = error instanceof Error ? error.message : "Unknown error";
 				toast.error("Staging failed", msg);
 			}
-		};
+		},
+		[projectId, node, isFile, canStage, onRefresh, toast]
+	);
+
+	const handleStageFolder = useCallback(
+		async (e: React.MouseEvent) => {
+			e.stopPropagation();
+			if (paths.length === 0) return;
+			try {
+				if (canStage) {
+					await window.gitagen.repo.stageFiles(projectId, paths);
+				} else {
+					await window.gitagen.repo.unstageFiles(projectId, paths);
+				}
+				onRefresh();
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : "Unknown error";
+				toast.error("Staging failed", msg);
+			}
+		},
+		[projectId, paths, canStage, onRefresh, toast]
+	);
+
+	if (isFile) {
 
 		return (
 			<div
@@ -206,6 +236,7 @@ function TreeItem({
 						canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
 					}`}
 					title={canStage ? "Stage file" : "Unstage file"}
+					aria-label={canStage ? "Stage file" : "Unstage file"}
 				>
 					{canStage ? (
 						<Plus size={14} strokeWidth={2} />
@@ -217,28 +248,7 @@ function TreeItem({
 		);
 	}
 
-	if (node.type === "folder" && node.children) {
-		const isExpanded = expandedFolders.has(node.path);
-		const childNodes = node.children as FileTreeNode[];
-		const canStage = section === "unstaged" || section === "untracked";
-		const paths = collectFilePaths(node);
-
-		const handleStageFolder = async (e: React.MouseEvent) => {
-			e.stopPropagation();
-			if (paths.length === 0) return;
-			try {
-				if (canStage) {
-					await window.gitagen.repo.stageFiles(projectId, paths);
-				} else {
-					await window.gitagen.repo.unstageFiles(projectId, paths);
-				}
-				onRefresh();
-			} catch (error) {
-				const msg = error instanceof Error ? error.message : "Unknown error";
-				toast.error("Staging failed", msg);
-			}
-		};
-
+	if (isFolder) {
 		return (
 			<div key={node.path}>
 				<div
@@ -278,6 +288,7 @@ function TreeItem({
 								canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
 							}`}
 							title={canStage ? "Stage folder" : "Unstage folder"}
+							aria-label={canStage ? "Stage folder" : "Unstage folder"}
 						>
 							{canStage ? (
 								<Plus size={14} strokeWidth={2} />

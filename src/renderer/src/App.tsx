@@ -1,5 +1,15 @@
 /// <reference lib="dom" />
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer, Component, type ReactNode, type ErrorInfo } from "react";
+import {
+	useState,
+	useEffect,
+	useCallback,
+	useMemo,
+	useRef,
+	useReducer,
+	Component,
+	type ReactNode,
+	type ErrorInfo,
+} from "react";
 import {
 	Group,
 	Panel,
@@ -45,7 +55,7 @@ import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
 import SyncButtons from "./components/SyncButtons";
 import ConflictBanner from "./components/ConflictBanner";
-import AutoCommitModal from "./components/AutoCommitModal";
+import GitAgentModal from "./components/GitAgentModal";
 import StartPage from "./components/StartPage";
 import { FpsMonitor } from "./components/FpsMonitor";
 import { Dialog, DialogContent } from "./components/ui/dialog";
@@ -84,6 +94,8 @@ import type {
 const MAIN_LAYOUT_FALLBACK = [20, 80];
 const CONTENT_LAYOUT_FALLBACK = [70, 30];
 const LAST_PROJECT_KEY = "gitagen:lastProjectId";
+const COMMIT_AGENT_INITIAL_PROMPT =
+	"Analyze all changes and propose 1 cohesive commit by default (maximum 2 only when there is a strong boundary).";
 
 type Layout = { [id: string]: number };
 
@@ -255,12 +267,16 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 		if (this.state.hasError) {
 			return (
 				<div className="flex h-screen flex-col items-center justify-center gap-4 bg-(--bg-primary) p-8">
-					<h1 className="text-lg font-semibold text-(--text-primary)">Something went wrong</h1>
+					<h1 className="text-lg font-semibold text-(--text-primary)">
+						Something went wrong
+					</h1>
 					<p className="max-w-md text-center text-sm text-(--text-muted)">
 						An unexpected error occurred. Please restart the application.
 					</p>
 					<details className="w-full max-w-md">
-						<summary className="cursor-pointer text-xs text-(--text-muted)">Error details</summary>
+						<summary className="cursor-pointer text-xs text-(--text-muted)">
+							Error details
+						</summary>
 						<pre className="mt-2 overflow-auto rounded bg-(--bg-secondary) p-2 text-xs text-(--danger)">
 							{this.state.error?.message}
 							{"\n"}
@@ -292,7 +308,10 @@ function AppContent() {
 	const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
 	const [viewMode, setViewMode] = useState<ViewMode>("single");
 	const [showSettings, setShowSettings] = useState(false);
-	const [showAutoCommit, setShowAutoCommit] = useState(false);
+	const [showGitAgent, setShowGitAgent] = useState(false);
+	const [gitAgentInitialPrompt, setGitAgentInitialPrompt] = useState<string | undefined>(
+		undefined
+	);
 	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
 	const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -372,13 +391,24 @@ function AppContent() {
 		setViewMode("all");
 	}, []);
 
+	const openGitAgent = useCallback((initialPrompt?: string) => {
+		setGitAgentInitialPrompt(initialPrompt);
+		setShowGitAgent(true);
+	}, []);
+
 	const refreshStatus = useCallback(() => {
 		if (!activeProject) return;
 		window.gitagen.repo.openProject(activeProject.id).then((data) => {
 			if (!data) return;
 			dispatch({ type: "SET_STATUS", payload: data.status });
-			dispatch({ type: "SET_WORKTREE_PATH", payload: data.prefs?.activeWorktreePath ?? null });
-			dispatch({ type: "SET_BRANCH_INFO", payload: data.branches.find((b) => b.current) ?? null });
+			dispatch({
+				type: "SET_WORKTREE_PATH",
+				payload: data.prefs?.activeWorktreePath ?? null,
+			});
+			dispatch({
+				type: "SET_BRANCH_INFO",
+				payload: data.branches.find((b) => b.current) ?? null,
+			});
 			dispatch({ type: "SET_REMOTES", payload: data.remotes });
 		});
 	}, [activeProject?.id]);
@@ -418,8 +448,14 @@ function AppContent() {
 		window.gitagen.repo.openProject(activeProject.id).then((data) => {
 			if (!data) return;
 			dispatch({ type: "SET_STATUS", payload: data.status });
-			dispatch({ type: "SET_WORKTREE_PATH", payload: data.prefs?.activeWorktreePath ?? null });
-			dispatch({ type: "SET_BRANCH_INFO", payload: data.branches.find((b) => b.current) ?? null });
+			dispatch({
+				type: "SET_WORKTREE_PATH",
+				payload: data.prefs?.activeWorktreePath ?? null,
+			});
+			dispatch({
+				type: "SET_BRANCH_INFO",
+				payload: data.branches.find((b) => b.current) ?? null,
+			});
 			dispatch({ type: "SET_REMOTES", payload: data.remotes });
 			if (data.cachedLog && data.cachedLog.length > 0) {
 				dispatch({
@@ -560,6 +596,9 @@ function AppContent() {
 				setSelectedCommitOid(null);
 				setActiveProject(null);
 			},
+			onOpenGitAgent: () => {
+				openGitAgent();
+			},
 			onOpenSettings: (tab) => {
 				setSettingsTabOverride(tab ?? null);
 				setShowSettings(true);
@@ -592,6 +631,7 @@ function AppContent() {
 		}),
 		[
 			handleAddProject,
+			openGitAgent,
 			refreshStatus,
 			refreshStatusAndPrefs,
 			toggleLeftPanel,
@@ -633,13 +673,15 @@ function AppContent() {
 				/>
 			)}
 			{activeProject && (
-				<AutoCommitModal
-					open={showAutoCommit}
+				<GitAgentModal
+					open={showGitAgent}
 					onClose={() => {
-						setShowAutoCommit(false);
+						setShowGitAgent(false);
+						setGitAgentInitialPrompt(undefined);
 						refreshStatus();
 					}}
 					projectId={activeProject.id}
+					initialPrompt={gitAgentInitialPrompt}
 				/>
 			)}
 		</>
@@ -785,7 +827,11 @@ function AppContent() {
 								onClick={toggleLeftPanel}
 								className="btn-icon rounded-md p-1.5"
 								title={isLeftPanelCollapsed ? "Show panel" : "Hide panel"}
-								aria-label={isLeftPanelCollapsed ? "Show sidebar panel" : "Hide sidebar panel"}
+								aria-label={
+									isLeftPanelCollapsed
+										? "Show sidebar panel"
+										: "Hide sidebar panel"
+								}
 							>
 								{isLeftPanelCollapsed ? (
 									<PanelLeft size={15} />
@@ -808,7 +854,11 @@ function AppContent() {
 							/>
 						</div>
 						<div className="mx-1 hidden h-4 w-px bg-(--border-secondary) sm:block" />
-						<div className="hidden items-center tab-bar sm:flex" role="tablist" aria-label="View mode">
+						<div
+							className="hidden items-center tab-bar sm:flex"
+							role="tablist"
+							aria-label="View mode"
+						>
 							<button
 								type="button"
 								onClick={() => setViewMode("single")}
@@ -830,7 +880,11 @@ function AppContent() {
 								<FileStack size={14} />
 							</button>
 						</div>
-						<div className="hidden items-center tab-bar md:flex" role="tablist" aria-label="Diff style">
+						<div
+							className="hidden items-center tab-bar md:flex"
+							role="tablist"
+							aria-label="Diff style"
+						>
 							<button
 								type="button"
 								onClick={() => setDiffStyle("unified")}
@@ -853,6 +907,15 @@ function AppContent() {
 							</button>
 						</div>
 						<div className="ml-auto flex shrink-0 items-center gap-0.5">
+							<button
+								type="button"
+								onClick={() => openGitAgent()}
+								className="btn-icon rounded-md p-1.5"
+								title="Open GitAgent"
+								aria-label="Open GitAgent"
+							>
+								<Sparkles size={15} />
+							</button>
 							<SyncButtons
 								projectId={activeProject.id}
 								ahead={currentBranchInfo?.ahead ?? 0}
@@ -866,7 +929,9 @@ function AppContent() {
 								onClick={toggleRightPanel}
 								className="btn-icon rounded-md p-1.5"
 								title={isRightPanelCollapsed ? "Show panel" : "Hide panel"}
-								aria-label={isRightPanelCollapsed ? "Show right panel" : "Hide right panel"}
+								aria-label={
+									isRightPanelCollapsed ? "Show right panel" : "Hide right panel"
+								}
 							>
 								{isRightPanelCollapsed ? (
 									<PanelRight size={15} />
@@ -943,7 +1008,9 @@ function AppContent() {
 										<CommitPanel
 											projectId={activeProject.id}
 											onCommit={refreshStatus}
-											onAutoCommit={() => setShowAutoCommit(true)}
+											onOpenGitAgent={() =>
+												openGitAgent(COMMIT_AGENT_INITIAL_PROMPT)
+											}
 										/>
 									</Panel>
 								</Group>
@@ -963,7 +1030,11 @@ function AppContent() {
 							}}
 						>
 							<div className="flex min-h-0 flex-1 flex-col">
-								<div className="flex shrink-0 tab-bar border-b border-(--border-secondary) mx-2 mt-2" role="tablist" aria-label="Right panel tabs">
+								<div
+									className="flex shrink-0 tab-bar border-b border-(--border-secondary) mx-2 mt-2"
+									role="tablist"
+									aria-label="Right panel tabs"
+								>
 									<button
 										type="button"
 										onClick={() => setRightTab("log")}

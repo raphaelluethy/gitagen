@@ -72,7 +72,7 @@ export interface AgentChatModalProps {
 	description?: string;
 	provider: AIProviderInstance;
 	instructions: string;
-	initialPrompt: string;
+	initialPrompt?: string;
 	traceKey?: string;
 	createTools: (helpers: AgentChatToolHelpers) => ToolSet;
 	renderToolPart?: (args: AgentToolPartRenderArgs) => ReactNode | null;
@@ -396,7 +396,9 @@ export default function AgentChatModal({
 				},
 				onStepFinish: (step) => {
 					const calledTools = step.toolCalls.map((call) => call.toolName).join(", ");
-					const resolvedTools = step.toolResults.map((result) => result.toolName).join(", ");
+					const resolvedTools = step.toolResults
+						.map((result) => result.toolName)
+						.join(", ");
 					appendTrace(
 						"info",
 						[
@@ -459,6 +461,7 @@ export default function AgentChatModal({
 	}, [appendTrace, status]);
 
 	useEffect(() => {
+		if (!initialPrompt || initialPrompt.trim() === "") return;
 		if (sentRef.current) return;
 		const timer = window.setTimeout(() => {
 			if (sentRef.current) return;

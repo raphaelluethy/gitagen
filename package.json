@@ -9,9 +9,8 @@
 	"scripts": {
 		"dev": "electron-vite dev",
 		"build": "electron-vite build",
-		"prepare:runtime-deps": "node -e \"require('node:fs').rmSync('.runtime-deploy', { recursive: true, force: true })\" && pnpm --filter . deploy --prod --legacy .runtime-deploy && pnpm --dir .runtime-deploy install --prod --config.node-linker=hoisted --no-frozen-lockfile --ignore-scripts",
-		"pack:mac": "test -d .runtime-deploy/node_modules || (echo \"Missing .runtime-deploy/node_modules. Run pnpm prepare:runtime-deps first.\" && exit 1); electron-builder --mac dmg --publish never",
-		"dist:mac": "pnpm build && pnpm prepare:runtime-deps && pnpm pack:mac",
+		"pack:mac": "electron-builder --mac dmg --publish never",
+		"dist:mac": "pnpm build && pnpm pack:mac",
 		"preview": "electron-vite preview",
 		"typecheck": "tsgo --noEmit -p tsconfig.typecheck.json",
 		"lint": "oxlint src",

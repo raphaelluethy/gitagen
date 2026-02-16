@@ -34,6 +34,7 @@ export interface CommandActions {
 	onOpenProject: (project: Project) => void;
 	onAddProject: () => Promise<void>;
 	onBackToProjects: () => void;
+	onOpenGitAgent: () => void;
 	onOpenSettings: (tab?: SettingsTab) => void;
 	onCloseSettings: () => void;
 	onSetViewMode: (mode: ViewMode) => void;
@@ -264,6 +265,17 @@ export function useCommandRegistry(
 		}
 
 		if (repoRoute) {
+			commands.push({
+				id: "ai.gitagent.open",
+				label: "Open GitAgent",
+				description: "Open AI assistant for git workflows",
+				category: "AI",
+				keywords: ["ai", "agent", "gitagent", "assistant", "commit"],
+				run: () => {
+					actions.onOpenGitAgent();
+				},
+			});
+
 			commands.push({
 				id: "nav.left.toggle",
 				label: context.isLeftPanelCollapsed ? "Show Left Panel" : "Hide Left Panel",

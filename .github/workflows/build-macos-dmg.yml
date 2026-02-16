@@ -34,43 +34,10 @@ jobs:
       - name: Build app
         run: pnpm build
 
-      - name: Prepare production runtime dependencies
-        run: pnpm prepare:runtime-deps
-
       - name: Package DMG
         run: pnpm exec electron-builder --mac dmg --publish never --config.extraMetadata.version="${APP_VERSION}" --config.mac.identity=null
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
-      - name: Verify runtime dependency resolution
-        run: |
-          APP_RESOURCES_DIR="$(find release -type d -path '*/Gitagen.app/Contents/Resources' | head -n1)"
-          if [ -z "$APP_RESOURCES_DIR" ]; then
-            echo "Could not locate packaged app resources directory."
-            exit 1
-          fi
-
-          REQUIRED_FILES=(
-            "node_modules/eventsource-parser/dist/stream.cjs"
-            "node_modules/ms/index.js"
-            "node_modules/simple-git/dist/cjs/index.js"
-            "node_modules/@ai-sdk/openai/dist/index.js"
-          )
-
-          MISSING_FILES=()
-          for rel in "${REQUIRED_FILES[@]}"; do
-            if [ ! -f "$APP_RESOURCES_DIR/$rel" ]; then
-              MISSING_FILES+=("$rel")
-            fi
-          done
-
-          if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
-            echo "Missing runtime module files:"
-            printf '%s\n' "${MISSING_FILES[@]}"
-            exit 1
-          fi
-
-          echo "Runtime dependency file check passed."
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4

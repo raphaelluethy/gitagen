@@ -5,14 +5,14 @@ import { useToast } from "../toast/provider";
 interface CommitPanelProps {
 	projectId: string;
 	onCommit: () => void;
-	onAutoCommit?: () => void;
+	onOpenGitAgent?: () => void;
 	disabled?: boolean;
 }
 
 export default function CommitPanel({
 	projectId,
 	onCommit,
-	onAutoCommit,
+	onOpenGitAgent,
 	disabled,
 }: CommitPanelProps) {
 	const [message, setMessage] = useState("");
@@ -76,10 +76,10 @@ export default function CommitPanel({
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
-						onClick={onAutoCommit}
-						disabled={disabled || !onAutoCommit}
+						onClick={onOpenGitAgent}
+						disabled={disabled || !onOpenGitAgent}
 						className="btn-icon rounded-md p-1"
-						title="Auto-commit with AI agent"
+						title="Open GitAgent"
 					>
 						<Bot size={13} />
 					</button>

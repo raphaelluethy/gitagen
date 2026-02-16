@@ -4,13 +4,12 @@
 	directories: {
 		output: "release",
 	},
-	files: ["out/**/*"],
+	files: [
+		"out/**/*",
+		"node_modules/keytar/**/*",
+		"node_modules/@libsql/**/*",
+	],
 	extraResources: [
-		{
-			from: ".runtime-deploy/node_modules",
-			to: "node_modules",
-			filter: ["**/*"],
-		},
 		{
 			from: "resources/cli",
 			to: "cli",
@@ -29,7 +28,8 @@
 	mac: {
 		icon: "resources/icon.icns",
 		category: "public.app-category.developer-tools",
-		target: ["dmg", "zip"],
+		target: [{ target: "dmg", arch: ["arm64"] }],
+		identity: null,
 	},
 	linux: {
 		icon: "resources/icon.png",

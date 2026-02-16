@@ -19,12 +19,7 @@ import {
 	pruneWorktrees as pruneWorktreesManager,
 } from "../services/worktree/manager.js";
 import { emitConflictDetected, emitRepoError, emitRepoUpdated } from "./events.js";
-import type {
-	ConflictState,
-	FileChange,
-	RepoStatus,
-	TreeNode,
-} from "../../shared/types.js";
+import type { ConflictState, FileChange, RepoStatus, TreeNode } from "../../shared/types.js";
 
 function migrateRepoStatus(raw: unknown): RepoStatus | null {
 	if (!raw || typeof raw !== "object") return null;
@@ -33,16 +28,20 @@ function migrateRepoStatus(raw: unknown): RepoStatus | null {
 	const branch = typeof r.branch === "string" ? r.branch : "";
 	const toFileChanges = (arr: unknown): FileChange[] => {
 		if (!Array.isArray(arr)) return [];
-		return arr.map((item) =>
-			typeof item === "string"
-				? { path: item, changeType: "M" }
-				: item && typeof item === "object" && "path" in (item as object)
-					? {
-							path: String((item as { path: unknown }).path),
-							changeType: String((item as { changeType?: unknown }).changeType ?? "M"),
-						}
-					: null
-		).filter((x): x is FileChange => x !== null);
+		return arr
+			.map((item) =>
+				typeof item === "string"
+					? { path: item, changeType: "M" }
+					: item && typeof item === "object" && "path" in (item as object)
+						? {
+								path: String((item as { path: unknown }).path),
+								changeType: String(
+									(item as { changeType?: unknown }).changeType ?? "M"
+								),
+							}
+						: null
+			)
+			.filter((x): x is FileChange => x !== null);
 	};
 	return {
 		headOid,
@@ -608,7 +607,6 @@ export function registerRepoHandlers(): void {
 		async (
 			_,
 			projectId: string,
-			format: "ssh" | "gpg",
 			key: string
 		): Promise<{ ok: boolean; message: string }> => {
 			const { testSigningConfig } = await import("../services/settings/git-config.js");
@@ -617,7 +615,7 @@ export function registerRepoHandlers(): void {
 				return { ok: false, message: "Project not found." };
 			}
 			try {
-				return testSigningConfig(cwd, format, key);
+				return testSigningConfig(cwd, key);
 			} catch (error) {
 				emitRepoError(projectId, error);
 				return {

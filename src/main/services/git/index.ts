@@ -1,7 +1,6 @@
 import { execSync } from "child_process";
 import { existsSync } from "fs";
 import { createSimpleGitProvider } from "./simple-git-provider.js";
-import { buildGitEnv, get1PasswordAgentPath } from "./env.js";
 import type { AppSettings } from "../../../shared/types.js";
 import type { GitProvider } from "./types.js";
 
@@ -42,10 +41,8 @@ export function resolveGitBinary(binaryPath: string | null): string | null {
 }
 
 export function createGitProvider(settings: Partial<AppSettings> = {}): GitProvider {
-	const use1Password = settings.signing?.use1PasswordAgent ?? false;
-	const env: NodeJS.ProcessEnv = buildGitEnv(use1Password);
 	const binary = resolveGitBinary(settings.gitBinaryPath ?? null);
-	return createSimpleGitProvider(binary, env);
+	return createSimpleGitProvider(binary);
 }
 
 export interface SshAgentInfo {
@@ -53,17 +50,12 @@ export interface SshAgentInfo {
 	path: string | null;
 }
 
-export function getSshAgentInfo(use1Password: boolean): SshAgentInfo {
-	if (use1Password) {
-		const p = get1PasswordAgentPath();
-		if (p) return { name: "1Password SSH Agent", path: p };
-		return { name: "1Password (not found)", path: null };
-	}
+export function getSshAgentInfo(): SshAgentInfo {
 	const sock = process.env.SSH_AUTH_SOCK;
 	if (sock) return { name: "System SSH Agent", path: sock };
 	return { name: "None", path: null };
 }
 
-export { buildGitEnv, get1PasswordAgentPath } from "./env.js";
+export { ensureSshAuthSock } from "./env.js";
 export { createSimpleGitProvider } from "./simple-git-provider.js";
 export type { GitProvider, RepoFingerprint } from "./types.js";

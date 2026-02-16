@@ -51,11 +51,7 @@ export function setLocalConfig(cwd: string, key: string, value: string): void {
 	}
 }
 
-export function testSigningConfig(
-	cwd: string,
-	format: "ssh" | "gpg",
-	key: string
-): { ok: boolean; message: string } {
+export function testSigningConfig(cwd: string, key: string): { ok: boolean; message: string } {
 	if (!key.trim()) {
 		return { ok: false, message: "Signing key is required." };
 	}
@@ -63,7 +59,7 @@ export function testSigningConfig(
 		"git",
 		[
 			"-c",
-			`gpg.format=${format}`,
+			"gpg.format=ssh",
 			"-c",
 			`user.signingkey=${key}`,
 			"config",

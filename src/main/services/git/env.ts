@@ -1,34 +1,24 @@
-import { existsSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { execSync } from "child_process";
 
-const ONEPASSWORD_AGENT_SOCK = join(
-	homedir(),
-	"Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
-);
+/**
+ * Ensure SSH_AUTH_SOCK is available in process.env.
+ * Electron apps launched from Finder/Dock may not inherit shell env vars,
+ * so we fall back to asking launchd for the value on macOS.
+ */
+export function ensureSshAuthSock(): void {
+	if (process.env.SSH_AUTH_SOCK) return;
 
-export function get1PasswordAgentPath(): string | null {
-	if (existsSync(ONEPASSWORD_AGENT_SOCK)) {
-		return ONEPASSWORD_AGENT_SOCK;
-	}
-	return null;
-}
-
-export interface GitEnv {
-	SSH_AUTH_SOCK?: string;
-	GIT_SSH_COMMAND?: string;
-}
-
-export function buildGitEnv(
-	use1Password: boolean,
-	baseEnv: NodeJS.ProcessEnv = process.env
-): NodeJS.ProcessEnv {
-	const env = { ...baseEnv };
-	if (use1Password) {
-		const sock = get1PasswordAgentPath();
-		if (sock) {
-			env.SSH_AUTH_SOCK = sock;
+	if (process.platform === "darwin") {
+		try {
+			const sock = execSync("launchctl getenv SSH_AUTH_SOCK", {
+				encoding: "utf-8",
+				timeout: 2000,
+			}).trim();
+			if (sock) {
+				process.env.SSH_AUTH_SOCK = sock;
+			}
+		} catch {
+			// launchctl not available or no SSH_AUTH_SOCK set – nothing we can do
 		}
 	}
-	return env;
 }

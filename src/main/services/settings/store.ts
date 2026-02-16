@@ -1,13 +1,29 @@
 import { getAppSetting, setAppSetting } from "../cache/queries.js";
-import type { AppSettings } from "../../../shared/types.js";
+import type { AppSettings, AIProviderInstance } from "../../../shared/types.js";
+import { setAIApiKey, getAllAIApiKeys } from "./keychain.js";
+
+export async function getAppSettingsWithKeys(): Promise<AppSettings> {
+	const settings = getAppSettings();
+	const apiKeys = await getAllAIApiKeys();
+
+	settings.ai.providers = settings.ai.providers.map((p) => ({
+		...p,
+		apiKey: apiKeys[p.id] ?? "",
+	}));
+
+	return settings;
+}
 
 const KEYS = {
 	gitBinaryPath: "gitBinaryPath",
 	theme: "theme",
 	signingEnabled: "signing.enabled",
-	signingFormat: "signing.format",
 	signingKey: "signing.key",
-	signingUse1Password: "signing.use1PasswordAgent",
+	aiProviders: "ai.providers",
+	aiActiveProvider: "ai.activeProviderId",
+	uiScale: "uiScale",
+	fontSize: "fontSize",
+	commitMessageFontSize: "commitMessageFontSize",
 } as const;
 
 const DEFAULTS: AppSettings = {
@@ -15,10 +31,15 @@ const DEFAULTS: AppSettings = {
 	theme: "system",
 	signing: {
 		enabled: false,
-		format: "ssh",
 		key: "",
-		use1PasswordAgent: false,
 	},
+	ai: {
+		activeProviderId: null,
+		providers: [],
+	},
+	uiScale: 1.0,
+	fontSize: 14,
+	commitMessageFontSize: 14,
 };
 
 export function getAppSettings(): AppSettings {
@@ -32,26 +53,49 @@ export function getAppSettings(): AppSettings {
 	) as AppSettings["theme"];
 
 	const signingEnabled = getAppSetting(KEYS.signingEnabled) === "true";
-	const signingFormat =
-		(getAppSetting(KEYS.signingFormat) as "ssh" | "gpg") || DEFAULTS.signing.format;
 	const signingKey = getAppSetting(KEYS.signingKey) ?? DEFAULTS.signing.key;
-	const signingUse1Password = getAppSetting(KEYS.signingUse1Password) === "true";
+
+	const aiProvidersRaw = getAppSetting(KEYS.aiProviders);
+	const aiActiveProvider = getAppSetting(KEYS.aiActiveProvider) ?? null;
+
+	let aiProviders: AIProviderInstance[] = [];
+	if (aiProvidersRaw) {
+		try {
+			aiProviders = JSON.parse(aiProvidersRaw);
+		} catch {
+			aiProviders = [];
+		}
+	}
+
+	const uiScaleRaw = getAppSetting(KEYS.uiScale);
+	const uiScale = uiScaleRaw ? parseFloat(uiScaleRaw) : DEFAULTS.uiScale;
+
+	const fontSizeRaw = getAppSetting(KEYS.fontSize);
+	const fontSize = fontSizeRaw ? parseInt(fontSizeRaw, 10) : DEFAULTS.fontSize;
+
+	const commitMessageFontSizeRaw = getAppSetting(KEYS.commitMessageFontSize);
+	const commitMessageFontSize = commitMessageFontSizeRaw
+		? parseInt(commitMessageFontSizeRaw, 10)
+		: DEFAULTS.commitMessageFontSize;
 
 	return {
 		gitBinaryPath,
 		theme,
 		signing: {
 			enabled: signingEnabled,
-			format: signingFormat,
 			key: signingKey,
-			use1PasswordAgent: signingUse1Password,
 		},
+		ai: {
+			activeProviderId: aiActiveProvider,
+			providers: aiProviders,
+		},
+		uiScale,
+		fontSize,
+		commitMessageFontSize,
 	};
 }
 
-export function setAppSettings(partial: Partial<AppSettings>): AppSettings {
-	const current = getAppSettings();
-
+export async function setAppSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
 	if (partial.gitBinaryPath !== undefined) {
 		setAppSetting(KEYS.gitBinaryPath, partial.gitBinaryPath);
 	}
@@ -62,18 +106,35 @@ export function setAppSettings(partial: Partial<AppSettings>): AppSettings {
 		if (partial.signing.enabled !== undefined) {
 			setAppSetting(KEYS.signingEnabled, partial.signing.enabled ? "true" : "false");
 		}
-		if (partial.signing.format !== undefined) {
-			setAppSetting(KEYS.signingFormat, partial.signing.format);
-		}
 		if (partial.signing.key !== undefined) {
 			setAppSetting(KEYS.signingKey, partial.signing.key);
 		}
-		if (partial.signing.use1PasswordAgent !== undefined) {
-			setAppSetting(
-				KEYS.signingUse1Password,
-				partial.signing.use1PasswordAgent ? "true" : "false"
-			);
+	}
+	if (partial.ai !== undefined) {
+		if (partial.ai.activeProviderId !== undefined) {
+			setAppSetting(KEYS.aiActiveProvider, partial.ai.activeProviderId ?? "");
 		}
+		if (partial.ai.providers !== undefined) {
+			for (const provider of partial.ai.providers) {
+				if (provider.apiKey) {
+					await setAIApiKey(provider.id, provider.apiKey);
+				}
+			}
+			const providersWithoutKeys = partial.ai.providers.map((p) => ({
+				...p,
+				apiKey: "",
+			}));
+			setAppSetting(KEYS.aiProviders, JSON.stringify(providersWithoutKeys));
+		}
+	}
+	if (partial.uiScale !== undefined) {
+		setAppSetting(KEYS.uiScale, String(partial.uiScale));
+	}
+	if (partial.fontSize !== undefined) {
+		setAppSetting(KEYS.fontSize, String(partial.fontSize));
+	}
+	if (partial.commitMessageFontSize !== undefined) {
+		setAppSetting(KEYS.commitMessageFontSize, String(partial.commitMessageFontSize));
 	}
 
 	return getAppSettings();

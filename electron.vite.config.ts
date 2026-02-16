@@ -13,6 +13,13 @@ export default defineConfig({
 	preload: {},
 	renderer: {
 		root: "src/renderer",
-		plugins: [react(), tailwindcss()],
+		plugins: [
+			react({
+				babel: {
+					plugins: ["babel-plugin-react-compiler"],
+				},
+			}),
+			tailwindcss(),
+		],
 	},
 });

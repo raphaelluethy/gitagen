@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { app } from "electron";
 import { join } from "path";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 let db: Database.Database | null = null;
 
@@ -73,6 +73,13 @@ function initSchema(database: Database.Database): void {
 		);
 		CREATE INDEX IF NOT EXISTS idx_patch_cache_project ON patch_cache(project_id);
 		CREATE INDEX IF NOT EXISTS idx_patch_cache_accessed ON patch_cache(accessed_at);
+
+		CREATE TABLE IF NOT EXISTS log_cache (
+			project_id TEXT NOT NULL PRIMARY KEY REFERENCES projects(id),
+			commits_json TEXT NOT NULL,
+			head_oid TEXT,
+			updated_at INTEGER NOT NULL
+		);
 	`);
 }
 
@@ -99,6 +106,16 @@ function runMigrations(database: Database.Database): void {
 					DROP TABLE IF EXISTS repo_cache;
 					DROP TABLE IF EXISTS patch_cache;
 					DROP TABLE IF EXISTS project_prefs;
+				`);
+			}
+			if (v === 4) {
+				database.exec(`
+					CREATE TABLE IF NOT EXISTS log_cache (
+						project_id TEXT NOT NULL PRIMARY KEY REFERENCES projects(id),
+						commits_json TEXT NOT NULL,
+						head_oid TEXT,
+						updated_at INTEGER NOT NULL
+					);
 				`);
 			}
 			database.prepare("INSERT OR IGNORE INTO schema_version (version) VALUES (?)").run(v);

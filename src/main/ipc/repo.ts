@@ -12,6 +12,8 @@ import {
 	getPatchCache,
 	setPatchCache,
 	invalidateProjectCache,
+	getLogCache,
+	setLogCache,
 } from "../services/cache/queries.js";
 import {
 	listWorktrees as listWorktreesManager,
@@ -152,20 +154,21 @@ async function emitConflictsIfAny(projectId: string, git: GitProvider, cwd: stri
 	}
 }
 
-async function runMutation(
+async function runMutation<T>(
 	projectId: string,
-	action: (git: GitProvider, cwd: string) => Promise<void>,
+	action: (git: GitProvider, cwd: string) => Promise<T>,
 	opts?: { emitConflicts?: boolean }
-): Promise<void> {
+): Promise<T> {
 	const cwd = getRepoPath(projectId);
-	if (!cwd) return;
+	if (!cwd) throw new Error("Project not found");
 	const git = getGitProvider();
 	try {
-		await action(git, cwd);
+		const result = await action(git, cwd);
 		invalidateAndEmit(projectId);
 		if (opts?.emitConflicts) {
 			await emitConflictsIfAny(projectId, git, cwd);
 		}
+		return result;
 	} catch (error) {
 		emitRepoError(projectId, error);
 		throw error;
@@ -361,6 +364,21 @@ export function registerRepoHandlers(): void {
 		}
 	);
 
+	ipcMain.handle("repo:undoLastCommit", async (_, projectId: string) => {
+		await runMutation(projectId, (git, cwd) => git.undoLastCommit(cwd));
+	});
+
+	ipcMain.handle("repo:getUnpushedOids", async (_, projectId: string) => {
+		const cwd = getRepoPath(projectId);
+		if (!cwd) return null;
+		try {
+			return await getGitProvider().getUnpushedOids(cwd);
+		} catch (error) {
+			emitRepoError(projectId, error);
+			return null;
+		}
+	});
+
 	ipcMain.handle("repo:generateCommitMessage", async (event, projectId: string) => {
 		return generateCommitMessage(projectId, event.sender);
 	});
@@ -375,13 +393,33 @@ export function registerRepoHandlers(): void {
 			const cwd = getRepoPath(projectId);
 			if (!cwd) return [];
 			try {
-				return await getGitProvider().getLog(cwd, opts);
+				const commits = await getGitProvider().getLog(cwd, opts);
+				// Cache the result for instant loading on next open (only for default queries)
+				if (!opts?.branch && !opts?.offset) {
+					try {
+						const headOid = commits.length > 0 ? commits[0]!.oid : null;
+						setLogCache(projectId, JSON.stringify(commits), headOid);
+					} catch {
+						// Cache write failure must never discard actual git data
+					}
+				}
+				return commits;
 			} catch (error) {
 				emitRepoError(projectId, error);
 				return [];
 			}
 		}
 	);
+
+	ipcMain.handle("repo:getCachedLog", async (_, projectId: string) => {
+		try {
+			const cached = getLogCache(projectId);
+			if (!cached) return null;
+			return JSON.parse(cached.commits_json);
+		} catch {
+			return null;
+		}
+	});
 
 	ipcMain.handle("repo:getCommitDetail", async (_, projectId: string, oid: string) => {
 		const cwd = getRepoPath(projectId);
@@ -449,7 +487,7 @@ export function registerRepoHandlers(): void {
 	ipcMain.handle(
 		"repo:fetch",
 		async (_, projectId: string, opts?: { remote?: string; prune?: boolean }) => {
-			await runMutation(projectId, (git, cwd) => git.fetch(cwd, opts));
+			return runMutation(projectId, (git, cwd) => git.fetch(cwd, opts));
 		}
 	);
 
@@ -458,9 +496,14 @@ export function registerRepoHandlers(): void {
 		async (
 			_,
 			projectId: string,
-			opts?: { remote?: string; branch?: string; rebase?: boolean }
+			opts?: {
+				remote?: string;
+				branch?: string;
+				rebase?: boolean;
+				behind?: number;
+			}
 		) => {
-			await runMutation(projectId, (git, cwd) => git.pull(cwd, opts), {
+			return runMutation(projectId, (git, cwd) => git.pull(cwd, opts), {
 				emitConflicts: true,
 			});
 		}
@@ -471,9 +514,15 @@ export function registerRepoHandlers(): void {
 		async (
 			_,
 			projectId: string,
-			opts?: { remote?: string; branch?: string; force?: boolean; setUpstream?: boolean }
+			opts?: {
+				remote?: string;
+				branch?: string;
+				force?: boolean;
+				setUpstream?: boolean;
+				ahead?: number;
+			}
 		) => {
-			await runMutation(projectId, (git, cwd) => git.push(cwd, opts));
+			return runMutation(projectId, (git, cwd) => git.push(cwd, opts));
 		}
 	);
 

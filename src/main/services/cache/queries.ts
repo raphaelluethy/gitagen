@@ -65,6 +65,7 @@ export function deleteProject(id: string): void {
 	getDb().prepare("DELETE FROM project_prefs WHERE project_id = ?").run(id);
 	getDb().prepare("DELETE FROM repo_cache WHERE project_id = ?").run(id);
 	getDb().prepare("DELETE FROM patch_cache WHERE project_id = ?").run(id);
+	getDb().prepare("DELETE FROM log_cache WHERE project_id = ?").run(id);
 	getDb().prepare("DELETE FROM projects WHERE id = ?").run(id);
 }
 
@@ -233,4 +234,37 @@ export function setPatchCache(
 export function invalidateProjectCache(projectId: string): void {
 	getDb().prepare("DELETE FROM repo_cache WHERE project_id = ?").run(projectId);
 	getDb().prepare("DELETE FROM patch_cache WHERE project_id = ?").run(projectId);
+}
+
+// --- Log cache ---
+
+export interface LogCacheRow {
+	commits_json: string;
+	head_oid: string | null;
+	updated_at: number;
+}
+
+export function getLogCache(projectId: string): LogCacheRow | null {
+	const row = getDb()
+		.prepare("SELECT commits_json, head_oid, updated_at FROM log_cache WHERE project_id = ?")
+		.get(projectId) as LogCacheRow | undefined;
+	return row ?? null;
+}
+
+export function setLogCache(projectId: string, commitsJson: string, headOid: string | null): void {
+	const now = Math.floor(Date.now() / 1000);
+	getDb()
+		.prepare(
+			`INSERT INTO log_cache (project_id, commits_json, head_oid, updated_at)
+			 VALUES (?, ?, ?, ?)
+			 ON CONFLICT(project_id) DO UPDATE SET
+			   commits_json = excluded.commits_json,
+			   head_oid = excluded.head_oid,
+			   updated_at = excluded.updated_at`
+		)
+		.run(projectId, commitsJson, headOid, now);
+}
+
+export function deleteLogCache(projectId: string): void {
+	getDb().prepare("DELETE FROM log_cache WHERE project_id = ?").run(projectId);
 }

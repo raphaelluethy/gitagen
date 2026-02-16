@@ -19,6 +19,9 @@ import type {
 	AddWorktreeOptions,
 	AddWorktreeResult,
 	ConfirmDialogOptions,
+	FetchResultSummary,
+	PullResultSummary,
+	PushResultSummary,
 } from "../shared/types.js";
 
 const EVENT_REPO_UPDATED = "events:repoUpdated";
@@ -69,12 +72,18 @@ const repo = {
 		message: string,
 		opts?: { amend?: boolean; sign?: boolean }
 	): Promise<CommitResult> => ipcRenderer.invoke("repo:commit", projectId, message, opts),
+	undoLastCommit: (projectId: string): Promise<void> =>
+		ipcRenderer.invoke("repo:undoLastCommit", projectId),
+	getUnpushedOids: (projectId: string): Promise<string[] | null> =>
+		ipcRenderer.invoke("repo:getUnpushedOids", projectId),
 	generateCommitMessage: (projectId: string): Promise<string> =>
 		ipcRenderer.invoke("repo:generateCommitMessage", projectId),
 	getLog: (
 		projectId: string,
 		opts?: { limit?: number; branch?: string; offset?: number }
 	): Promise<CommitInfo[]> => ipcRenderer.invoke("repo:getLog", projectId, opts),
+	getCachedLog: (projectId: string): Promise<CommitInfo[] | null> =>
+		ipcRenderer.invoke("repo:getCachedLog", projectId),
 	getCommitDetail: (projectId: string, oid: string): Promise<CommitDetail | null> =>
 		ipcRenderer.invoke("repo:getCommitDetail", projectId, oid),
 	listBranches: (projectId: string): Promise<BranchInfo[]> =>
@@ -92,12 +101,19 @@ const repo = {
 		source: string,
 		opts?: { noFf?: boolean; squash?: boolean; message?: string }
 	): Promise<void> => ipcRenderer.invoke("repo:mergeBranch", projectId, source, opts),
-	fetch: (projectId: string, opts?: { remote?: string; prune?: boolean }): Promise<void> =>
-		ipcRenderer.invoke("repo:fetch", projectId, opts),
+	fetch: (
+		projectId: string,
+		opts?: { remote?: string; prune?: boolean }
+	): Promise<FetchResultSummary> => ipcRenderer.invoke("repo:fetch", projectId, opts),
 	pull: (
 		projectId: string,
-		opts?: { remote?: string; branch?: string; rebase?: boolean }
-	): Promise<void> => ipcRenderer.invoke("repo:pull", projectId, opts),
+		opts?: {
+			remote?: string;
+			branch?: string;
+			rebase?: boolean;
+			behind?: number;
+		}
+	): Promise<PullResultSummary> => ipcRenderer.invoke("repo:pull", projectId, opts),
 	push: (
 		projectId: string,
 		opts?: {
@@ -105,8 +121,9 @@ const repo = {
 			branch?: string;
 			force?: boolean;
 			setUpstream?: boolean;
+			ahead?: number;
 		}
-	): Promise<void> => ipcRenderer.invoke("repo:push", projectId, opts),
+	): Promise<PushResultSummary> => ipcRenderer.invoke("repo:push", projectId, opts),
 	listRemotes: (projectId: string): Promise<RemoteInfo[]> =>
 		ipcRenderer.invoke("repo:listRemotes", projectId),
 	addRemote: (projectId: string, name: string, url: string): Promise<void> =>

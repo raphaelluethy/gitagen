@@ -138,6 +138,8 @@ export interface CommitInfo {
 	author: { name: string; email: string; date: string };
 	parents: string[];
 	signed: boolean;
+	/** Whether this commit has been pushed to the upstream. undefined = unknown. false when no upstream. */
+	pushed?: boolean;
 }
 
 export interface CommitDetail extends CommitInfo {
@@ -177,6 +179,29 @@ export interface RemoteInfo {
 	pushUrl?: string;
 }
 
+/** Summary returned from fetch for toast display */
+export interface FetchResultSummary {
+	branchesUpdated: number;
+	tagsUpdated: number;
+	refsDeleted: number;
+	newBranchRefs: string[];
+}
+
+/** Summary returned from pull for toast display */
+export interface PullResultSummary {
+	commitsPulled: number;
+	filesChanged: number;
+	insertions: number;
+	deletions: number;
+}
+
+/** Summary returned from push for toast display */
+export interface PushResultSummary {
+	commitsPushed: number;
+	refsPushed: number;
+	branch?: string;
+}
+
 export interface ConfigEntry {
 	key: string;
 	value: string;
@@ -211,4 +236,10 @@ export interface AISettings {
 	activeProviderId: string | null;
 	providers: AIProviderInstance[];
 	commitStyle: CommitStyle;
+}
+
+export interface CliStatus {
+	installed: boolean;
+	path: string | null;
+	needsUpdate: boolean;
 }

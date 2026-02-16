@@ -1,11 +1,14 @@
-import { app, BrowserWindow, dialog, Menu } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeImage } from "electron";
 import { randomUUID } from "crypto";
 import { join, resolve } from "path";
 import { closeDb, getDb } from "./services/cache/sqlite.js";
 import { runRetention } from "./services/cache/retention.js";
 import {
 	getProjectByPath,
+	getProjectPrefs,
 	insertProject,
+	listProjects,
+	setLogCache,
 	setProjectPrefs,
 } from "./services/cache/queries.js";
 import { getAppSettings, setAppSettings } from "./services/settings/store.js";
@@ -41,8 +44,7 @@ async function handleOpenRepo(path: string, win: BrowserWindow): Promise<void> {
 	const worktrees = await provider.listWorktrees(resolvedPath);
 	const mainWorktree = worktrees.find((w) => w.isMainWorktree);
 	const mainPath = mainWorktree ? resolve(mainWorktree.path) : resolvedPath;
-	const parentProject =
-		mainPath !== resolvedPath ? getProjectByPath(mainPath) : null;
+	const parentProject = mainPath !== resolvedPath ? getProjectByPath(mainPath) : null;
 	if (parentProject) {
 		setProjectPrefs(parentProject.id, { activeWorktreePath: resolvedPath });
 		win.webContents.send(EVENT_OPEN_REPO, {
@@ -73,7 +75,26 @@ async function handleOpenRepo(path: string, win: BrowserWindow): Promise<void> {
 }
 
 const RETENTION_INTERVAL_MS = 30 * 60 * 1000;
+const PRELOAD_PROJECT_COUNT = 5;
+const PRELOAD_COMMIT_LIMIT = 10;
 let retentionInterval: NodeJS.Timeout | null = null;
+
+async function preloadRecentProjectLogs(): Promise<void> {
+	const projects = listProjects().slice(0, PRELOAD_PROJECT_COUNT);
+	if (projects.length === 0) return;
+	const provider = createGitProvider(getAppSettings());
+	for (const project of projects) {
+		try {
+			const prefs = getProjectPrefs(project.id);
+			const cwd = prefs?.active_worktree_path?.trim() || project.path;
+			const commits = await provider.getLog(cwd, { limit: PRELOAD_COMMIT_LIMIT });
+			const headOid = commits.length > 0 ? commits[0]!.oid : null;
+			setLogCache(project.id, JSON.stringify(commits), headOid);
+		} catch {
+			// Skip projects that fail (deleted repos, broken paths, etc.)
+		}
+	}
+}
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -83,8 +104,7 @@ if (!singleInstanceLock) {
 
 app.on("second-instance", (_event, commandLine) => {
 	const path = parseOpenRepoArg(commandLine);
-	const win =
-		BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+	const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
 	if (win && !win.isDestroyed()) {
 		if (path) {
 			void handleOpenRepo(path, win);
@@ -95,10 +115,17 @@ app.on("second-instance", (_event, commandLine) => {
 	}
 });
 
+function getIconPath(): string {
+	return app.isPackaged
+		? join(process.resourcesPath, "icon.png")
+		: join(__dirname, "../../resources/icon.png");
+}
+
 function createWindow(): BrowserWindow {
 	const win = new BrowserWindow({
 		width: 1200,
 		height: 800,
+		icon: getIconPath(),
 		webPreferences: {
 			preload: join(__dirname, "../preload/index.js"),
 			sandbox: true,
@@ -174,6 +201,11 @@ app.whenReady().then(() => {
 	ensureSshAuthSock();
 	getDb();
 
+	if (process.platform === "darwin" && app.dock) {
+		const dockIcon = nativeImage.createFromPath(getIconPath());
+		app.dock.setIcon(dockIcon);
+	}
+
 	const appSettings = getAppSettings();
 	if (appSettings.gitBinaryPath && !validateGitBinary(appSettings.gitBinaryPath)) {
 		setAppSettings({ gitBinaryPath: null });
@@ -193,11 +225,13 @@ app.whenReady().then(() => {
 		void handleOpenRepo(openPath, win);
 	}
 
-	// Run cache retention after the first window is created so startup stays responsive.
+	// Run cache retention and preload commit history after the window is created
+	// so startup stays responsive.
 	setTimeout(() => {
 		runRetention();
 		retentionInterval = setInterval(runRetention, RETENTION_INTERVAL_MS);
 		retentionInterval.unref();
+		void preloadRecentProjectLogs();
 	}, 0);
 
 	app.on("activate", () => {

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Gitagen CLI - opens Git repositories in the Gitagen app.
+# Install via: Gitagen app menu or Settings > General > Command Line
+
+set -e
+
+APP_NAME="Gitagen"
+OPEN_REPO_ARG="--open-repo"
+
+print_help() {
+	cat <<'EOF'
+Usage: gitagen [path]
+
+  path    Path to a git repository (default: current directory for validation)
+          Use '.' or omit to open the app without a specific repo.
+
+Examples:
+  gitagen              Open the app (StartPage)
+  gitagen .            Open the current directory as a repo (if it is a git repo)
+  gitagen /path/to/repo  Open the specified repository
+
+Options:
+  --help     Show this help
+  --version  Show version
+EOF
+}
+
+print_version() {
+	echo "gitagen 1.0.0"
+}
+
+# Parse flags
+for arg in "$@"; do
+	case "$arg" in
+		--help|-h)
+			print_help
+			exit 0
+			;;
+		--version|-v)
+			print_version
+			exit 0
+			;;
+	esac
+done
+
+# No path arg: just launch the app (StartPage)
+if [ $# -eq 0 ]; then
+	open -a "$APP_NAME"
+	exit 0
+fi
+
+TARGET="$1"
+shift
+if [ $# -gt 0 ] && [ "$1" != "--" ]; then
+	echo "gitagen: unexpected argument: $1" >&2
+	exit 1
+fi
+
+# Resolve to absolute path
+if [ "$TARGET" = "." ]; then
+	RESOLVED="$(pwd)"
+else
+	RESOLVED="$(cd "$TARGET" 2>/dev/null && pwd)" || true
+	if [ -z "$RESOLVED" ]; then
+		echo "gitagen: '$TARGET' is not a valid path" >&2
+		exit 1
+	fi
+fi
+
+# Validate git repo and get toplevel (handles subdirs and worktrees)
+TOPLEVEL="$(cd "$RESOLVED" && git rev-parse --show-toplevel 2>/dev/null)" || true
+if [ -z "$TOPLEVEL" ]; then
+	echo "gitagen: '$RESOLVED' is not a git repository" >&2
+	exit 1
+fi
+
+# Normalize path (follow symlinks for consistency)
+TOPLEVEL="$(cd "$TOPLEVEL" && pwd)"
+
+# Launch the app with the repo path
+open -a "$APP_NAME" --args "$OPEN_REPO_ARG" "$TOPLEVEL"

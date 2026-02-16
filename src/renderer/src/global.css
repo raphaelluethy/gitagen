@@ -545,6 +545,36 @@ select {
 		outline-offset: 2px;
 	}
 
+	/* Tooltip - shows on hover, no delay */
+	[data-tooltip] {
+		position: relative;
+	}
+	[data-tooltip]::after {
+		content: attr(data-tooltip);
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 4px 8px;
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		border: 1px solid var(--border-primary);
+		border-radius: var(--radius-sm);
+		font-size: 11px;
+		font-weight: 500;
+		white-space: nowrap;
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transition: opacity 0.1s, visibility 0.1s;
+		z-index: 50;
+		box-shadow: var(--shadow-md);
+	}
+	[data-tooltip]:hover::after {
+		opacity: 1;
+		visibility: visible;
+	}
+
 	/* Selected state - monochrome */
 	.selected {
 		background-color: var(--bg-active);
@@ -635,6 +665,22 @@ select {
 
 	.animate-startpage-card {
 		animation: startpageCardIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+	}
+
+	@keyframes stagePulse {
+		0% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(0.88);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
+	.animate-stage-press {
+		animation: stagePulse 180ms cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.commit-message-text {

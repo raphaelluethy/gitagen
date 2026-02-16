@@ -58,10 +58,11 @@ export async function addWorktree(
 export async function removeWorktree(
 	repoPath: string,
 	worktreePath: string,
-	gitProvider?: ReturnType<typeof createSimpleGitProvider>
+	gitProvider?: ReturnType<typeof createSimpleGitProvider>,
+	force?: boolean
 ): Promise<void> {
 	const provider = gitProvider ?? createSimpleGitProvider();
-	await provider.removeWorktree(repoPath, worktreePath);
+	await provider.removeWorktree(repoPath, worktreePath, force);
 }
 
 export async function pruneWorktrees(

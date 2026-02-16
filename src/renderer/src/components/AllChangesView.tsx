@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { ChevronRight, Square, CheckSquare, ExternalLink, FileCode } from "lucide-react";
+import { ChevronRight, CircleMinus, CirclePlus, ExternalLink, FileCode } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
@@ -99,13 +99,23 @@ function FileChangeCard({
 				<button
 					type="button"
 					onClick={handleStageToggle}
-					className="btn-icon rounded-md p-1.5"
+					className={
+						isStaged
+							? "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-(--bg-tertiary) text-(--text-primary) transition-colors hover:bg-(--bg-hover)"
+							: "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-(--text-secondary) transition-colors hover:bg-(--success-bg) hover:text-(--success)"
+					}
 					title={isStaged ? "Unstage file" : "Stage file"}
 				>
 					{isStaged ? (
-						<CheckSquare size={18} className="text-(--text-primary)" />
+						<>
+							<CircleMinus size={15} />
+							<span>Unstage</span>
+						</>
 					) : (
-						<Square size={18} className="text-(--text-muted)" />
+						<>
+							<CirclePlus size={15} />
+							<span>Stage</span>
+						</>
 					)}
 				</button>
 				<button

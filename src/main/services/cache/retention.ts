@@ -29,22 +29,30 @@ function pruneByLru(targetFreeBytes: number): number {
 	const patches = db
 		.prepare("SELECT id, size_bytes FROM patch_cache ORDER BY accessed_at ASC")
 		.all() as { id: number; size_bytes: number }[];
-
+	const patchIds: number[] = [];
 	for (const p of patches) {
 		if (freed >= targetFreeBytes) break;
-		db.prepare("DELETE FROM patch_cache WHERE id = ?").run(p.id);
+		patchIds.push(p.id);
 		freed += p.size_bytes ?? 0;
+	}
+	if (patchIds.length > 0) {
+		const placeholders = patchIds.map(() => "?").join(", ");
+		db.prepare(`DELETE FROM patch_cache WHERE id IN (${placeholders})`).run(...patchIds);
 	}
 
 	// Then repo_cache
 	const repos = db
 		.prepare("SELECT id, size_bytes FROM repo_cache ORDER BY accessed_at ASC")
 		.all() as { id: number; size_bytes: number }[];
-
+	const repoIds: number[] = [];
 	for (const r of repos) {
 		if (freed >= targetFreeBytes) break;
-		db.prepare("DELETE FROM repo_cache WHERE id = ?").run(r.id);
+		repoIds.push(r.id);
 		freed += r.size_bytes ?? 0;
+	}
+	if (repoIds.length > 0) {
+		const placeholders = repoIds.map(() => "?").join(", ");
+		db.prepare(`DELETE FROM repo_cache WHERE id IN (${placeholders})`).run(...repoIds);
 	}
 
 	return freed;

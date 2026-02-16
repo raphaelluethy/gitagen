@@ -323,7 +323,7 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 							unstaged: status.files.filter(
 								(f) => f.working_dir !== " " && f.working_dir !== "?"
 							),
-					})
+						})
 					: "";
 				return {
 					repoPath: cwd,

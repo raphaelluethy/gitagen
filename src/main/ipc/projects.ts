@@ -103,7 +103,8 @@ export function registerProjectsHandlers(): void {
 			await removeWorktreeManager(
 				project.path,
 				project.path,
-				createGitProvider(getAppSettings())
+				createGitProvider(getAppSettings()),
+				true
 			);
 		} catch {
 			// Best-effort cleanup; fall through to direct removal.

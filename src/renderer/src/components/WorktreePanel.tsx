@@ -70,8 +70,18 @@ export default function WorktreePanel({
 		try {
 			await window.gitagen.repo.removeWorktree(projectId, path);
 			onRefresh();
-		} catch {
-			// ignore
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Failed to remove worktree.";
+			const shouldForce = confirm(
+				`${message}\n\nForce removal? This will discard uncommitted changes.`
+			);
+			if (!shouldForce) return;
+			try {
+				await window.gitagen.repo.removeWorktree(projectId, path, true);
+				onRefresh();
+			} catch {
+				// ignore
+			}
 		}
 	};
 

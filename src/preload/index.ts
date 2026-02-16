@@ -156,8 +156,8 @@ const repo = {
 		ipcRenderer.invoke("repo:listWorktrees", projectId),
 	addWorktree: (projectId: string, branch: string, newBranch?: string): Promise<string> =>
 		ipcRenderer.invoke("repo:addWorktree", projectId, branch, newBranch),
-	removeWorktree: (projectId: string, worktreePath: string): Promise<void> =>
-		ipcRenderer.invoke("repo:removeWorktree", projectId, worktreePath),
+	removeWorktree: (projectId: string, worktreePath: string, force?: boolean): Promise<void> =>
+		ipcRenderer.invoke("repo:removeWorktree", projectId, worktreePath, force),
 	pruneWorktrees: (projectId: string): Promise<void> =>
 		ipcRenderer.invoke("repo:pruneWorktrees", projectId),
 };

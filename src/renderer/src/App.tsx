@@ -1880,7 +1880,8 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										Developer Mode
 									</h3>
 									<p className="mb-3 text-xs text-(--text-muted)">
-										Enable developer mode to show performance metrics and debugging tools.
+										Enable developer mode to show performance metrics and
+										debugging tools.
 									</p>
 									<label className="flex cursor-pointer items-center gap-2">
 										<input
@@ -1891,7 +1892,9 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 												setDevMode(v);
 											}}
 										/>
-										<span className="text-sm text-(--text-secondary)">Enable dev mode</span>
+										<span className="text-sm text-(--text-secondary)">
+											Enable dev mode
+										</span>
 									</label>
 								</div>
 								<div className="panel p-4">
@@ -1899,7 +1902,9 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										FPS Monitor
 									</h3>
 									<p className="mb-3 text-xs text-(--text-muted)">
-										When dev mode is enabled, an FPS monitor will be displayed in the bottom-right corner showing real-time frame rate and history.
+										When dev mode is enabled, an FPS monitor will be displayed
+										in the bottom-right corner showing real-time frame rate and
+										history.
 									</p>
 								</div>
 							</div>

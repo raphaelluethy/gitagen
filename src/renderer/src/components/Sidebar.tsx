@@ -8,6 +8,7 @@ import {
 	Folder,
 	FolderOpen,
 	GitBranch,
+	List,
 	ListMinus,
 	ListPlus,
 	Minus,
@@ -197,7 +198,7 @@ function TreeItem({
 				<button
 					type="button"
 					onClick={handleStage}
-					className={`ml-auto shrink-0 rounded p-0.5 opacity-0 transition-all duration-[120ms] group-hover:opacity-100 hover:bg-(--bg-tertiary) text-(--text-muted) ${
+					className={`ml-auto shrink-0 rounded p-0.5 opacity-0 transition-all duration-120 group-hover:opacity-100 hover:bg-(--bg-tertiary) text-(--text-muted) ${
 						canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
 					}`}
 					title={canStage ? "Stage file" : "Unstage file"}
@@ -215,35 +216,72 @@ function TreeItem({
 	if (node.type === "folder" && node.children) {
 		const isExpanded = expandedFolders.has(node.path);
 		const childNodes = node.children as FileTreeNode[];
+		const canStage = section === "unstaged" || section === "untracked";
+		const paths = collectFilePaths(node);
+
+		const handleStageFolder = async (e: React.MouseEvent) => {
+			e.stopPropagation();
+			if (paths.length === 0) return;
+			try {
+				if (canStage) {
+					await window.gitagen.repo.stageFiles(projectId, paths);
+				} else {
+					await window.gitagen.repo.unstageFiles(projectId, paths);
+				}
+				onRefresh();
+			} catch {
+				// ignore
+			}
+		};
 
 		return (
 			<div key={node.path}>
-				<button
-					type="button"
-					onClick={() => onToggleFolder(node.path)}
-					className="group flex w-full items-center gap-2 py-1.5 text-left text-[13px] text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+				<div
+					className="group flex w-full items-center py-1.5 text-left text-[13px] text-(--text-secondary) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
 					style={{ paddingLeft }}
 				>
-					<ChevronRight
-						size={14}
-						className={`shrink-0 text-(--text-muted) transition-transform ${isExpanded ? "rotate-90" : ""}`}
-						strokeWidth={2}
-					/>
-					{isExpanded ? (
-						<FolderOpen
+					<button
+						type="button"
+						onClick={() => onToggleFolder(node.path)}
+						className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
+					>
+						<ChevronRight
 							size={14}
-							className="shrink-0 text-(--text-primary)"
+							className={`shrink-0 text-(--text-muted) transition-transform ${isExpanded ? "rotate-90" : ""}`}
 							strokeWidth={2}
 						/>
-					) : (
-						<Folder
-							size={14}
-							className="shrink-0 text-(--text-muted)"
-							strokeWidth={2}
-						/>
+						{isExpanded ? (
+							<FolderOpen
+								size={14}
+								className="shrink-0 text-(--text-primary)"
+								strokeWidth={2}
+							/>
+						) : (
+							<Folder
+								size={14}
+								className="shrink-0 text-(--text-muted)"
+								strokeWidth={2}
+							/>
+						)}
+						<span className="truncate font-medium">{node.name}</span>
+					</button>
+					{paths.length > 0 && (
+						<button
+							type="button"
+							onClick={handleStageFolder}
+							className={`ml-auto shrink-0 rounded p-0.5 opacity-0 transition-all duration-120 group-hover:opacity-100 hover:bg-(--bg-tertiary) text-(--text-muted) ${
+								canStage ? "hover:text-(--success)" : "hover:text-(--text-muted)"
+							}`}
+							title={canStage ? "Stage folder" : "Unstage folder"}
+						>
+							{canStage ? (
+								<Plus size={14} strokeWidth={2} />
+							) : (
+								<Minus size={14} strokeWidth={2} />
+							)}
+						</button>
 					)}
-					<span className="truncate font-medium">{node.name}</span>
-				</button>
+				</div>
 				{isExpanded && (
 					<div>
 						{childNodes.map((child) => (
@@ -251,6 +289,9 @@ function TreeItem({
 								key={child.path}
 								node={child}
 								depth={depth + 1}
+								section={section}
+								projectId={projectId}
+								onRefresh={onRefresh}
 								selectedFile={selectedFile}
 								onSelect={onSelect}
 								expandedFolders={expandedFolders}
@@ -267,21 +308,27 @@ function TreeItem({
 }
 
 function FileTreeSection({
+	projectId,
+	section,
 	title,
 	count,
 	files,
 	selectedFile,
 	onSelect,
+	onRefresh,
 	expandedFolders,
 	onToggleFolder,
 	onExpandAll,
 	onViewAll,
 }: {
+	projectId: string;
+	section: "staged" | "unstaged" | "untracked";
 	title: string;
 	count: number;
 	files: GitFileStatus[];
 	selectedFile: GitFileStatus | null;
 	onSelect: (file: GitFileStatus) => void;
+	onRefresh: () => void;
 	expandedFolders: Set<string>;
 	onToggleFolder: (path: string) => void;
 	onExpandAll: (paths: Set<string>) => void;
@@ -307,31 +354,65 @@ function FileTreeSection({
 	const viewAllSection: "staged" | "unstaged" | "untracked" =
 		sectionKey === "staged" ? "staged" : sectionKey === "unstaged" ? "unstaged" : "untracked";
 
+	const handleStageAll = async () => {
+		try {
+			if (section === "staged") {
+				await window.gitagen.repo.unstageAll(projectId);
+			} else {
+				await window.gitagen.repo.stageFiles(
+					projectId,
+					files.map((f) => f.path)
+				);
+			}
+			onRefresh();
+		} catch {
+			// ignore
+		}
+	};
+
 	return (
-		<div className="mb-4">
-			<div className="mb-2 flex items-center justify-between px-3 py-2">
-				<div className="flex items-center gap-2">
-					<h3 className="section-title">{title}</h3>
-					<span className="font-mono text-[10px] text-(--text-muted)">{count}</span>
-					{count > 0 && onViewAll && (
-						<button
-							type="button"
-							onClick={() => onViewAll(viewAllSection)}
-							className="text-[10px] text-(--text-muted) outline-none hover:text-(--text-primary)"
-						>
-							View all
-						</button>
+		<div className="mb-4 overflow-visible">
+			<div className="mb-2 px-3 py-2 overflow-visible">
+				<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+					<div className="flex items-center gap-1.5 shrink-0">
+						<h3 className="section-title">{title}</h3>
+						<span className="font-mono text-[10px] text-(--text-muted)">{count}</span>
+					</div>
+					{count > 0 && (
+						<div className="flex items-center gap-1 shrink-0">
+							{onViewAll && (
+								<button
+									type="button"
+									onClick={() => onViewAll(viewAllSection)}
+									data-tooltip="View all"
+									className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+								>
+									<List size={16} strokeWidth={2} />
+								</button>
+							)}
+							<button
+								type="button"
+								onClick={handleStageAll}
+								data-tooltip={section === "staged" ? "Unstage all" : "Stage all"}
+								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+							>
+								{section === "staged" ? (
+									<ListMinus size={16} strokeWidth={2} />
+								) : (
+									<ListPlus size={16} strokeWidth={2} />
+								)}
+							</button>
+							<button
+								type="button"
+								onClick={expandAll}
+								data-tooltip="Expand all folders"
+								className="flex items-center justify-center rounded-md p-1.5 text-(--text-muted) outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+							>
+								<ChevronsDownUp size={16} strokeWidth={2} />
+							</button>
+						</div>
 					)}
 				</div>
-				<button
-					type="button"
-					onClick={expandAll}
-					title="Expand all"
-					className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) outline-none hover:bg-(--bg-hover) hover:text-(--text-secondary)"
-				>
-					<ChevronsDownUp size={11} strokeWidth={2} />
-					<span>expand</span>
-				</button>
 			</div>
 			<div className="px-1">
 				{tree.map((node) => (
@@ -339,6 +420,9 @@ function FileTreeSection({
 						key={node.path}
 						node={node}
 						depth={0}
+						section={section}
+						projectId={projectId}
+						onRefresh={onRefresh}
 						selectedFile={selectedFile}
 						onSelect={onSelect}
 						expandedFolders={expandedFolders}

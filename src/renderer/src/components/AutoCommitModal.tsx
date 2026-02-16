@@ -391,7 +391,7 @@ export default function AutoCommitModal({ open, onClose, projectId }: AutoCommit
 						description="AI agent analyzes and commits your changes"
 						provider={provider}
 						instructions={AUTO_COMMIT_SYSTEM_PROMPT}
-						initialPrompt="Analyze all changes and propose atomic commits."
+						initialPrompt="Analyze all changes and propose a small set of cohesive commits (avoid over-splitting)."
 						traceKey="auto-commit"
 						createTools={toolsFactory}
 						renderToolPart={renderAutoCommitTool}

@@ -83,6 +83,14 @@ pnpm dev
 pnpm build
 ```
 
+### Build macOS DMG
+
+```bash
+pnpm dist:mac
+```
+
+GitHub Actions also builds a macOS `.dmg` via `.github/workflows/build-macos-dmg.yml` when a `v*` tag is pushed. Download it from the workflow run artifacts (`gitagen-macos-dmg-<ref>`).
+
 ### Other Commands
 
 ```bash

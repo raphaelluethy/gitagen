@@ -79,10 +79,11 @@ export function FpsMonitor({ enabled }: FpsMonitorProps) {
 							: fps >= 30
 								? "var(--warning)"
 								: "var(--danger)";
+					const key = `${index}-${fps}`;
 
 					return (
 						<div
-							key={index}
+							key={key}
 							style={{
 								width: `${barWidth}px`,
 								height: `${Math.max(height, 2)}px`,

@@ -7,6 +7,7 @@ import * as schema from "./schema.js";
 
 let client: ReturnType<typeof createClient> | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let dbInitPromise: Promise<ReturnType<typeof drizzle<typeof schema>>> | null = null;
 
 function getDbPath(): string {
 	return join(app.getPath("userData"), "gitagen.db");
@@ -21,11 +22,15 @@ function getMigrationsPath(): string {
 
 export async function getDb(): Promise<ReturnType<typeof drizzle<typeof schema>>> {
 	if (db) return db;
-	const url = process.env.DATABASE_URL ?? `file:${getDbPath()}`;
-	client = createClient({ url });
-	db = drizzle({ client, schema });
-	await migrate(db, { migrationsFolder: getMigrationsPath() });
-	return db;
+	if (dbInitPromise) return dbInitPromise;
+	dbInitPromise = (async () => {
+		const url = process.env.DATABASE_URL ?? `file:${getDbPath()}`;
+		client = createClient({ url });
+		db = drizzle({ client, schema });
+		await migrate(db, { migrationsFolder: getMigrationsPath() });
+		return db;
+	})();
+	return dbInitPromise;
 }
 
 export async function closeDb(): Promise<void> {

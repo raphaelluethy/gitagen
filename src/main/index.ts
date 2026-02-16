@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeImage, session } from "electron";
 import { randomUUID } from "crypto";
 import { join, resolve } from "path";
 import { closeDb, getDb } from "./services/cache/sqlite.js";
@@ -101,7 +101,6 @@ async function preloadRecentProjectLogs(): Promise<void> {
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
 	app.quit();
-	process.exit(0);
 }
 
 app.on("second-instance", (_event, commandLine) => {
@@ -109,7 +108,9 @@ app.on("second-instance", (_event, commandLine) => {
 	const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
 	if (win && !win.isDestroyed()) {
 		if (path) {
-			void handleOpenRepo(path, win);
+			void handleOpenRepo(path, win).catch((error) => {
+				console.error("[handleOpenRepo] Failed to open repo:", error);
+			});
 		} else {
 			win.show();
 			win.focus();
@@ -133,7 +134,23 @@ function createWindow(): BrowserWindow {
 			sandbox: true,
 			contextIsolation: true,
 			nodeIntegration: false,
+			webSecurity: true,
+			allowRunningInsecureContent: false,
 		},
+	});
+
+	win.webContents.on("will-navigate", (event, url) => {
+		const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+		const allowedPrefix = isDev
+			? process.env.ELECTRON_RENDERER_URL ?? "http://localhost:5173"
+			: `file://${join(__dirname, "../renderer")}`;
+		if (!url.startsWith(allowedPrefix)) {
+			event.preventDefault();
+		}
+	});
+
+	win.webContents.setWindowOpenHandler(() => {
+		return { action: "deny" };
 	});
 
 	if (process.env.NODE_ENV === "development" || !app.isPackaged) {
@@ -203,6 +220,27 @@ app.whenReady().then(async () => {
 	ensureSshAuthSock();
 	await getDb();
 
+	const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+	const cspDirectives = [
+		"default-src 'self'",
+		isDev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
+		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+		"font-src 'self' data: https://fonts.gstatic.com",
+		"img-src 'self' data:",
+		isDev
+			? "connect-src 'self' ws://localhost:* http://localhost:* https: wss:"
+			: "connect-src 'self' https: wss:",
+	];
+	const csp = cspDirectives.join("; ");
+	session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+		callback({
+			responseHeaders: {
+				...details.responseHeaders,
+				"Content-Security-Policy": [csp],
+			},
+		});
+	});
+
 	if (process.platform === "darwin" && app.dock) {
 		const dockIcon = nativeImage.createFromPath(getIconPath());
 		app.dock.setIcon(dockIcon);
@@ -224,18 +262,24 @@ app.whenReady().then(async () => {
 	const win = createWindow();
 	const openPath = parseOpenRepoArg(process.argv);
 	if (openPath) {
-		void handleOpenRepo(openPath, win);
+		void handleOpenRepo(openPath, win).catch((error) => {
+			console.error("[handleOpenRepo] Failed to open repo:", error);
+		});
 	}
 
-	// Run cache retention and preload commit history after the window is created
-	// so startup stays responsive.
 	setTimeout(() => {
-		void runRetention();
+		void runRetention().catch((error) => {
+			console.error("[runRetention] Cache retention failed:", error);
+		});
 		retentionInterval = setInterval(() => {
-			void runRetention();
+			void runRetention().catch((error) => {
+				console.error("[runRetention] Cache retention failed:", error);
+			});
 		}, RETENTION_INTERVAL_MS);
 		retentionInterval.unref();
-		void preloadRecentProjectLogs();
+		void preloadRecentProjectLogs().catch((error) => {
+			console.error("[preloadRecentProjectLogs] Preload failed:", error);
+		});
 	}, 0);
 
 	app.on("activate", () => {
@@ -247,10 +291,29 @@ app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") app.quit();
 });
 
-app.on("quit", () => {
+app.on("quit", async () => {
 	if (retentionInterval) {
 		clearInterval(retentionInterval);
 		retentionInterval = null;
 	}
-	void closeDb();
+	try {
+		await closeDb();
+	} catch (error) {
+		console.error("[closeDb] Failed to close database:", error);
+	}
 });
+
+function gracefulShutdown(): void {
+	if (retentionInterval) {
+		clearInterval(retentionInterval);
+		retentionInterval = null;
+	}
+	closeDb()
+		.catch(() => {})
+		.finally(() => {
+			app.quit();
+		});
+}
+
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);

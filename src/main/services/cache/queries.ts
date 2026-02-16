@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "./sqlite.js";
 import { appSettings, logCache, patchCache, projectPrefs, projects, repoCache } from "./schema.js";
 
@@ -203,19 +203,8 @@ export async function getRepoCache(
 				eq(repoCache.includeIgnored, inc)
 			)
 		);
-	const row = rows[0];
+		const row = rows[0];
 	if (!row) return null;
-	// Touch accessed_at
-	await db
-		.update(repoCache)
-		.set({ accessedAt: sql`unixepoch()` })
-		.where(
-			and(
-				eq(repoCache.projectId, projectId),
-				eq(repoCache.fingerprint, fingerprint),
-				eq(repoCache.includeIgnored, inc)
-			)
-		);
 	return row as RepoCacheRow;
 }
 
@@ -272,17 +261,6 @@ export async function getPatchCache(
 		);
 	const row = rows[0];
 	if (!row) return null;
-	await db
-		.update(patchCache)
-		.set({ accessedAt: sql`unixepoch()` })
-		.where(
-			and(
-				eq(patchCache.projectId, projectId),
-				eq(patchCache.filePath, filePath),
-				eq(patchCache.scope, scope),
-				eq(patchCache.fingerprint, fingerprint)
-			)
-		);
 	return row.patch_text;
 }
 

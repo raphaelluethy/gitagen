@@ -1282,6 +1282,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 	const { theme, setTheme } = useTheme();
 	const { updateSettings } = useSettings();
 	const [uiScale, setUiScale] = useState(1.0);
+	const [uiScaleText, setUiScaleText] = useState("100");
 	const [fontSize, setFontSize] = useState(14);
 	const [commitMessageFontSize, setCommitMessageFontSize] = useState(14);
 	const [fontFamily, setFontFamily] = useState<"geist" | "geist-pixel" | "system">("geist");
@@ -1316,6 +1317,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			setSignCommits(s.signing?.enabled ?? false);
 			setSigningKey(s.signing?.key ?? "");
 			setUiScale(s.uiScale ?? 1.0);
+			setUiScaleText(String(Math.round((s.uiScale ?? 1.0) * 100)));
 			setFontSize(s.fontSize ?? 14);
 			setCommitMessageFontSize(s.commitMessageFontSize ?? 14);
 			setFontFamily(s.fontFamily ?? "geist");
@@ -1459,49 +1461,30 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										UI Scale
 									</h3>
 									<p className="mb-2 text-xs text-(--text-muted)">75% — 150%</p>
-									<input
-										type="text"
-										value={String(Math.round(uiScale * 100))}
-										onChange={(e) => {
-											const v = parseFloat(
-												(e.target as HTMLInputElement).value
-											);
-											if (!Number.isNaN(v))
-												setUiScale(Math.min(150, Math.max(75, v)) / 100);
-										}}
-										onBlur={() => {
-											const v = Math.min(1.5, Math.max(0.75, uiScale));
-											setUiScale(v);
-											void updateSettings({ uiScale: v });
-										}}
-										className="input w-20 text-[13px]"
-									/>
+								<input
+									type="text"
+									value={uiScaleText}
+									onChange={(e) => {
+										setUiScaleText(e.target.value);
+									}}
+									onBlur={() => {
+										const parsed = parseFloat(uiScaleText);
+										const clamped = Number.isNaN(parsed)
+											? 100
+											: Math.min(150, Math.max(75, parsed));
+										const v = clamped / 100;
+										setUiScale(v);
+										setUiScaleText(String(Math.round(clamped)));
+										void updateSettings({ uiScale: v });
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter") {
+											(e.target as HTMLInputElement).blur();
+										}
+									}}
+									className="input w-20 text-[13px]"
+								/>
 									<span className="ml-2 text-xs text-(--text-muted)">%</span>
-								</div>
-								<div className="panel p-4">
-									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
-										Font Size
-									</h3>
-									<p className="mb-2 text-xs text-(--text-muted)">12px — 18px</p>
-									<input
-										type="text"
-										value={String(fontSize)}
-										onChange={(e) => {
-											const v = parseInt(
-												(e.target as HTMLInputElement).value,
-												10
-											);
-											if (!Number.isNaN(v))
-												setFontSize(Math.min(18, Math.max(12, v)));
-										}}
-										onBlur={() => {
-											const v = Math.min(18, Math.max(12, fontSize));
-											setFontSize(v);
-											void updateSettings({ fontSize: v });
-										}}
-										className="input w-20 text-[13px]"
-									/>
-									<span className="ml-2 text-xs text-(--text-muted)">px</span>
 								</div>
 								<div className="panel p-4">
 									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
@@ -1751,6 +1734,33 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										<option value="geist-pixel">Geist Pixel</option>
 										<option value="system">System</option>
 									</select>
+								</div>
+								<div className="panel p-4">
+									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">
+										Font size
+									</h3>
+									<p className="mb-2 text-xs text-(--text-muted)">
+										12px — 18px
+									</p>
+									<input
+										type="text"
+										value={String(fontSize)}
+										onChange={(e) => {
+											const v = parseInt(
+												(e.target as HTMLInputElement).value,
+												10
+											);
+											if (!Number.isNaN(v))
+												setFontSize(Math.min(18, Math.max(12, v)));
+										}}
+										onBlur={() => {
+											const v = Math.min(18, Math.max(12, fontSize));
+											setFontSize(v);
+											void updateSettings({ fontSize: v });
+										}}
+										className="input w-20 text-[13px]"
+									/>
+									<span className="ml-2 text-xs text-(--text-muted)">px</span>
 								</div>
 								<div className="panel p-4">
 									<h3 className="mb-3 text-sm font-semibold text-(--text-primary)">

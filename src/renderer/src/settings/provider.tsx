@@ -1,9 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import type { FontFamily } from "../../../shared/types";
 
 interface Settings {
 	uiScale: number;
 	fontSize: number;
 	commitMessageFontSize: number;
+	fontFamily: FontFamily;
 }
 
 interface SettingsContextValue {
@@ -11,10 +13,26 @@ interface SettingsContextValue {
 	updateSettings: (partial: Partial<Settings>) => void;
 }
 
+const FONT_STACKS: Record<FontFamily, { sans: string; mono: string }> = {
+	geist: {
+		sans: '"Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+		mono: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+	},
+	"geist-pixel": {
+		sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+		mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+	},
+	system: {
+		sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+		mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+	},
+};
+
 const defaultSettings: Settings = {
 	uiScale: 1.0,
 	fontSize: 14,
 	commitMessageFontSize: 14,
+	fontFamily: "system",
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -45,6 +63,9 @@ export function SettingsProvider({
 			"--commit-message-font-size",
 			`${settings.commitMessageFontSize}px`
 		);
+		const fonts = FONT_STACKS[settings.fontFamily];
+		document.documentElement.style.setProperty("--font-sans", fonts.sans);
+		document.documentElement.style.setProperty("--font-mono", fonts.mono);
 	}, [settings]);
 
 	const updateSettings = async (partial: Partial<Settings>) => {

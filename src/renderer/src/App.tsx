@@ -20,6 +20,8 @@ import {
 	FileText,
 	PanelRightClose,
 	PanelRight,
+	PanelLeftClose,
+	PanelLeft,
 	ArrowLeft,
 	GitBranch,
 	Key,
@@ -34,6 +36,7 @@ import CommitPanel from "./components/CommitPanel";
 import BranchSelector from "./components/BranchSelector";
 import WorktreeSelector from "./components/WorktreeSelector";
 import LogPanel from "./components/LogPanel";
+import CommitDetailView from "./components/CommitDetailView";
 import StashPanel from "./components/StashPanel";
 import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
@@ -76,6 +79,7 @@ function sanitizeTwoPanelLayout(
 		secondMin: number;
 		secondMax: number;
 		allowSecondCollapse?: boolean;
+		allowFirstCollapse?: boolean;
 		panelIds: [string, string];
 	}
 ): Layout {
@@ -108,7 +112,8 @@ function sanitizeTwoPanelLayout(
 		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
 	}
 
-	if (first < opts.firstMin || first > opts.firstMax) {
+	const firstMin = opts.allowFirstCollapse ? 0 : opts.firstMin;
+	if (first < firstMin || first > opts.firstMax) {
 		const [a, b] = opts.fallback;
 		return { [opts.panelIds[0]]: a, [opts.panelIds[1]]: b };
 	}
@@ -163,9 +168,12 @@ function AppContent() {
 	const [viewMode, setViewMode] = useState<ViewMode>("single");
 	const [showSettings, setShowSettings] = useState(false);
 	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
+	const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
+	const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
 	const rightPanelRef = useRef<PanelImperativeHandle>(null);
+	const leftPanelRef = useRef<PanelImperativeHandle>(null);
 
 	const mainLayout = useDefaultLayout({
 		id: "gitagen-main-layout-v4",
@@ -183,6 +191,7 @@ function AppContent() {
 				firstMax: 35,
 				secondMin: 65,
 				secondMax: 88,
+				allowFirstCollapse: true,
 				panelIds: ["sidebar", "main"],
 			}),
 		[mainLayout.defaultLayout]
@@ -212,6 +221,17 @@ function AppContent() {
 		}
 	}, []);
 
+	const toggleLeftPanel = useCallback(() => {
+		const panel = leftPanelRef.current;
+		if (panel?.isCollapsed()) {
+			panel.expand();
+			setIsLeftPanelCollapsed(false);
+		} else {
+			panel?.collapse();
+			setIsLeftPanelCollapsed(true);
+		}
+	}, []);
+
 	const refreshStatus = useCallback(() => {
 		if (activeProject) {
 			window.gitagen.settings
@@ -235,6 +255,7 @@ function AppContent() {
 			setStatus(null);
 			setActiveWorktreePath(null);
 			setSelectedFile(null);
+			setSelectedCommitOid(null);
 			return;
 		}
 		window.gitagen.projects.switchTo(activeProject.id).then(() => {
@@ -246,6 +267,29 @@ function AppContent() {
 			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
 		});
 	}, [activeProject?.id]);
+
+	useEffect(() => {
+		if (!selectedFile || !status) return;
+		const lookup = (
+			items: RepoStatus["staged"] | RepoStatus["unstaged"] | RepoStatus["untracked"],
+			type: "staged" | "unstaged" | "untracked"
+		) => {
+			for (const item of items) {
+				const path = typeof item === "string" ? item : item.path;
+				if (path === selectedFile.path) return type;
+			}
+			return null;
+		};
+		const newStatus =
+			lookup(status.staged, "staged") ??
+			lookup(status.unstaged, "unstaged") ??
+			lookup(status.untracked, "untracked");
+		if (newStatus && newStatus !== selectedFile.status) {
+			setSelectedFile((prev) =>
+				prev ? { ...prev, status: newStatus } : prev
+			);
+		}
+	}, [status, selectedFile?.path]);
 
 	useEffect(() => {
 		const unsubscribeUpdated = window.gitagen.events.onRepoUpdated(
@@ -371,9 +415,14 @@ function AppContent() {
 				<Panel
 					id="sidebar"
 					className="flex flex-col border-r border-(--border-secondary)"
+					collapsible
 					defaultSize="20%"
 					minSize="14%"
 					maxSize="35%"
+					panelRef={leftPanelRef}
+					onResize={(size) => {
+						setIsLeftPanelCollapsed(size.asPercentage < 1);
+					}}
 				>
 					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
 						<Sidebar
@@ -407,6 +456,19 @@ function AppContent() {
 				<Panel id="main" className="flex min-w-0 flex-1 flex-col" minSize="40%">
 					<div className="flex shrink-0 items-center gap-1.5 border-b border-(--border-secondary) bg-(--bg-toolbar) px-3 py-1.5">
 						<div className="flex min-w-0 items-center gap-1">
+							<button
+								type="button"
+								onClick={toggleLeftPanel}
+								className="btn-icon rounded-md p-1.5"
+								title={isLeftPanelCollapsed ? "Show panel" : "Hide panel"}
+							>
+								{isLeftPanelCollapsed ? (
+									<PanelLeft size={15} />
+								) : (
+									<PanelLeftClose size={15} />
+								)}
+							</button>
+							<div className="mx-0.5 hidden h-4 w-px bg-(--border-secondary) sm:block" />
 							<WorktreeSelector
 								projectId={activeProject.id}
 								activeWorktreePath={activeWorktreePath}
@@ -492,26 +554,53 @@ function AppContent() {
 						onLayoutChanged={contentLayout.onLayoutChanged}
 					>
 						<Panel id="center" className="flex min-w-0 flex-1 flex-col" minSize="30%">
-							<div className="flex min-h-0 flex-1 flex-col">
-								{viewMode === "all" ? (
-									<AllChangesView
-										projectId={activeProject.id}
-										gitStatus={gitStatus}
-										diffStyle={diffStyle}
-										selectedFile={selectedFile}
-										onRefresh={refreshStatus}
-									/>
-								) : (
-									<DiffViewer
-										projectId={activeProject.id}
-										repoPath={gitStatus.repoPath}
-										selectedFile={selectedFile}
-										diffStyle={diffStyle}
-										onRefresh={refreshStatus}
-									/>
-								)}
-							</div>
-							<CommitPanel projectId={activeProject.id} onCommit={refreshStatus} />
+							{selectedCommitOid ? (
+								<CommitDetailView
+									projectId={activeProject.id}
+									oid={selectedCommitOid}
+									diffStyle={diffStyle}
+									onClose={() => setSelectedCommitOid(null)}
+								/>
+							) : (
+								<Group
+									className="flex min-h-0 flex-1 flex-col"
+									id="center-vertical"
+									orientation="vertical"
+									defaultLayout={{ "diff-area": 75, "commit-area": 25 }}
+								>
+									<Panel id="diff-area" className="flex min-h-0 flex-1 flex-col" minSize="30%">
+										{viewMode === "all" ? (
+											<AllChangesView
+												projectId={activeProject.id}
+												gitStatus={gitStatus}
+												diffStyle={diffStyle}
+												selectedFile={selectedFile}
+												onRefresh={refreshStatus}
+											/>
+										) : (
+											<DiffViewer
+												projectId={activeProject.id}
+												repoPath={gitStatus.repoPath}
+												selectedFile={selectedFile}
+												diffStyle={diffStyle}
+												onRefresh={refreshStatus}
+											/>
+										)}
+									</Panel>
+									<Separator className="panel-resize-handle" />
+									<Panel
+										id="commit-area"
+										className="flex flex-col border-t border-(--border-primary)"
+										minSize="10%"
+										defaultSize="25%"
+									>
+										<CommitPanel
+											projectId={activeProject.id}
+											onCommit={refreshStatus}
+										/>
+									</Panel>
+								</Group>
+							)}
 						</Panel>
 						<Separator className="panel-resize-handle" />
 						<Panel
@@ -558,13 +647,17 @@ function AppContent() {
 								</div>
 								<div className="relative min-h-0 flex-1 overflow-hidden">
 									<div
-										className={`min-h-full overflow-auto ${rightTab !== "log" ? "hidden" : ""}`}
+										className={`h-full overflow-auto ${rightTab !== "log" ? "hidden" : ""}`}
 										aria-hidden={rightTab !== "log"}
 									>
-										<LogPanel projectId={activeProject.id} />
+										<LogPanel
+											projectId={activeProject.id}
+											selectedOid={selectedCommitOid}
+											onSelectCommit={setSelectedCommitOid}
+										/>
 									</div>
 									<div
-										className={`min-h-full overflow-auto ${rightTab !== "stash" ? "hidden" : ""}`}
+										className={`h-full overflow-auto ${rightTab !== "stash" ? "hidden" : ""}`}
 										aria-hidden={rightTab !== "stash"}
 									>
 										<StashPanel
@@ -573,7 +666,7 @@ function AppContent() {
 										/>
 									</div>
 									<div
-										className={`min-h-full overflow-auto ${rightTab !== "remote" ? "hidden" : ""}`}
+										className={`h-full overflow-auto ${rightTab !== "remote" ? "hidden" : ""}`}
 										aria-hidden={rightTab !== "remote"}
 									>
 										<RemotePanel
@@ -1275,6 +1368,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 	const [customFontInput, setCustomFontInput] = useState("");
 	const [gpuAcceleration, setGpuAcceleration] = useState(true);
 	const [devMode, setDevMode] = useState(false);
+	const [autoExpandSingleFolder, setAutoExpandSingleFolder] = useState(true);
 	const signingConfigEntries = useMemo(() => {
 		return {
 			key: getLatestConfigEntry(effectiveConfig, "user.signingkey"),
@@ -1321,6 +1415,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			if (!isFontPreset(ff)) setCustomFontInput(ff);
 			setGpuAcceleration(s.gpuAcceleration ?? true);
 			setDevMode(s.devMode ?? false);
+			setAutoExpandSingleFolder(s.autoExpandSingleFolder ?? true);
 		});
 		window.gitagen.settings.discoverGitBinaries().then(setGitBinaries);
 		window.gitagen.settings.getSshAgentInfo().then(setSshAgentInfo);
@@ -1871,6 +1966,29 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 									/>
 									<span className="ml-2 text-xs text-(--text-muted)">px</span>
 								</div>
+								<div className="panel p-4">
+									<h3 className="mb-1 text-sm font-semibold text-(--text-primary)">
+										Auto-expand single folders
+									</h3>
+									<p className="mb-3 text-xs text-(--text-muted)">
+										Automatically expand folders when they are the only folder
+										at their level
+									</p>
+									<label className="flex cursor-pointer items-center gap-2">
+										<input
+											type="checkbox"
+											checked={autoExpandSingleFolder}
+											onChange={(e) => {
+												const v = (e.target as HTMLInputElement).checked;
+												setAutoExpandSingleFolder(v);
+												void updateSettings({ autoExpandSingleFolder: v });
+											}}
+										/>
+										<span className="text-sm text-(--text-secondary)">
+											Enabled
+										</span>
+									</label>
+								</div>
 							</div>
 						)}
 						{activeTab === "dev" && (
@@ -1920,6 +2038,7 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 										gitBinaryPath: gitPath,
 										gpuAcceleration,
 										devMode,
+										autoExpandSingleFolder,
 									});
 									await updateSettings({
 										uiScale,
@@ -1956,12 +2075,14 @@ export default function App() {
 		commitMessageFontSize: number;
 		fontFamily: FontFamily;
 		devMode: boolean;
+		autoExpandSingleFolder: boolean;
 	}>({
 		uiScale: 1.0,
 		fontSize: 14,
 		commitMessageFontSize: 14,
 		fontFamily: "system",
 		devMode: false,
+		autoExpandSingleFolder: true,
 	});
 
 	useEffect(() => {
@@ -1975,6 +2096,7 @@ export default function App() {
 					commitMessageFontSize: s?.commitMessageFontSize ?? 14,
 					fontFamily: s?.fontFamily ?? "system",
 					devMode: s?.devMode ?? false,
+					autoExpandSingleFolder: s?.autoExpandSingleFolder ?? true,
 				});
 			})
 			.catch(() => {});

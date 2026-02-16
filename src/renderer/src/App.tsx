@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import {
 	Group,
 	Panel,
@@ -30,6 +30,7 @@ import {
 	Bug,
 } from "lucide-react";
 import Sidebar from "./components/Sidebar";
+import CommandPalette from "./components/CommandPalette";
 import DiffViewer from "./components/DiffViewer";
 import AllChangesView from "./components/AllChangesView";
 import CommitPanel from "./components/CommitPanel";
@@ -40,16 +41,27 @@ import CommitDetailView from "./components/CommitDetailView";
 import StashPanel from "./components/StashPanel";
 import WorktreePanel from "./components/WorktreePanel";
 import RemotePanel from "./components/RemotePanel";
+import SyncButtons from "./components/SyncButtons";
 import ConflictBanner from "./components/ConflictBanner";
 import StartPage from "./components/StartPage";
 import { FpsMonitor } from "./components/FpsMonitor";
 import { ThemeProvider, useTheme } from "./theme/provider";
 import { SettingsProvider, useSettings } from "./settings/provider";
-import { ToastProvider } from "./toast/provider";
+import { ToastProvider, useToast } from "./toast/provider";
+import { getAppRouteId } from "./lib/appRoute";
+import {
+	useCommandRegistry,
+	type CommandActions,
+	type CommandContext,
+	type RightPanelTab,
+	type SettingsTab,
+	type ViewMode,
+} from "./hooks/useCommandRegistry";
 import type {
 	Project,
 	ProjectPrefs,
 	RepoStatus,
+	GitStatus,
 	GitFileStatus,
 	DiffStyle,
 	ConfigEntry,
@@ -60,10 +72,9 @@ import type {
 	AIProviderType,
 	ConflictState,
 	FontFamily,
+	BranchInfo,
+	RemoteInfo,
 } from "../../shared/types";
-
-type RightPanelTab = "log" | "stash" | "remote";
-type ViewMode = "single" | "all";
 
 const MAIN_LAYOUT_FALLBACK = [20, 80];
 const CONTENT_LAYOUT_FALLBACK = [70, 30];
@@ -159,9 +170,12 @@ function getLatestConfigEntry(entries: ConfigEntry[], key: string): ConfigEntry 
 }
 
 function AppContent() {
+	const { toast } = useToast();
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [activeProject, setActiveProject] = useState<Project | null>(null);
 	const [status, setStatus] = useState<RepoStatus | null>(null);
+	const [currentBranchInfo, setCurrentBranchInfo] = useState<BranchInfo | null>(null);
+	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
 	const [activeWorktreePath, setActiveWorktreePath] = useState<string | null>(null);
 	const [selectedFile, setSelectedFile] = useState<GitFileStatus | null>(null);
 	const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
@@ -172,6 +186,8 @@ function AppContent() {
 	const [loading, setLoading] = useState(true);
 	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
 	const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+	const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+	const [settingsTabOverride, setSettingsTabOverride] = useState<SettingsTab | null>(null);
 	const rightPanelRef = useRef<PanelImperativeHandle>(null);
 	const leftPanelRef = useRef<PanelImperativeHandle>(null);
 
@@ -240,8 +256,17 @@ function AppContent() {
 					setActiveWorktreePath(p?.activeWorktreePath ?? null);
 				});
 			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
+			Promise.all([
+				window.gitagen.repo.listBranches(activeProject.id),
+				window.gitagen.repo.listRemotes(activeProject.id),
+			]).then(([branches, remotesList]) => {
+				const current = (branches as BranchInfo[]).find((b) => b.current);
+				setCurrentBranchInfo(current ?? null);
+				setRemotes(remotesList as RemoteInfo[]);
+			});
 		}
 	}, [activeProject?.id]);
+	const refreshStatusAndPrefs = refreshStatus;
 
 	useEffect(() => {
 		window.gitagen.projects.list().then((list: Project[]) => {
@@ -253,6 +278,8 @@ function AppContent() {
 	useEffect(() => {
 		if (!activeProject) {
 			setStatus(null);
+			setCurrentBranchInfo(null);
+			setRemotes([]);
 			setActiveWorktreePath(null);
 			setSelectedFile(null);
 			setSelectedCommitOid(null);
@@ -265,6 +292,14 @@ function AppContent() {
 					setActiveWorktreePath(p?.activeWorktreePath ?? null);
 				});
 			window.gitagen.repo.getStatus(activeProject.id).then(setStatus);
+			Promise.all([
+				window.gitagen.repo.listBranches(activeProject.id),
+				window.gitagen.repo.listRemotes(activeProject.id),
+			]).then(([branches, remotesList]) => {
+				const current = (branches as BranchInfo[]).find((b) => b.current);
+				setCurrentBranchInfo(current ?? null);
+				setRemotes(remotesList as RemoteInfo[]);
+			});
 		});
 	}, [activeProject?.id]);
 
@@ -285,9 +320,7 @@ function AppContent() {
 			lookup(status.unstaged, "unstaged") ??
 			lookup(status.untracked, "untracked");
 		if (newStatus && newStatus !== selectedFile.status) {
-			setSelectedFile((prev) =>
-				prev ? { ...prev, status: newStatus } : prev
-			);
+			setSelectedFile((prev) => (prev ? { ...prev, status: newStatus } : prev));
 		}
 	}, [status, selectedFile?.path]);
 
@@ -308,7 +341,7 @@ function AppContent() {
 			(payload: { projectId: string | null; message: string; name: string }) => {
 				if (!activeProject) return;
 				if (payload.projectId && payload.projectId !== activeProject.id) return;
-				console.error(`[${payload.name}] ${payload.message}`);
+				toast.error(payload.name, payload.message);
 			}
 		);
 		return () => {
@@ -316,7 +349,7 @@ function AppContent() {
 			unsubscribeConflicts();
 			unsubscribeErrors();
 		};
-	}, [activeProject?.id, refreshStatus]);
+	}, [activeProject?.id, refreshStatus, toast]);
 
 	const handleAddProject = async () => {
 		const path: string | null = await window.gitagen.settings.selectFolder();
@@ -327,6 +360,150 @@ function AppContent() {
 		setActiveProject(p);
 	};
 
+	const gitStatus: GitStatus | null =
+		activeProject && status
+			? {
+					repoPath: activeProject.path,
+					staged: repoStatusToGitFileStatus(status, "staged"),
+					unstaged: repoStatusToGitFileStatus(status, "unstaged"),
+					untracked: repoStatusToGitFileStatus(status, "untracked"),
+				}
+			: null;
+
+	const appRoute = getAppRouteId({
+		loading,
+		projects,
+		activeProject,
+		gitStatus,
+		showSettings,
+		selectedCommitOid,
+	});
+
+	const closeCommandPalette = useCallback(() => {
+		setIsCommandPaletteOpen(false);
+	}, []);
+
+	const commandContext = useMemo<CommandContext>(
+		() => ({
+			route: appRoute,
+			projects,
+			activeProject,
+			status,
+			gitStatus,
+			activeWorktreePath,
+			selectedFile,
+			diffStyle,
+			viewMode,
+			rightTab,
+			selectedCommitOid,
+			isLeftPanelCollapsed,
+			isRightPanelCollapsed,
+		}),
+		[
+			activeProject,
+			activeWorktreePath,
+			appRoute,
+			diffStyle,
+			gitStatus,
+			isLeftPanelCollapsed,
+			isRightPanelCollapsed,
+			projects,
+			rightTab,
+			selectedCommitOid,
+			selectedFile,
+			status,
+			viewMode,
+		]
+	);
+
+	const commandActions = useMemo<CommandActions>(
+		() => ({
+			onOpenProject: (project) => {
+				setActiveProject(project);
+				setShowSettings(false);
+				setSelectedCommitOid(null);
+			},
+			onAddProject: handleAddProject,
+			onBackToProjects: () => {
+				setShowSettings(false);
+				setSelectedCommitOid(null);
+				setActiveProject(null);
+			},
+			onOpenSettings: (tab) => {
+				setSettingsTabOverride(tab ?? null);
+				setShowSettings(true);
+				setSelectedCommitOid(null);
+			},
+			onCloseSettings: () => {
+				setShowSettings(false);
+				setSettingsTabOverride(null);
+			},
+			onSetViewMode: setViewMode,
+			onSetDiffStyle: setDiffStyle,
+			onSetRightTab: setRightTab,
+			onToggleLeftPanel: toggleLeftPanel,
+			onToggleRightPanel: toggleRightPanel,
+			onRefreshStatus: refreshStatus,
+			onRefreshStatusAndPrefs: refreshStatusAndPrefs,
+			onSelectFile: (file) => {
+				setSelectedFile(file);
+				setSelectedCommitOid(null);
+			},
+			onOpenCommitDetail: (oid) => {
+				setSelectedCommitOid(oid);
+			},
+			onCloseCommitDetail: () => {
+				setSelectedCommitOid(null);
+			},
+			onNotifyError: (message) => {
+				toast.error(message);
+			},
+		}),
+		[
+			handleAddProject,
+			refreshStatus,
+			refreshStatusAndPrefs,
+			toggleLeftPanel,
+			toggleRightPanel,
+			toast,
+		]
+	);
+
+	const commands = useCommandRegistry(commandContext, commandActions);
+
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey)) return;
+			if (event.key.toLowerCase() !== "p") return;
+			if (appRoute === "loading") return;
+			event.preventDefault();
+			setIsCommandPaletteOpen((prev) => !prev);
+		};
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [appRoute]);
+
+	useEffect(() => {
+		if (appRoute === "loading") {
+			setIsCommandPaletteOpen(false);
+		}
+	}, [appRoute]);
+
+	const withPalette = (content: ReactNode) => (
+		<>
+			{content}
+			{appRoute !== "loading" && (
+				<CommandPalette
+					open={isCommandPaletteOpen}
+					onClose={closeCommandPalette}
+					commands={commands}
+				/>
+			)}
+		</>
+	);
+
 	if (loading) {
 		return (
 			<div className="flex h-screen items-center justify-center bg-(--bg-primary)">
@@ -336,7 +513,7 @@ function AppContent() {
 	}
 
 	if (projects.length === 0) {
-		return (
+		return withPalette(
 			<div className="empty-state h-screen bg-(--bg-primary)">
 				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-(--bg-secondary) border border-(--border-secondary)">
 					<FolderOpen size={32} className="text-(--text-muted)" />
@@ -356,7 +533,7 @@ function AppContent() {
 	}
 
 	if (!activeProject) {
-		return (
+		return withPalette(
 			<StartPage
 				projects={projects}
 				onSelectProject={setActiveProject}
@@ -365,17 +542,8 @@ function AppContent() {
 		);
 	}
 
-	const gitStatus = status
-		? {
-				repoPath: activeProject.path,
-				staged: repoStatusToGitFileStatus(status, "staged"),
-				unstaged: repoStatusToGitFileStatus(status, "unstaged"),
-				untracked: repoStatusToGitFileStatus(status, "untracked"),
-			}
-		: null;
-
 	if (!gitStatus) {
-		return (
+		return withPalette(
 			<div className="flex h-screen flex-col items-center justify-center gap-4 bg-(--bg-primary)">
 				<p className="text-sm text-(--text-muted)">
 					Not a git repository or failed to load status.
@@ -392,17 +560,21 @@ function AppContent() {
 	}
 
 	if (showSettings) {
-		return (
+		return withPalette(
 			<div className="flex h-screen flex-col bg-(--bg-primary) animate-fade-in">
 				<SettingsPanel
 					projectId={activeProject.id}
-					onClose={() => setShowSettings(false)}
+					activeTabOverride={settingsTabOverride}
+					onClose={() => {
+						setShowSettings(false);
+						setSettingsTabOverride(null);
+					}}
 				/>
 			</div>
 		);
 	}
 
-	return (
+	return withPalette(
 		<div className="flex h-screen flex-col bg-(--bg-primary)">
 			<ConflictBanner projectId={activeProject.id} onResolved={refreshStatus} />
 			<Group
@@ -524,6 +696,14 @@ function AppContent() {
 							</button>
 						</div>
 						<div className="ml-auto flex shrink-0 items-center gap-0.5">
+							<SyncButtons
+								projectId={activeProject.id}
+								ahead={currentBranchInfo?.ahead ?? 0}
+								behind={currentBranchInfo?.behind ?? 0}
+								hasRemotes={remotes.length > 0}
+								onComplete={refreshStatus}
+							/>
+							<div className="mx-0.5 h-4 w-px bg-(--border-secondary)" />
 							<button
 								type="button"
 								onClick={toggleRightPanel}
@@ -538,7 +718,10 @@ function AppContent() {
 							</button>
 							<button
 								type="button"
-								onClick={() => setShowSettings(true)}
+								onClick={() => {
+									setSettingsTabOverride(null);
+									setShowSettings(true);
+								}}
 								className="btn-icon rounded-md p-1.5"
 								title="Settings"
 							>
@@ -568,7 +751,11 @@ function AppContent() {
 									orientation="vertical"
 									defaultLayout={{ "diff-area": 75, "commit-area": 25 }}
 								>
-									<Panel id="diff-area" className="flex min-h-0 flex-1 flex-col" minSize="30%">
+									<Panel
+										id="diff-area"
+										className="flex min-h-0 flex-1 flex-col"
+										minSize="30%"
+									>
 										{viewMode === "all" ? (
 											<AllChangesView
 												projectId={activeProject.id}
@@ -1331,14 +1518,20 @@ function ProviderEditForm({
 	);
 }
 
-type SettingsTab = "general" | "git" | "signing" | "ai" | "appearance" | "dev";
-
 const FONT_PRESETS = ["geist", "geist-pixel", "system"] as const;
 function isFontPreset(v: string): v is (typeof FONT_PRESETS)[number] {
 	return FONT_PRESETS.includes(v as (typeof FONT_PRESETS)[number]);
 }
 
-function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClose: () => void }) {
+function SettingsPanel({
+	projectId,
+	onClose,
+	activeTabOverride,
+}: {
+	projectId: string | null;
+	onClose: () => void;
+	activeTabOverride?: SettingsTab | null;
+}) {
 	const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 	const [gitPath, setGitPath] = useState<string | null>(null);
 	const [gitBinaries, setGitBinaries] = useState<string[]>([]);
@@ -1377,6 +1570,11 @@ function SettingsPanel({ projectId, onClose }: { projectId: string | null; onClo
 			allowedSigners: getLatestConfigEntry(effectiveConfig, "gpg.ssh.allowedsignersfile"),
 		};
 	}, [effectiveConfig]);
+
+	useEffect(() => {
+		if (!activeTabOverride) return;
+		setActiveTab(activeTabOverride);
+	}, [activeTabOverride]);
 
 	const loadEffectiveConfig = useCallback(() => {
 		if (!projectId) {

@@ -24,6 +24,7 @@ import type {
 	FetchResultSummary,
 	PullResultSummary,
 	PushResultSummary,
+	TagInfo,
 } from "../shared/types.js";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -300,6 +301,10 @@ const repo = {
 	listTags: (projectId: string): Promise<string[]> => {
 		validateProjectId(projectId);
 		return ipcRenderer.invoke("repo:listTags", projectId);
+	},
+	listTagsDetailed: (projectId: string): Promise<TagInfo[]> => {
+		validateProjectId(projectId);
+		return ipcRenderer.invoke("repo:listTagsDetailed", projectId);
 	},
 	createTag: (
 		projectId: string,

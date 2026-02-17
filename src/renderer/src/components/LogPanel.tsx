@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowUpCircle, GitCommit, Loader2, RotateCcw, Shield } from "lucide-react";
+import { ArrowUpCircle, GitCommit, Loader2, RotateCcw, Shield, Tag } from "lucide-react";
 import type { CommitInfo } from "../../../shared/types";
 import { useToast } from "../toast/provider";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "./ui/context-menu";
+import { CreateTagDialog } from "./CreateTagDialog";
 
 const ROW_HEIGHT = 80;
 const OVERSCAN = 5;
@@ -95,12 +103,31 @@ export default function LogPanel({
 	const { toast } = useToast();
 	const [commits, setCommits] = useState<CommitInfo[]>([]);
 	const [unpushedOids, setUnpushedOids] = useState<Set<string> | null>(null);
+	const [tagsByOid, setTagsByOid] = useState<Map<string, string[]>>(new Map());
+	const [tagDialogOpen, setTagDialogOpen] = useState(false);
+	const [tagDialogOid, setTagDialogOid] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [showSpinner, setShowSpinner] = useState(false);
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [hasMore, setHasMore] = useState(true);
 	const [undoing, setUndoing] = useState(false);
+	const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
+
+	const refreshTags = useCallback(() => {
+		window.gitagen.repo
+			.listTagsDetailed(projectId)
+			.then((tags) => {
+				const map = new Map<string, string[]>();
+				for (const t of tags) {
+					const existing = map.get(t.oid) ?? [];
+					existing.push(t.name);
+					map.set(t.oid, existing);
+				}
+				setTagsByOid(map);
+			})
+			.catch(() => setTagsByOid(new Map()));
+	}, [projectId]);
 
 	// Delay the spinner so cached data has time to arrive before any flash
 	useEffect(() => {
@@ -212,13 +239,21 @@ export default function LogPanel({
 	useEffect(() => {
 		const unsub = window.gitagen.events.onRepoUpdated(
 			(payload: { projectId: string; updatedAt: number }) => {
-				if (payload.projectId === projectId) refreshFirstPage();
+				if (payload.projectId === projectId) {
+					refreshFirstPage();
+					refreshTags();
+				}
 			}
 		);
 		return () => {
 			unsub();
 		};
-	}, [projectId, refreshFirstPage]);
+	}, [projectId, refreshFirstPage, refreshTags]);
+
+	// Fetch tags on mount / project change
+	useEffect(() => {
+		refreshTags();
+	}, [refreshTags]);
 
 	const rowVirtualizer = useVirtualizer({
 		count: commits.length,
@@ -263,8 +298,25 @@ export default function LogPanel({
 
 	const canUndo = commits.length > 0 && commits[0]!.pushed === false;
 
+	const openCreateTagDialog = (oid: string) => {
+		setTagDialogOid(oid);
+		setTagDialogOpen(true);
+	};
+
 	return (
 		<div className="flex h-full flex-col">
+			{tagDialogOid && (
+				<CreateTagDialog
+					open={tagDialogOpen}
+					onOpenChange={(open) => {
+						setTagDialogOpen(open);
+						if (!open) setTagDialogOid(null);
+					}}
+					projectId={projectId}
+					commitOid={tagDialogOid}
+					onTagCreated={refreshTags}
+				/>
+			)}
 			{canUndo && (
 				<div className="flex items-center justify-between border-b border-(--border-secondary) px-3 py-1.5">
 					<span className="text-[10px] text-(--text-muted)">
@@ -294,74 +346,142 @@ export default function LogPanel({
 						const isSelected = selectedOid === c.oid;
 						const isFirst = virtualRow.index === 0;
 						const isUnpushed = c.pushed === false;
+						const commitTags = tagsByOid.get(c.oid) ?? [];
+						const isHovered = hoveredRowIndex === virtualRow.index;
 						return (
-							<div
-								key={virtualRow.key}
-								role="button"
-								tabIndex={0}
-								onClick={() => onSelectCommit?.(c.oid)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										onSelectCommit?.(c.oid);
-									}
-								}}
-								className={`absolute left-0 top-0 w-full cursor-pointer border-b border-(--border-secondary) px-3 py-2.5 transition-colors ${
-									isSelected
-										? "border-l-2 border-l-(--accent-primary) bg-(--bg-hover)"
-										: isUnpushed
-											? "border-l-2 border-l-(--warning) hover:bg-(--bg-hover)"
-											: isFirst
-												? "border-l-2 border-l-(--text-muted) hover:bg-(--bg-hover)"
-												: "border-l-2 border-l-transparent hover:bg-(--bg-hover)"
-								}`}
-								style={{
-									height: `${virtualRow.size}px`,
-									transform: `translateY(${virtualRow.start}px)`,
-								}}
-							>
-								<p className="truncate text-[12px] font-medium leading-snug text-(--text-primary)">
-									{c.message.split("\n")[0]}
-								</p>
-								<div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-(--text-muted)">
-									<code
-										className="shrink-0 cursor-pointer rounded bg-(--bg-tertiary) px-1 py-px font-mono text-[10px] text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
-										title="Copy commit hash"
-										onClick={(e) => {
-											e.stopPropagation();
+							<ContextMenu key={virtualRow.key}>
+								<ContextMenuTrigger>
+									<div
+										role="button"
+										tabIndex={0}
+										onClick={() => onSelectCommit?.(c.oid)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" || e.key === " ") {
+												e.preventDefault();
+												onSelectCommit?.(c.oid);
+											}
+										}}
+										onMouseEnter={() => setHoveredRowIndex(virtualRow.index)}
+										onMouseLeave={() => setHoveredRowIndex(null)}
+										className={`absolute left-0 top-0 w-full cursor-pointer border-b border-(--border-secondary) px-3 py-2.5 transition-colors ${
+											isSelected
+												? "border-l-2 border-l-(--accent-primary) bg-(--bg-hover)"
+												: isUnpushed
+													? "border-l-2 border-l-(--warning) hover:bg-(--bg-hover)"
+													: isFirst
+														? "border-l-2 border-l-(--text-muted) hover:bg-(--bg-hover)"
+														: "border-l-2 border-l-transparent hover:bg-(--bg-hover)"
+										}`}
+										style={{
+											height: `${virtualRow.size}px`,
+											transform: `translateY(${virtualRow.start}px)`,
+										}}
+									>
+										<div className="flex items-start justify-between gap-2">
+											<div className="min-w-0 flex-1">
+												<p className="truncate text-[12px] font-medium leading-snug text-(--text-primary)">
+													{c.message.split("\n")[0]}
+												</p>
+												<div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-(--text-muted)">
+													<code
+														className="shrink-0 cursor-pointer rounded bg-(--bg-tertiary) px-1 py-px font-mono text-[10px] text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+														title="Copy commit hash"
+														onClick={(e) => {
+															e.stopPropagation();
+															navigator.clipboard.writeText(c.oid);
+															toast.success(
+																"Copied",
+																c.oid.slice(0, 7)
+															);
+														}}
+													>
+														{c.oid.slice(0, 7)}
+													</code>
+													{c.pushed === false ? (
+														<span className="shrink-0 rounded bg-(--warning-bg) px-1.5 py-px font-medium text-(--warning)">
+															local
+														</span>
+													) : (
+														<span className="shrink-0 flex items-center gap-0.5 text-(--text-subtle)">
+															<ArrowUpCircle size={10} />
+															<span>pushed</span>
+														</span>
+													)}
+													{commitTags.map((tagName) => (
+														<span
+															key={tagName}
+															className="shrink-0 flex items-center gap-0.5 rounded bg-(--accent-bg) px-1.5 py-px font-medium text-(--accent-primary)"
+														>
+															<Tag size={9} />
+															{tagName}
+														</span>
+													))}
+													<span className="truncate text-(--text-secondary)">
+														{c.author.name}
+													</span>
+												</div>
+												<div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-(--text-subtle)">
+													<span>
+														{formatRelativeTime(
+															new Date(c.author.date)
+														)}
+													</span>
+													{c.signed && (
+														<>
+															<span className="text-(--border-primary)">
+																·
+															</span>
+															<span className="flex items-center gap-0.5 text-(--success)">
+																<Shield size={9} />
+																<span>signed</span>
+															</span>
+														</>
+													)}
+												</div>
+											</div>
+											{isHovered && (
+												<button
+													type="button"
+													onClick={(e) => {
+														e.stopPropagation();
+														openCreateTagDialog(c.oid);
+													}}
+													className="shrink-0 rounded p-1 text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--accent-primary)"
+													title="Create tag"
+													aria-label="Create tag"
+												>
+													<Tag size={14} />
+												</button>
+											)}
+										</div>
+									</div>
+								</ContextMenuTrigger>
+								<ContextMenuContent>
+									<ContextMenuItem onClick={() => openCreateTagDialog(c.oid)}>
+										<Tag size={12} className="shrink-0" />
+										Create Tag...
+									</ContextMenuItem>
+									<ContextMenuSeparator />
+									<ContextMenuItem
+										onClick={() => {
 											navigator.clipboard.writeText(c.oid);
 											toast.success("Copied", c.oid.slice(0, 7));
 										}}
 									>
-										{c.oid.slice(0, 7)}
-									</code>
-									{c.pushed === false ? (
-										<span className="shrink-0 rounded bg-(--warning-bg) px-1.5 py-px font-medium text-(--warning)">
-											local
-										</span>
-									) : (
-										<span className="shrink-0 flex items-center gap-0.5 text-(--text-subtle)">
-											<ArrowUpCircle size={10} />
-											<span>pushed</span>
-										</span>
-									)}
-									<span className="truncate text-(--text-secondary)">
-										{c.author.name}
-									</span>
-								</div>
-								<div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-(--text-subtle)">
-									<span>{formatRelativeTime(new Date(c.author.date))}</span>
-									{c.signed && (
-										<>
-											<span className="text-(--border-primary)">·</span>
-											<span className="flex items-center gap-0.5 text-(--success)">
-												<Shield size={9} />
-												<span>signed</span>
-											</span>
-										</>
-									)}
-								</div>
-							</div>
+										Copy Commit Hash
+									</ContextMenuItem>
+									<ContextMenuItem
+										onClick={() => {
+											navigator.clipboard.writeText(
+												c.message.split("\n")[0] ?? ""
+											);
+											toast.success("Copied", "Commit message");
+										}}
+									>
+										Copy Commit Message
+									</ContextMenuItem>
+								</ContextMenuContent>
+							</ContextMenu>
 						);
 					})}
 				</div>

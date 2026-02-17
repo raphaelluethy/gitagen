@@ -876,6 +876,17 @@ export function registerRepoHandlers(): void {
 		}
 	});
 
+	ipcMain.handle("repo:listTagsDetailed", async (_, projectId: string) => {
+		const cwd = await getRepoPath(projectId);
+		if (!cwd) return [];
+		try {
+			return (await getGitProvider()).listTagsDetailed(cwd);
+		} catch (error) {
+			emitRepoError(projectId, error);
+			return [];
+		}
+	});
+
 	ipcMain.handle(
 		"repo:createTag",
 		async (

@@ -69,6 +69,7 @@ export type IpcChannel =
 	| "repo:stashDrop"
 	| "repo:stashShow"
 	| "repo:listTags"
+	| "repo:listTagsDetailed"
 	| "repo:createTag"
 	| "repo:deleteTag"
 	| "repo:rebase"
@@ -262,6 +263,11 @@ export interface RemoteInfo {
 	name: string;
 	url: string;
 	pushUrl?: string;
+}
+
+export interface TagInfo {
+	name: string;
+	oid: string;
 }
 
 /** Bundled response from repo:openProject - status, branches, remotes, cachedLog, prefs in one IPC call */

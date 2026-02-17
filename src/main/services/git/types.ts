@@ -9,6 +9,7 @@ import type {
 	RemoteInfo,
 	StashDetail,
 	StashEntry,
+	TagInfo,
 	TreeNode,
 	WorktreeInfo,
 } from "../../../shared/types.js";
@@ -110,6 +111,7 @@ export interface GitProvider {
 	stashShow(cwd: string, index: number): Promise<StashDetail | null>;
 
 	listTags(cwd: string): Promise<string[]>;
+	listTagsDetailed(cwd: string): Promise<TagInfo[]>;
 	createTag(
 		cwd: string,
 		name: string,

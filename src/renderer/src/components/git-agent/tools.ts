@@ -119,6 +119,15 @@ export function createGitAgentTools(
 				}),
 		}),
 
+		list_tags: tool({
+			description: "List git tags in the repository",
+			inputSchema: z.object({}),
+			execute: async (_, ctx) =>
+				runTool("list_tags", ctx, async () => {
+					return await window.gitagen.repo.listTags(projectId);
+				}),
+		}),
+
 		stage_files: tool({
 			description: "Stage specific files",
 			inputSchema: z.object({
@@ -294,6 +303,37 @@ export function createGitAgentTools(
 				runWriteTool("create_branch", planId, ctx, async () => {
 					await window.gitagen.repo.createBranch(projectId, name, startPoint);
 					return { success: true, branch: name, startPoint: startPoint ?? null };
+				}),
+		}),
+
+		create_tag: tool({
+			description: "Create a git tag at a commit or ref",
+			inputSchema: z.object({
+				planId: z.string(),
+				name: z.string(),
+				message: z.string().optional(),
+				ref: z.string().optional(),
+			}),
+			execute: async ({ planId, name, message, ref }, ctx) =>
+				runWriteTool("create_tag", planId, ctx, async () => {
+					await window.gitagen.repo.createTag(projectId, name, {
+						message,
+						ref,
+					});
+					return { success: true, tag: name, ref: ref ?? "HEAD" };
+				}),
+		}),
+
+		delete_tag: tool({
+			description: "Delete a git tag",
+			inputSchema: z.object({
+				planId: z.string(),
+				name: z.string(),
+			}),
+			execute: async ({ planId, name }, ctx) =>
+				runWriteTool("delete_tag", planId, ctx, async () => {
+					await window.gitagen.repo.deleteTag(projectId, name);
+					return { success: true, deleted: name };
 				}),
 		}),
 

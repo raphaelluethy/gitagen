@@ -106,14 +106,14 @@ Gitagen is an Electron-based Git client with a strict **main → preload → ren
 
 The renderer never imports `ipcRenderer` directly. It uses `window.gitagen` methods, which the preload script wires to `ipcRenderer.invoke(channel, ...args)`.
 
-| Flow | Example |
-|------|---------|
-| 1. Renderer | `await window.gitagen.repo.getStatus(projectId)` |
-| 2. Preload | `ipcRenderer.invoke("repo:getStatus", projectId)` |
-| 3. Main | `ipcMain.handle("repo:getStatus", async (_, projectId) => {...})` |
-| 4. Main | Calls `createGitProvider().getStatus(cwd)` via `simple-git` |
-| 5. Main | Returns `RepoStatus` to renderer |
-| 6. Renderer | Receives Promise result |
+| Flow        | Example                                                           |
+| ----------- | ----------------------------------------------------------------- |
+| 1. Renderer | `await window.gitagen.repo.getStatus(projectId)`                  |
+| 2. Preload  | `ipcRenderer.invoke("repo:getStatus", projectId)`                 |
+| 3. Main     | `ipcMain.handle("repo:getStatus", async (_, projectId) => {...})` |
+| 4. Main     | Calls `createGitProvider().getStatus(cwd)` via `simple-git`       |
+| 5. Main     | Returns `RepoStatus` to renderer                                  |
+| 6. Renderer | Receives Promise result                                           |
 
 All repo operations (status, tree, patch, stage, commit, push, etc.) follow this pattern. Project and settings APIs work the same way.
 
@@ -121,13 +121,13 @@ All repo operations (status, tree, patch, stage, commit, push, etc.) follow this
 
 Main broadcasts events when the repo state changes; the renderer subscribes via `events.on*`:
 
-| Event | When Fired | Purpose |
-|-------|------------|---------|
-| `events:repoUpdated` | After any Git mutation (stage, commit, pull…), file watcher detects changes | Tell UI to refetch status/tree/log |
-| `events:repoError` | Git command fails | Show error toast |
-| `events:conflictDetected` | Merge/rebase/cherry-pick finds conflicts | Show conflict banner and conflict resolution UI |
-| `events:openRepo` | App opened with `--open-repo /path` or second instance | Navigate to that project |
-| `ai:commitChunk` | AI streaming commit message | Update textarea in real time |
+| Event                     | When Fired                                                                  | Purpose                                         |
+| ------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------- |
+| `events:repoUpdated`      | After any Git mutation (stage, commit, pull…), file watcher detects changes | Tell UI to refetch status/tree/log              |
+| `events:repoError`        | Git command fails                                                           | Show error toast                                |
+| `events:conflictDetected` | Merge/rebase/cherry-pick finds conflicts                                    | Show conflict banner and conflict resolution UI |
+| `events:openRepo`         | App opened with `--open-repo /path` or second instance                      | Navigate to that project                        |
+| `ai:commitChunk`          | AI streaming commit message                                                 | Update textarea in real time                    |
 
 Each `events.on*` returns an unsubscribe function; components typically call it in a `useEffect` cleanup.
 
@@ -147,20 +147,20 @@ Each `events.on*` returns an unsubscribe function; components typically call it 
 2. **Per-Repo Instance:** `simpleGit({ baseDir: cwd, binary })` is created per repo path.
 3. **Project → Path Resolution:** Projects are stored by main worktree path. `getRepoPath(projectId)` returns either the main path or `activeWorktreePath` from project prefs.
 4. **Caching:**
-   - **In-memory:** Status cached for 1 second to avoid repeated `git status` in rapid succession.
-   - **SQLite:** Tree, status, and patches cached by a “fingerprint” (repo path, HEAD, index mtime, status hash). Invalidated on mutations.
+    - **In-memory:** Status cached for 1 second to avoid repeated `git status` in rapid succession.
+    - **SQLite:** Tree, status, and patches cached by a “fingerprint” (repo path, HEAD, index mtime, status hash). Invalidated on mutations.
 
 ### Key Git Operations (Main Side)
 
-| Operation | simple-git / Shell | Notes |
-|-----------|--------------------|-------|
-| `getStatus` | `git status --porcelain=v1` | Parsed into staged/unstaged/untracked |
-| `getTree` | `git ls-files` + `git status` | Builds tree with depth and status |
-| `getPatch` | `git diff --cached` or `git diff` | Staged vs unstaged; untracked built from file content |
-| `stageFiles` | `git add <paths>` | |
-| `commit` | `git commit -m "..."` | Optional amend, signing |
-| `fetch/pull/push` | `git fetch`, etc. | Returns summaries for toasts |
-| Worktrees | `git worktree list`, `add`, `remove`, `prune` | Via `worktree/manager.ts` |
+| Operation         | simple-git / Shell                            | Notes                                                 |
+| ----------------- | --------------------------------------------- | ----------------------------------------------------- |
+| `getStatus`       | `git status --porcelain=v1`                   | Parsed into staged/unstaged/untracked                 |
+| `getTree`         | `git ls-files` + `git status`                 | Builds tree with depth and status                     |
+| `getPatch`        | `git diff --cached` or `git diff`             | Staged vs unstaged; untracked built from file content |
+| `stageFiles`      | `git add <paths>`                             |                                                       |
+| `commit`          | `git commit -m "..."`                         | Optional amend, signing                               |
+| `fetch/pull/push` | `git fetch`, etc.                             | Returns summaries for toasts                          |
+| Worktrees         | `git worktree list`, `add`, `remove`, `prune` | Via `worktree/manager.ts`                             |
 
 ### File Watcher
 

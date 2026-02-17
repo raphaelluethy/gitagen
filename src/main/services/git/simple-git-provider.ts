@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { readFileSync, statSync } from "fs";
 import { join, resolve } from "path";
 import simpleGit, { SimpleGit, StatusResult } from "simple-git";
-import type { FileChange, GitChangeType, StashDetail } from "../../../shared/types.js";
+import type { FileChange, GitChangeType, StashDetail, TagInfo } from "../../../shared/types.js";
 
 const MAX_NEW_FILE_BYTES = 1024 * 1024;
 const STATUS_CACHE_TTL_MS = 1000;
@@ -698,6 +698,33 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			const git = createGit(cwd, binary);
 			const tags = await git.tags();
 			return tags.all;
+		},
+
+		async listTagsDetailed(cwd: string): Promise<TagInfo[]> {
+			const git = createGit(cwd, binary);
+			// %(refname:short) = tag name
+			// %(*objectname) = peeled OID (commit for annotated tags; empty for lightweight)
+			// %(objectname) = direct OID (commit for lightweight tags)
+			const out = (await git.raw([
+				"for-each-ref",
+				"refs/tags",
+				"--format=%(refname:short) %(*objectname) %(objectname)",
+			])) as string;
+			const lines = out.trim().split("\n").filter(Boolean);
+			const result: { name: string; oid: string }[] = [];
+			for (const line of lines) {
+				const parts = line.trim().split(/\s+/);
+				if (parts.length < 2) continue;
+				const [name, peeled, direct] = parts as [
+					string,
+					string | undefined,
+					string | undefined,
+				];
+				// Use peeled OID if present (annotated tag), else direct (lightweight tag)
+				const oid = (peeled && peeled.length === 40 ? peeled : direct) ?? "";
+				if (oid) result.push({ name, oid });
+			}
+			return result;
 		},
 
 		async createTag(cwd, name, opts): Promise<void> {

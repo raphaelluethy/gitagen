@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { readFileSync, statSync } from "fs";
 import { join, resolve } from "path";
 import simpleGit, { SimpleGit, StatusResult } from "simple-git";
-import type { StashDetail } from "../../../shared/types.js";
+import type { FileChange, GitChangeType, StashDetail } from "../../../shared/types.js";
 
 const MAX_NEW_FILE_BYTES = 1024 * 1024;
 const STATUS_CACHE_TTL_MS = 1000;
@@ -253,17 +253,17 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 				const currentBranch = (branch as { current?: string })?.current ?? "";
 				const stagedPaths = new Set<string>();
 				const unstagedPaths = new Set<string>();
-				const staged: { path: string; changeType: string }[] = [];
-				const unstaged: { path: string; changeType: string }[] = [];
-				const untracked: { path: string; changeType: string }[] = [];
+				const staged: FileChange[] = [];
+				const unstaged: FileChange[] = [];
+				const untracked: FileChange[] = [];
 				for (const f of status.files) {
 					if (f.index !== " " && f.index !== "?") {
 						stagedPaths.add(f.path);
-						staged.push({ path: f.path, changeType: f.index });
+						staged.push({ path: f.path, changeType: f.index as GitChangeType });
 					}
 					if (f.working_dir !== " " && f.working_dir !== "?") {
 						unstagedPaths.add(f.path);
-						unstaged.push({ path: f.path, changeType: f.working_dir });
+						unstaged.push({ path: f.path, changeType: f.working_dir as GitChangeType });
 					}
 				}
 				for (const p of status.not_added) {

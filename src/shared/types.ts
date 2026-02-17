@@ -1,15 +1,18 @@
+/** Git change type: Modified, Added, Deleted, Renamed, Copied, or Untracked */
+export type GitChangeType = "M" | "A" | "D" | "R" | "C" | "?";
+
 export interface GitFileStatus {
 	path: string;
 	status: "staged" | "unstaged" | "untracked";
 	/** Git change type: M, A, D, R, C, ? */
-	changeType?: string;
+	changeType?: GitChangeType;
 	/** For renames: previous path */
 	from?: string;
 }
 
 export interface FileChange {
 	path: string;
-	changeType: string; // M, A, D, R, C, ?
+	changeType: GitChangeType;
 }
 
 export interface GitStatus {

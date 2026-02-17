@@ -25,9 +25,31 @@ async function createGit(cwd: string) {
 
 async function getDiff(cwd: string): Promise<string> {
 	const git = await createGit(cwd);
-	const staged = (await git.diff(["--cached"])) || "";
-	if (staged.trim()) return staged;
-	return (await git.diff()) || "";
+	const status = await git.status();
+
+	// Check for staged, unstaged, and untracked files
+	const hasStaged = status.files.some((f) => f.index !== " " && f.index !== "?");
+	const hasUnstaged = status.files.some((f) => f.working_dir !== " " && f.working_dir !== "?");
+	const hasUntracked = status.not_added.length > 0;
+
+	// If only untracked files exist, throw an error
+	if (!hasStaged && !hasUnstaged && hasUntracked) {
+		throw new Error(
+			"Only untracked files found. Stage files first before generating a commit message."
+		);
+	}
+
+	// If nothing is staged but there are unstaged files, stage them
+	if (!hasStaged && hasUnstaged) {
+		const unstagedPaths = status.files
+			.filter((f) => f.working_dir !== " " && f.working_dir !== "?")
+			.map((f) => f.path);
+		if (unstagedPaths.length > 0) {
+			await git.add(unstagedPaths);
+		}
+	}
+
+	return (await git.diff(["--cached"])) || "";
 }
 
 export async function generateCommitMessage(

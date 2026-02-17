@@ -337,6 +337,27 @@ export function createGitAgentTools(
 				}),
 		}),
 
+		push_tag: tool({
+			description: "Push one or more tags to the remote",
+			inputSchema: z.object({
+				planId: z.string(),
+				tags: z.array(z.string()).min(1),
+				remote: z.string().optional(),
+			}),
+			execute: async ({ planId, tags, remote }, ctx) =>
+				runWriteTool("push_tag", planId, ctx, async () => {
+					const result = await window.gitagen.repo.pushTags(projectId, {
+						tags,
+						remote,
+					});
+					return {
+						success: true,
+						tagsPushed: result.tagsPushed,
+						tags: tags,
+					};
+				}),
+		}),
+
 		propose_actions: {
 			description:
 				"Present an action plan and wait for approval before any mutating tool call. Always call this before writes.",

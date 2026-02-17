@@ -56,7 +56,7 @@ const BASE_SYSTEM_PROMPT = dedent`
 	- stash_create, stash_apply, stash_pop
 	- fetch, pull, push
 	- switch_branch, create_branch
-	- create_tag, delete_tag
+	- create_tag, delete_tag, push_tag
 
 	## Forbidden Scope
 

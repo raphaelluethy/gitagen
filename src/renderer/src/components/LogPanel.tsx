@@ -24,6 +24,8 @@ interface LogPanelProps {
 	initialCommits?: CommitInfo[] | null;
 	/** Cached unpushed OIDs for annotating initialCommits with pushed status */
 	initialUnpushedOids?: string[] | null;
+	/** Whether repo has remotes (for CreateTagDialog push option) */
+	hasRemotes?: boolean;
 }
 
 function annotateWithPushedStatus(
@@ -99,6 +101,7 @@ export default function LogPanel({
 	onSelectCommit,
 	initialCommits,
 	initialUnpushedOids,
+	hasRemotes = true,
 }: LogPanelProps) {
 	const { toast } = useToast();
 	const [commits, setCommits] = useState<CommitInfo[]>([]);
@@ -303,6 +306,22 @@ export default function LogPanel({
 		setTagDialogOpen(true);
 	};
 
+	const handlePushTag = useCallback(
+		async (tagName: string) => {
+			try {
+				const result = await window.gitagen.repo.pushTags(projectId, {
+					tags: [tagName],
+				});
+				toast.success("Tag pushed", `${result.tagsPushed} tag to remote`);
+				refreshTags();
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : "Unknown error";
+				toast.error("Push failed", msg);
+			}
+		},
+		[projectId, toast, refreshTags]
+	);
+
 	return (
 		<div className="flex h-full flex-col">
 			{tagDialogOid && (
@@ -315,6 +334,7 @@ export default function LogPanel({
 					projectId={projectId}
 					commitOid={tagDialogOid}
 					onTagCreated={refreshTags}
+					hasRemotes={hasRemotes}
 				/>
 			)}
 			{canUndo && (
@@ -461,6 +481,16 @@ export default function LogPanel({
 										<Tag size={12} className="shrink-0" />
 										Create Tag...
 									</ContextMenuItem>
+									{hasRemotes &&
+										commitTags.map((tagName) => (
+											<ContextMenuItem
+												key={tagName}
+												onClick={() => handlePushTag(tagName)}
+											>
+												<ArrowUpCircle size={12} className="shrink-0" />
+												Push tag {tagName}
+											</ContextMenuItem>
+										))}
 									<ContextMenuSeparator />
 									<ContextMenuItem
 										onClick={() => {

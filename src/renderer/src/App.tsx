@@ -1149,6 +1149,7 @@ function AppContent() {
 													? (cachedLog.unpushedOids ?? null)
 													: null
 											}
+											hasRemotes={remotes.length > 0}
 										/>
 									</div>
 									<div

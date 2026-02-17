@@ -9,6 +9,8 @@ interface CreateTagDialogProps {
 	projectId: string;
 	commitOid: string;
 	onTagCreated: () => void;
+	/** Whether repo has remotes (to show push option) */
+	hasRemotes?: boolean;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -23,10 +25,12 @@ export function CreateTagDialog({
 	projectId,
 	commitOid,
 	onTagCreated,
+	hasRemotes = true,
 }: CreateTagDialogProps) {
 	const [name, setName] = useState("");
 	const [message, setMessage] = useState("");
 	const [ref, setRef] = useState(commitOid);
+	const [pushAfterCreate, setPushAfterCreate] = useState(true);
 	const [loading, setLoading] = useState(false);
 	const { toast } = useToast();
 
@@ -53,6 +57,16 @@ export function CreateTagDialog({
 			});
 			toast.success("Tag created", trimmedName);
 			onTagCreated();
+			if (pushAfterCreate && hasRemotes) {
+				try {
+					const result = await window.gitagen.repo.pushTags(projectId, {
+						tags: [trimmedName],
+					});
+					toast.success("Tag pushed", `${result.tagsPushed} tag to remote`);
+				} catch (pushErr) {
+					toast.error("Tag created but push failed", getErrorMessage(pushErr));
+				}
+			}
 			onOpenChange(false);
 		} catch (error) {
 			toast.error("Failed to create tag", getErrorMessage(error));
@@ -118,6 +132,19 @@ export function CreateTagDialog({
 								className="input w-full font-mono text-xs"
 							/>
 						</div>
+						{hasRemotes && (
+							<label className="flex cursor-pointer items-center gap-2">
+								<input
+									type="checkbox"
+									checked={pushAfterCreate}
+									onChange={(e) => setPushAfterCreate(e.target.checked)}
+									className="h-4 w-4 rounded border-(--border-primary)"
+								/>
+								<span className="text-xs text-(--text-secondary)">
+									Push tag after creating
+								</span>
+							</label>
+						)}
 					</div>
 					<div className="mt-4 flex justify-end gap-2">
 						<button

@@ -5,6 +5,7 @@ import type {
 	FetchResultSummary,
 	PullResultSummary,
 	PushResultSummary,
+	PushTagsResultSummary,
 	RepoStatus,
 	RemoteInfo,
 	StashDetail,
@@ -99,6 +100,10 @@ export interface GitProvider {
 			ahead?: number;
 		}
 	): Promise<PushResultSummary>;
+	pushTags(
+		cwd: string,
+		opts?: { remote?: string; tags?: string[] }
+	): Promise<PushTagsResultSummary>;
 	listRemotes(cwd: string): Promise<RemoteInfo[]>;
 	addRemote(cwd: string, name: string, url: string): Promise<void>;
 	removeRemote(cwd: string, name: string): Promise<void>;

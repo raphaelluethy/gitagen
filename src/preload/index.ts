@@ -24,6 +24,7 @@ import type {
 	FetchResultSummary,
 	PullResultSummary,
 	PushResultSummary,
+	PushTagsResultSummary,
 	TagInfo,
 } from "../shared/types.js";
 
@@ -258,6 +259,13 @@ const repo = {
 	): Promise<PushResultSummary> => {
 		validateProjectId(projectId);
 		return ipcRenderer.invoke("repo:push", projectId, opts);
+	},
+	pushTags: (
+		projectId: string,
+		opts?: { remote?: string; tags?: string[] }
+	): Promise<PushTagsResultSummary> => {
+		validateProjectId(projectId);
+		return ipcRenderer.invoke("repo:pushTags", projectId, opts);
 	},
 	listRemotes: (projectId: string): Promise<RemoteInfo[]> => {
 		validateProjectId(projectId);

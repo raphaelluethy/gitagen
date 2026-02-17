@@ -799,6 +799,13 @@ export function registerRepoHandlers(): void {
 		}
 	);
 
+	ipcMain.handle(
+		"repo:pushTags",
+		async (_, projectId: string, opts?: { remote?: string; tags?: string[] }) => {
+			return runMutation(projectId, (git, cwd) => git.pushTags(cwd, opts));
+		}
+	);
+
 	ipcMain.handle("repo:listRemotes", async (_, projectId: string) => {
 		const cwd = await getRepoPath(projectId);
 		if (!cwd) return [];

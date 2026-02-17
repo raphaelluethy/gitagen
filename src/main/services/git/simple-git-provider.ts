@@ -600,6 +600,25 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			};
 		},
 
+		async pushTags(
+			cwd: string,
+			opts?: { remote?: string; tags?: string[] }
+		): Promise<import("../../../shared/types.js").PushTagsResultSummary> {
+			const git = createGit(cwd, binary);
+			const remote = opts?.remote ?? "origin";
+			const tags = opts?.tags;
+			const args: string[] = [remote];
+			if (tags && tags.length > 0) {
+				args.push(...tags);
+			} else {
+				args.push("--tags");
+			}
+			await git.push(args);
+			return {
+				tagsPushed: tags?.length ?? (await git.tags()).all.length,
+			};
+		},
+
 		async listRemotes(cwd: string): Promise<RemoteInfo[]> {
 			const git = createGit(cwd, binary);
 			const remotes = await git.getRemotes(true);

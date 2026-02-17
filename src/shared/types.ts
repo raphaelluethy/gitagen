@@ -59,6 +59,7 @@ export type IpcChannel =
 	| "repo:fetch"
 	| "repo:pull"
 	| "repo:push"
+	| "repo:pushTags"
 	| "repo:listRemotes"
 	| "repo:addRemote"
 	| "repo:removeRemote"
@@ -302,6 +303,11 @@ export interface PushResultSummary {
 	commitsPushed: number;
 	refsPushed: number;
 	branch?: string;
+}
+
+/** Summary returned from pushTags */
+export interface PushTagsResultSummary {
+	tagsPushed: number;
 }
 
 export interface ConfigEntry {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { getGravatarUrl } from "../utils/gravatar";
 
 interface GravatarAvatarProps {
@@ -20,7 +20,7 @@ function getInitials(name: string): string {
 	);
 }
 
-export default function GravatarAvatar({
+export default memo(function GravatarAvatar({
 	email,
 	name,
 	size = 32,
@@ -73,4 +73,4 @@ export default function GravatarAvatar({
 			{initials}
 		</div>
 	);
-}
+});

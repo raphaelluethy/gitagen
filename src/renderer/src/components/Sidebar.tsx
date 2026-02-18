@@ -766,7 +766,7 @@ export default function Sidebar({
 						</PopoverTrigger>
 						<PopoverContent
 							align="start"
-							className="max-h-64 w-[var(--radix-popover-trigger-width)] overflow-auto"
+							className="max-h-64 w-(--radix-popover-trigger-width) overflow-auto"
 						>
 							{projects.map((p) => (
 								<button

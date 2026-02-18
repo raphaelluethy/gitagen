@@ -12,6 +12,9 @@ import {
 } from "./ui/context-menu";
 import { CreateTagDialog } from "./CreateTagDialog";
 
+/** Local extension: pre-computed relative time string to avoid new Date() on every row render */
+type CommitWithFormattedDate = CommitInfo & { formattedDate: string };
+
 const ROW_HEIGHT = 80;
 const OVERSCAN = 5;
 const PAGE_SIZE = 25;
@@ -44,7 +47,7 @@ function annotateWithPushedStatus(
 /**
  * Merge fresh commits into an existing list.
  * Prepends any new commits that appear before the first overlap,
- * and replaces the tail with the fresh data so pushed/signed status
+ * then replaces the tail with the fresh data so pushed/signed status
  * stays accurate while the scroll position is preserved.
  */
 function mergeCommits(existing: CommitInfo[], fresh: CommitInfo[]): CommitInfo[] {
@@ -66,10 +69,15 @@ function mergeCommits(existing: CommitInfo[], fresh: CommitInfo[]): CommitInfo[]
 	}
 
 	const newCommits = fresh.slice(0, overlapIdx);
-	const freshOids = new Set(fresh.map((c) => c.oid));
-	const keptOld = existing.filter((c) => !freshOids.has(c.oid));
+	return [...newCommits, ...fresh.slice(overlapIdx)];
+}
 
-	return [...newCommits, ...fresh.slice(overlapIdx), ...keptOld];
+/** Pre-compute formatted dates when commits are loaded to avoid new Date() on every row render */
+function addFormattedDates(commits: CommitInfo[]): CommitWithFormattedDate[] {
+	return commits.map((c) => ({
+		...c,
+		formattedDate: formatRelativeTime(new Date(c.author.date)),
+	}));
 }
 
 function formatRelativeTime(date: Date): string {
@@ -104,7 +112,7 @@ export default function LogPanel({
 	hasRemotes = true,
 }: LogPanelProps) {
 	const { toast } = useToast();
-	const [commits, setCommits] = useState<CommitInfo[]>([]);
+	const [commits, setCommits] = useState<CommitWithFormattedDate[]>([]);
 	const [unpushedOids, setUnpushedOids] = useState<Set<string> | null>(null);
 	const [tagsByOid, setTagsByOid] = useState<Map<string, string[]>>(new Map());
 	const [tagDialogOpen, setTagDialogOpen] = useState(false);
@@ -154,9 +162,9 @@ export default function LogPanel({
 					setUnpushedOids(oidSet);
 					const annotated = annotateWithPushedStatus(logData, oidSet);
 					if (opts?.replace) {
-						setCommits(annotated);
+						setCommits(addFormattedDates(annotated));
 					} else {
-						setCommits((prev) => mergeCommits(prev, annotated));
+						setCommits((prev) => addFormattedDates(mergeCommits(prev, annotated)));
 					}
 					setHasMore(logData.length >= PAGE_SIZE);
 				})
@@ -181,7 +189,7 @@ export default function LogPanel({
 					const annotated = annotateWithPushedStatus(page, unpushedOids);
 					setCommits((current) => {
 						const existingOids = new Set(current.map((c) => c.oid));
-						const newItems = annotated.filter((c) => !existingOids.has(c.oid));
+						const newItems = addFormattedDates(annotated.filter((c) => !existingOids.has(c.oid)));
 						return [...current, ...newItems];
 					});
 				}
@@ -228,7 +236,7 @@ export default function LogPanel({
 					? new Set(initialUnpushedOids)
 					: null;
 			setUnpushedOids(oidSet);
-			setCommits(annotateWithPushedStatus(initialCommits, oidSet));
+			setCommits(addFormattedDates(annotateWithPushedStatus(initialCommits, oidSet)));
 			setLoading(false);
 		} else {
 			setCommits([]);
@@ -441,11 +449,7 @@ export default function LogPanel({
 													</span>
 												</div>
 												<div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-(--text-subtle)">
-													<span>
-														{formatRelativeTime(
-															new Date(c.author.date)
-														)}
-													</span>
+													<span>{c.formattedDate}</span>
 													{c.signed && (
 														<>
 															<span className="text-(--border-primary)">

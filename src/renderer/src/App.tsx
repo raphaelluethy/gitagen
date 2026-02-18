@@ -408,18 +408,8 @@ function AppContent() {
 
 	const refreshStatus = useCallback(() => {
 		if (!activeProject) return;
-		window.gitagen.repo.openProject(activeProject.id).then((data) => {
-			if (!data) return;
-			dispatch({ type: "SET_STATUS", payload: data.status });
-			dispatch({
-				type: "SET_WORKTREE_PATH",
-				payload: data.prefs?.activeWorktreePath ?? null,
-			});
-			dispatch({
-				type: "SET_BRANCH_INFO",
-				payload: data.branches.find((b) => b.current) ?? null,
-			});
-			dispatch({ type: "SET_REMOTES", payload: data.remotes });
+		window.gitagen.repo.getStatus(activeProject.id).then((status) => {
+			if (status) dispatch({ type: "SET_STATUS", payload: status });
 		});
 	}, [activeProject?.id]);
 	const refreshStatusAndPrefs = refreshStatus;
@@ -2038,7 +2028,7 @@ function SettingsPanel({
 					))}
 				</nav>
 				<div className="min-w-0 flex-1 overflow-auto">
-					<div className="mx-auto max-w-[600px] px-6 py-6">
+					<div className="mx-auto max-w-150 px-6 py-6">
 						{activeTab === "general" && (
 							<div className="space-y-6">
 								<div className="panel p-4">

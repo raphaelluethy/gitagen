@@ -118,7 +118,7 @@ export default function CommitPanel({
 				</label>
 				<div className="flex items-center gap-2">
 					{error && (
-						<span className="max-w-[180px] truncate text-[11px] text-(--danger)">
+						<span className="max-w-45 truncate text-[11px] text-(--danger)">
 							{error}
 						</span>
 					)}

@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { FolderOpen, Plus, GitBranch, Check, GitFork, ChevronRight } from "lucide-react";
+import { FolderOpen, Plus, GitBranch, Check, GitFork, ChevronRight, Trash2 } from "lucide-react";
 import type { GroupedProject, Project, RepoStatus } from "../../../shared/types";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "./ui/context-menu";
 
 const CARD_MIN_WIDTH = 250;
 const CARD_ROW_HEIGHT = 120;
@@ -35,6 +41,7 @@ interface ProjectCardProps {
 	status?: RepoStatus | null;
 	isRecent: boolean;
 	onOpen: () => void;
+	onRemove?: () => void;
 	worktreeCount?: number;
 	worktreeChildren?: Project[];
 	onOpenWorktree?: (project: Project) => void;
@@ -46,6 +53,7 @@ function ProjectCard({
 	status,
 	isRecent,
 	onOpen,
+	onRemove,
 	worktreeCount,
 	worktreeChildren,
 	onOpenWorktree,
@@ -55,7 +63,7 @@ function ProjectCard({
 		status && status.staged.length + status.unstaged.length + status.untracked.length;
 	const isLoading = isRecent && status === undefined;
 
-	return (
+	const card = (
 		<button
 			type="button"
 			onClick={onOpen}
@@ -162,6 +170,27 @@ function ProjectCard({
 			</div>
 		</button>
 	);
+
+	if (!onRemove) return card;
+
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger>{card}</ContextMenuTrigger>
+			<ContextMenuContent>
+				<ContextMenuItem onClick={onOpen}>
+					<FolderOpen size={12} className="shrink-0" />
+					Open
+				</ContextMenuItem>
+				<ContextMenuItem
+					onClick={onRemove}
+					className="text-(--danger) focus:text-(--danger)"
+				>
+					<Trash2 size={12} className="shrink-0" />
+					Remove
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
+	);
 }
 
 function buildDisplayList(grouped: GroupedProject[]): GroupedProject[] {
@@ -172,9 +201,15 @@ interface StartPageProps {
 	projects: Project[];
 	onSelectProject: (project: Project) => void;
 	onAddProject: () => void;
+	onRemoveProject?: (projectId: string) => void;
 }
 
-export default function StartPage({ projects, onSelectProject, onAddProject }: StartPageProps) {
+export default function StartPage({
+	projects,
+	onSelectProject,
+	onAddProject,
+	onRemoveProject,
+}: StartPageProps) {
 	const [grouped, setGrouped] = useState<GroupedProject[] | null>(null);
 	const [statusMap, setStatusMap] = useState<Record<string, RepoStatus | null>>({});
 	const scrollRef = useRef<HTMLDivElement>(null);
@@ -307,19 +342,24 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 										gridTemplateColumns: `repeat(${recentColCount}, minmax(0, 1fr))`,
 									}}
 								>
-									{recent.map((p, i) => (
-										<ProjectCard
-											key={p.id}
-											project={p}
-											status={statusMap[p.id]}
-											isRecent
-											onOpen={() => handleOpen(p)}
-											worktreeCount={p.worktreeChildren?.length}
-											worktreeChildren={p.worktreeChildren}
-											onOpenWorktree={handleOpen}
-											animationDelay={i * 50}
-										/>
-									))}
+								{recent.map((p, i) => (
+									<ProjectCard
+										key={p.id}
+										project={p}
+										status={statusMap[p.id]}
+										isRecent
+										onOpen={() => handleOpen(p)}
+										onRemove={
+											onRemoveProject
+												? () => onRemoveProject(p.id)
+												: undefined
+										}
+										worktreeCount={p.worktreeChildren?.length}
+										worktreeChildren={p.worktreeChildren}
+										onOpenWorktree={handleOpen}
+										animationDelay={i * 50}
+									/>
+								))}
 								</div>
 							</div>
 						</section>
@@ -374,6 +414,11 @@ export default function StartPage({ projects, onSelectProject, onAddProject }: S
 														project={p}
 														isRecent={false}
 														onOpen={() => handleOpen(p)}
+														onRemove={
+															onRemoveProject
+																? () => onRemoveProject(p.id)
+																: undefined
+														}
 														worktreeCount={p.worktreeChildren?.length}
 														worktreeChildren={p.worktreeChildren}
 														onOpenWorktree={handleOpen}

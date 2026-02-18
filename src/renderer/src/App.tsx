@@ -320,6 +320,7 @@ function AppContent() {
 	const [showStashDialog, setShowStashDialog] = useState(false);
 	const [stashRefreshKey, setStashRefreshKey] = useState(0);
 	const [loading, setLoading] = useState(true);
+	const [projectLoading, setProjectLoading] = useState(false);
 	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
 	const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
 	const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -438,36 +439,46 @@ function AppContent() {
 	}, [activeProject?.id]);
 
 	useEffect(() => {
+		dispatch({ type: "CLEAR_REPO_STATE" });
+		setSelectedFile(null);
+		setSelectedCommitOid(null);
 		if (!activeProject) {
-			dispatch({ type: "CLEAR_REPO_STATE" });
-			setSelectedFile(null);
-			setSelectedCommitOid(null);
+			setProjectLoading(false);
 			return;
 		}
-		dispatch({ type: "SET_CACHED_LOG", payload: null });
-		window.gitagen.repo.openProject(activeProject.id).then((data) => {
-			if (!data) return;
-			dispatch({ type: "SET_STATUS", payload: data.status });
-			dispatch({
-				type: "SET_WORKTREE_PATH",
-				payload: data.prefs?.activeWorktreePath ?? null,
-			});
-			dispatch({
-				type: "SET_BRANCH_INFO",
-				payload: data.branches.find((b) => b.current) ?? null,
-			});
-			dispatch({ type: "SET_REMOTES", payload: data.remotes });
-			if (data.cachedLog && data.cachedLog.length > 0) {
+		setProjectLoading(true);
+		const currentId = activeProject.id;
+		window.gitagen.repo
+			.openProject(currentId)
+			.then((data) => {
+				if (!data) return;
+				dispatch({ type: "SET_STATUS", payload: data.status });
 				dispatch({
-					type: "SET_CACHED_LOG",
-					payload: {
-						projectId: activeProject.id,
-						commits: data.cachedLog,
-						unpushedOids: data.cachedUnpushedOids,
-					},
+					type: "SET_WORKTREE_PATH",
+					payload: data.prefs?.activeWorktreePath ?? null,
 				});
-			}
-		});
+				dispatch({
+					type: "SET_BRANCH_INFO",
+					payload: data.branches.find((b) => b.current) ?? null,
+				});
+				dispatch({ type: "SET_REMOTES", payload: data.remotes });
+				if (data.cachedLog && data.cachedLog.length > 0) {
+					dispatch({
+						type: "SET_CACHED_LOG",
+						payload: {
+							projectId: currentId,
+							commits: data.cachedLog,
+							unpushedOids: data.cachedUnpushedOids,
+						},
+					});
+				}
+			})
+			.catch((error) => {
+				console.error("[App] openProject failed:", error);
+			})
+			.finally(() => {
+				setProjectLoading(false);
+			});
 	}, [activeProject?.id]);
 
 	useEffect(() => {
@@ -560,6 +571,17 @@ function AppContent() {
 		setProjects((prev) => [p, ...prev]);
 		setActiveProject(p);
 	};
+
+	const handleRemoveProject = useCallback(
+		async (projectId: string) => {
+			await window.gitagen.projects.remove(projectId);
+			setProjects((prev) => prev.filter((p) => p.id !== projectId));
+			if (activeProject?.id === projectId) {
+				setActiveProject(null);
+			}
+		},
+		[activeProject?.id]
+	);
 
 	const gitStatus: GitStatus | null =
 		activeProject && status
@@ -764,6 +786,7 @@ function AppContent() {
 				projects={projects}
 				onSelectProject={setActiveProject}
 				onAddProject={handleAddProject}
+				onRemoveProject={handleRemoveProject}
 			/>
 		);
 	}
@@ -786,16 +809,22 @@ function AppContent() {
 	if (!gitStatus) {
 		return withPalette(
 			<div className="flex h-screen flex-col items-center justify-center gap-4 bg-(--bg-primary)">
-				<p className="text-sm text-(--text-muted)">
-					Not a git repository or failed to load status.
-				</p>
-				<button
-					type="button"
-					onClick={() => setActiveProject(null)}
-					className="text-sm text-(--accent-primary) hover:underline"
-				>
-					Back to projects
-				</button>
+				{projectLoading ? (
+					<div className="h-5 w-5 animate-spin rounded-full border-2 border-(--border-primary) border-t-(--text-muted)" />
+				) : (
+					<>
+						<p className="text-sm text-(--text-muted)">
+							Not a git repository or failed to load status.
+						</p>
+						<button
+							type="button"
+							onClick={() => setActiveProject(null)}
+							className="text-sm text-(--accent-primary) hover:underline"
+						>
+							Back to projects
+						</button>
+					</>
+				)}
 			</div>
 		);
 	}

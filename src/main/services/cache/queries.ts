@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./sqlite.js";
 import { appSettings, logCache, patchCache, projectPrefs, projects, repoCache } from "./schema.js";
 
@@ -96,10 +96,12 @@ export async function updateProjectLastOpened(id: string, lastOpenedAt: number):
 
 export async function deleteProject(id: string): Promise<void> {
 	const db = await getDb();
-	await db.delete(projectPrefs).where(eq(projectPrefs.projectId, id));
-	await db.delete(repoCache).where(eq(repoCache.projectId, id));
-	await db.delete(patchCache).where(eq(patchCache.projectId, id));
-	await db.delete(logCache).where(eq(logCache.projectId, id));
+	await Promise.all([
+		db.delete(projectPrefs).where(eq(projectPrefs.projectId, id)),
+		db.delete(repoCache).where(eq(repoCache.projectId, id)),
+		db.delete(patchCache).where(eq(patchCache.projectId, id)),
+		db.delete(logCache).where(eq(logCache.projectId, id)),
+	]);
 	await db.delete(projects).where(eq(projects.id, id));
 }
 
@@ -139,39 +141,34 @@ export async function setProjectPrefs(
 		activeWorktreePath?: string | null;
 	}
 ): Promise<void> {
-	const existing = await getProjectPrefs(projectId);
-	const includeIgnored =
-		prefs.includeIgnored ?? (existing ? Boolean(existing.include_ignored) : false);
-	const changedOnly = prefs.changedOnly ?? (existing ? Boolean(existing.changed_only) : false);
-	const expandedDirs = prefs.expandedDirs ?? (existing ? JSON.parse(existing.expanded_dirs) : []);
-	const selectedFilePath = prefs.selectedFilePath ?? existing?.selected_file_path ?? null;
-	const sidebarScrollTop = prefs.sidebarScrollTop ?? existing?.sidebar_scroll_top ?? 0;
-	const activeWorktreePath =
-		prefs.activeWorktreePath !== undefined
-			? prefs.activeWorktreePath
-			: (existing?.active_worktree_path ?? null);
-
 	const db = await getDb();
 	await db
 		.insert(projectPrefs)
 		.values({
 			projectId,
-			includeIgnored: includeIgnored ? 1 : 0,
-			changedOnly: changedOnly ? 1 : 0,
-			expandedDirs: JSON.stringify(expandedDirs),
-			selectedFilePath,
-			sidebarScrollTop,
-			activeWorktreePath,
+			includeIgnored: prefs.includeIgnored !== undefined ? (prefs.includeIgnored ? 1 : 0) : 0,
+			changedOnly: prefs.changedOnly !== undefined ? (prefs.changedOnly ? 1 : 0) : 0,
+			expandedDirs:
+				prefs.expandedDirs !== undefined ? JSON.stringify(prefs.expandedDirs) : "[]",
+			selectedFilePath: prefs.selectedFilePath ?? null,
+			sidebarScrollTop: prefs.sidebarScrollTop ?? 0,
+			activeWorktreePath: prefs.activeWorktreePath ?? null,
 		})
 		.onConflictDoUpdate({
 			target: projectPrefs.projectId,
 			set: {
-				includeIgnored: includeIgnored ? 1 : 0,
-				changedOnly: changedOnly ? 1 : 0,
-				expandedDirs: JSON.stringify(expandedDirs),
-				selectedFilePath,
-				sidebarScrollTop,
-				activeWorktreePath,
+				includeIgnored:
+					sql`COALESCE(${prefs.includeIgnored !== undefined ? (prefs.includeIgnored ? 1 : 0) : null}, include_ignored)`,
+				changedOnly:
+					sql`COALESCE(${prefs.changedOnly !== undefined ? (prefs.changedOnly ? 1 : 0) : null}, changed_only)`,
+				expandedDirs:
+					sql`COALESCE(${prefs.expandedDirs !== undefined ? JSON.stringify(prefs.expandedDirs) : null}, expanded_dirs)`,
+				selectedFilePath:
+					sql`COALESCE(${prefs.selectedFilePath !== undefined ? prefs.selectedFilePath : null}, selected_file_path)`,
+				sidebarScrollTop:
+					sql`COALESCE(${prefs.sidebarScrollTop !== undefined ? prefs.sidebarScrollTop : null}, sidebar_scroll_top)`,
+				activeWorktreePath:
+					sql`COALESCE(${prefs.activeWorktreePath !== undefined ? prefs.activeWorktreePath : null}, active_worktree_path)`,
 			},
 		});
 }

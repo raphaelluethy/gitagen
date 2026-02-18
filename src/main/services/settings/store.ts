@@ -1,6 +1,10 @@
-import { getAppSetting, setAppSetting } from "../cache/queries.js";
+import { setAppSetting } from "../cache/queries.js";
+import { getDb } from "../cache/sqlite.js";
+import { appSettings } from "../cache/schema.js";
 import type { AppSettings, AIProviderInstance, CommitStyle } from "../../../shared/types.js";
 import { setAIApiKey, getAllAIApiKeys } from "./keychain.js";
+
+let cachedAppSettings: AppSettings | null = null;
 
 function maskApiKey(key: string): string {
 	if (!key || key.length < 8) return key ? "***" : "";
@@ -72,39 +76,32 @@ const DEFAULTS: AppSettings = {
 };
 
 export async function getAppSettings(): Promise<AppSettings> {
-	const [
-		gitBinaryPathRaw,
-		themeRaw,
-		signingEnabledRaw,
-		signingKeyRaw,
-		aiProvidersRaw,
-		aiActiveProviderRaw,
-		aiCommitStyleRaw,
-		uiScaleRaw,
-		fontSizeRaw,
-		commitMessageFontSizeRaw,
-		fontFamilyRaw,
-		gpuAccelerationRaw,
-		devModeRaw,
-		autoExpandSingleFolderRaw,
-		showWorktreePanelRaw,
-	] = await Promise.all([
-		getAppSetting(KEYS.gitBinaryPath),
-		getAppSetting(KEYS.theme),
-		getAppSetting(KEYS.signingEnabled),
-		getAppSetting(KEYS.signingKey),
-		getAppSetting(KEYS.aiProviders),
-		getAppSetting(KEYS.aiActiveProvider),
-		getAppSetting(KEYS.aiCommitStyle),
-		getAppSetting(KEYS.uiScale),
-		getAppSetting(KEYS.fontSize),
-		getAppSetting(KEYS.commitMessageFontSize),
-		getAppSetting(KEYS.fontFamily),
-		getAppSetting(KEYS.gpuAcceleration),
-		getAppSetting(KEYS.devMode),
-		getAppSetting(KEYS.autoExpandSingleFolder),
-		getAppSetting(KEYS.showWorktreePanel),
-	]);
+	if (cachedAppSettings !== null) {
+		return cachedAppSettings;
+	}
+
+	const db = await getDb();
+	const rows = await db.select({ key: appSettings.key, value: appSettings.value }).from(appSettings);
+	const map = new Map<string, string | null>();
+	for (const row of rows) {
+		map.set(row.key, row.value);
+	}
+
+	const gitBinaryPathRaw = map.get(KEYS.gitBinaryPath) ?? null;
+	const themeRaw = map.get(KEYS.theme) ?? null;
+	const signingEnabledRaw = map.get(KEYS.signingEnabled) ?? null;
+	const signingKeyRaw = map.get(KEYS.signingKey) ?? null;
+	const aiProvidersRaw = map.get(KEYS.aiProviders) ?? null;
+	const aiActiveProviderRaw = map.get(KEYS.aiActiveProvider) ?? null;
+	const aiCommitStyleRaw = map.get(KEYS.aiCommitStyle) ?? null;
+	const uiScaleRaw = map.get(KEYS.uiScale) ?? null;
+	const fontSizeRaw = map.get(KEYS.fontSize) ?? null;
+	const commitMessageFontSizeRaw = map.get(KEYS.commitMessageFontSize) ?? null;
+	const fontFamilyRaw = map.get(KEYS.fontFamily) ?? null;
+	const gpuAccelerationRaw = map.get(KEYS.gpuAcceleration) ?? null;
+	const devModeRaw = map.get(KEYS.devMode) ?? null;
+	const autoExpandSingleFolderRaw = map.get(KEYS.autoExpandSingleFolder) ?? null;
+	const showWorktreePanelRaw = map.get(KEYS.showWorktreePanel) ?? null;
 
 	const gitBinaryPath =
 		gitBinaryPathRaw === "" || gitBinaryPathRaw === undefined ? null : gitBinaryPathRaw;
@@ -161,7 +158,7 @@ export async function getAppSettings(): Promise<AppSettings> {
 
 	const showWorktreePanel = showWorktreePanelRaw === "false" ? false : DEFAULTS.showWorktreePanel;
 
-	return {
+	cachedAppSettings = {
 		gitBinaryPath,
 		theme,
 		signing: {
@@ -182,9 +179,12 @@ export async function getAppSettings(): Promise<AppSettings> {
 		autoExpandSingleFolder,
 		showWorktreePanel,
 	};
+	return cachedAppSettings;
 }
 
 export async function setAppSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
+	cachedAppSettings = null;
+
 	if (partial.gitBinaryPath !== undefined) {
 		await setAppSetting(KEYS.gitBinaryPath, partial.gitBinaryPath);
 	}

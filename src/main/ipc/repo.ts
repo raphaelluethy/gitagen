@@ -445,17 +445,21 @@ export function registerRepoHandlers(): void {
 				for (const f of status.untracked)
 					entries.push({ path: f.path, scope: "untracked" });
 
-				const results: { path: string; scope: string; diff: string }[] = [];
-				for (const entry of entries) {
-					const patch = await git.getPatch({
-						cwd,
-						filePath: entry.path,
-						scope: entry.scope,
-					});
-					if (patch != null) {
-						results.push({ path: entry.path, scope: entry.scope, diff: patch });
-					}
-				}
+				const results = (
+					await Promise.all(
+						entries.map(async (entry) => {
+							const patch = await git.getPatch({
+								cwd,
+								filePath: entry.path,
+								scope: entry.scope,
+							});
+							if (patch != null) {
+								return { path: entry.path, scope: entry.scope, diff: patch };
+							}
+							return null;
+						})
+					)
+				).filter((r): r is { path: string; scope: "staged" | "unstaged" | "untracked"; diff: string } => r != null);
 				debugRepo(
 					"repo:getAllDiffs",
 					`ok projectId=${projectId} took=${Date.now() - startedAt}ms entries=${entries.length} results=${results.length}`

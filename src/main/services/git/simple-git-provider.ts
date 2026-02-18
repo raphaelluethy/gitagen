@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
-import { readFileSync, statSync } from "fs";
+import { statSync } from "fs";
+import { readFile, stat } from "fs/promises";
 import { join, resolve } from "path";
 import simpleGit, { SimpleGit, StatusResult } from "simple-git";
 import type { FileChange, GitChangeType, StashDetail, TagInfo } from "../../../shared/types.js";
@@ -36,13 +37,13 @@ async function getStatusCached(git: SimpleGit, cwd: string): Promise<StatusResul
 	return status;
 }
 
-function resolveGitDir(repoPath: string): string | null {
+async function resolveGitDir(repoPath: string): Promise<string | null> {
 	const dotGitPath = join(repoPath, ".git");
 	try {
-		const stat = statSync(dotGitPath);
-		if (stat.isDirectory()) return dotGitPath;
-		if (!stat.isFile()) return null;
-		const contents = readFileSync(dotGitPath, "utf-8");
+		const st = await stat(dotGitPath);
+		if (st.isDirectory()) return dotGitPath;
+		if (!st.isFile()) return null;
+		const contents = await readFile(dotGitPath, "utf-8");
 		const match = contents.match(/^gitdir:\s*(.+)$/m);
 		if (!match) return null;
 		return resolve(repoPath, match[1].trim());
@@ -81,12 +82,12 @@ function listGitPaths(
 	});
 }
 
-function buildNewFileDiff(repoPath: string, filePath: string): string | null {
+async function buildNewFileDiff(repoPath: string, filePath: string): Promise<string | null> {
 	try {
 		const fullPath = join(repoPath, filePath);
-		const stats = statSync(fullPath);
+		const stats = await stat(fullPath);
 		if (stats.size > MAX_NEW_FILE_BYTES) return null;
-		const content = readFileSync(fullPath, "utf-8");
+		const content = await readFile(fullPath, "utf-8");
 		if (content.includes("\0")) return null;
 		const lines = content.split(/\r?\n/);
 		const addCount = lines.length;
@@ -146,9 +147,10 @@ function buildTreeFromPaths(
 
 	function ensurePath(parts: string[], fileStatus?: string) {
 		let current = root;
+		let pathSoFar = "";
 		for (let i = 0; i < parts.length; i++) {
 			const part = parts[i];
-			const pathSoFar = parts.slice(0, i + 1).join("/");
+			pathSoFar = pathSoFar ? pathSoFar + "/" + part : part;
 			const isLast = i === parts.length - 1;
 
 			if (!current.children.has(part)) {
@@ -287,7 +289,7 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 					try {
 						return git.diff(["--no-index", "/dev/null", join(opts.cwd, opts.filePath)]);
 					} catch {
-						return buildNewFileDiff(opts.cwd, opts.filePath);
+						return await buildNewFileDiff(opts.cwd, opts.filePath);
 					}
 				}
 				return git.diff(["--", opts.filePath]);
@@ -324,7 +326,7 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 					getStatusCached(git, cwd),
 				]);
 				const headOid = (head as string)?.trim() ?? "";
-				const gitDir = resolveGitDir(cwd) ?? join(cwd, ".git");
+				const gitDir = (await resolveGitDir(cwd)) ?? join(cwd, ".git");
 				const indexPath = join(gitDir, "index");
 				let indexMtimeMs = 0;
 				let headMtimeMs = 0;
@@ -501,7 +503,7 @@ export function createSimpleGitProvider(binary?: string | null): GitProvider {
 			const git = createGit(cwd, binary);
 			const [summary, status] = await Promise.all([
 				git.branchLocal(),
-				git.status().catch(() => null),
+				getStatusCached(git, cwd),
 			]);
 			const currentAhead = (status as { ahead?: number })?.ahead ?? 0;
 			const currentBehind = (status as { behind?: number })?.behind ?? 0;

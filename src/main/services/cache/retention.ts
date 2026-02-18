@@ -25,15 +25,27 @@ async function pruneByTtl(): Promise<void> {
 	]);
 }
 
+const PATCH_AVG_BYTES = 50 * 1024; // 50KB
+const REPO_AVG_BYTES = 500 * 1024; // 500KB
+
+function calcLruLimit(targetFreeBytes: number, avgEntryBytes: number): number {
+	const raw = Math.ceil(targetFreeBytes / avgEntryBytes) * 10;
+	return Math.min(1000, Math.max(100, raw));
+}
+
 async function pruneByLru(targetFreeBytes: number): Promise<number> {
 	const db = await getDb();
 	let freed = 0;
+
+	const patchLimit = calcLruLimit(targetFreeBytes, PATCH_AVG_BYTES);
+	const repoLimit = calcLruLimit(targetFreeBytes, REPO_AVG_BYTES);
 
 	// Delete oldest patch_cache entries first (smaller, more granular)
 	const patches = await db
 		.select({ id: patchCache.id, sizeBytes: patchCache.sizeBytes })
 		.from(patchCache)
-		.orderBy(asc(patchCache.accessedAt));
+		.orderBy(asc(patchCache.accessedAt))
+		.limit(patchLimit);
 	const patchIds: number[] = [];
 	for (const p of patches) {
 		if (freed >= targetFreeBytes) break;
@@ -48,7 +60,8 @@ async function pruneByLru(targetFreeBytes: number): Promise<number> {
 	const repos = await db
 		.select({ id: repoCache.id, sizeBytes: repoCache.sizeBytes })
 		.from(repoCache)
-		.orderBy(asc(repoCache.accessedAt));
+		.orderBy(asc(repoCache.accessedAt))
+		.limit(repoLimit);
 	const repoIds: number[] = [];
 	for (const r of repos) {
 		if (freed >= targetFreeBytes) break;

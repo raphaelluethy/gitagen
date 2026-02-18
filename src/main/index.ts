@@ -1,7 +1,6 @@
 import { app, BrowserWindow, dialog, Menu, nativeImage, session } from "electron";
 import { randomUUID } from "crypto";
 import { join, resolve } from "path";
-import { updateElectronApp } from "update-electron-app";
 import { closeDb, getDb } from "./services/cache/sqlite.js";
 import { runRetention } from "./services/cache/retention.js";
 import {
@@ -287,7 +286,7 @@ app.whenReady().then(async () => {
 		void preloadRecentProjectLogs().catch((error) => {
 			console.error("[preloadRecentProjectLogs] Preload failed:", error);
 		});
-	}, 0);
+	}, 3000);
 
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -2,20 +2,14 @@ import { useState, useEffect } from "react";
 import { FolderTree, ChevronDown, Check } from "lucide-react";
 import type { WorktreeInfo } from "../../../shared/types";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
 
-interface WorktreeSelectorProps {
-	projectId: string;
-	activeWorktreePath: string | null;
-	mainRepoPath: string;
-	onWorktreeChange: () => void;
-}
-
-export default function WorktreeSelector({
-	projectId,
-	activeWorktreePath,
-	mainRepoPath,
-	onWorktreeChange,
-}: WorktreeSelectorProps) {
+export default function WorktreeSelector() {
+	const activeProject = useProjectStore((s) => s.activeProject);
+	const activeWorktreePath = useRepoStore((s) => s.activeWorktreePath);
+	const projectId = activeProject?.id ?? "";
+	const mainRepoPath = activeProject?.path ?? "";
 	const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
 	const [open, setOpen] = useState(false);
 
@@ -44,7 +38,7 @@ export default function WorktreeSelector({
 		window.gitagen.settings.setProjectPrefs(projectId, {
 			activeWorktreePath: value,
 		});
-		onWorktreeChange();
+		void useRepoStore.getState().refreshStatus();
 		setOpen(false);
 	};
 

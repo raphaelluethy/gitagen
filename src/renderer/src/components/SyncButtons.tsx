@@ -6,14 +6,8 @@ import type {
 	PullResultSummary,
 	PushResultSummary,
 } from "../../../shared/types";
-
-interface SyncButtonsProps {
-	projectId: string;
-	ahead: number;
-	behind: number;
-	hasRemotes: boolean;
-	onComplete: () => void;
-}
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
 
 type LoadingOp = "fetch" | "pull" | "push" | null;
 
@@ -66,14 +60,14 @@ function getErrorMessage(error: unknown): string {
 	return "Unknown error";
 }
 
-export default function SyncButtons({
-	projectId,
-	ahead,
-	behind,
-	hasRemotes,
-	onComplete,
-}: SyncButtonsProps) {
+export default function SyncButtons() {
 	const { toast } = useToast();
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const currentBranchInfo = useRepoStore((s) => s.currentBranchInfo);
+	const remotes = useRepoStore((s) => s.remotes);
+	const ahead = currentBranchInfo?.ahead ?? 0;
+	const behind = currentBranchInfo?.behind ?? 0;
+	const hasRemotes = remotes.length > 0;
 	const [loadingOp, setLoadingOp] = useState<LoadingOp>(null);
 	const loading = loadingOp !== null;
 	const disabled = loading || !hasRemotes;
@@ -85,7 +79,7 @@ export default function SyncButtons({
 			const result = await window.gitagen.repo.fetch(projectId, {
 				prune: true,
 			});
-			onComplete();
+			void useRepoStore.getState().refreshStatus();
 			const { title, desc } = formatFetchToast(result);
 			toast.success(title, desc);
 		} catch (error) {
@@ -100,7 +94,7 @@ export default function SyncButtons({
 		setLoadingOp("pull");
 		try {
 			const result = await window.gitagen.repo.pull(projectId, { behind });
-			onComplete();
+			void useRepoStore.getState().refreshStatus();
 			const { title, desc } = formatPullToast(result);
 			toast.success(title, desc);
 		} catch (error) {
@@ -115,7 +109,7 @@ export default function SyncButtons({
 		setLoadingOp("push");
 		try {
 			const result = await window.gitagen.repo.push(projectId, { ahead });
-			onComplete();
+			void useRepoStore.getState().refreshStatus();
 			const { title, desc } = formatPushToast(result);
 			toast.success(title, desc);
 		} catch (error) {

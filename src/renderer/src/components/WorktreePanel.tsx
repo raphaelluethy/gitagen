@@ -4,19 +4,11 @@ import type { AddWorktreeResult, BranchInfo, WorktreeInfo } from "../../../share
 import { useToast } from "../toast/provider";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { ModalShell } from "./ui/modal-shell";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 
 const DRAG_HEIGHT_KEY = "gitagen:worktreePanel:height";
-
-interface WorktreePanelProps {
-	projectId: string;
-	projectName: string;
-	projectPath: string;
-	currentBranch: string;
-	activeWorktreePath: string | null;
-	onRefresh: () => void;
-	isCollapsed?: boolean;
-	onToggle?: () => void;
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
 	if (error instanceof Error && error.message.trim() !== "") {
@@ -38,16 +30,14 @@ function readStoredHeight(): number | null {
 	return null;
 }
 
-export default function WorktreePanel({
-	projectId,
-	projectName: _projectName,
-	projectPath: _projectPath,
-	currentBranch,
-	activeWorktreePath,
-	onRefresh,
-	isCollapsed,
-	onToggle,
-}: WorktreePanelProps) {
+export default function WorktreePanel() {
+	const activeProject = useProjectStore((s) => s.activeProject);
+	const status = useRepoStore((s) => s.status);
+	const activeWorktreePath = useRepoStore((s) => s.activeWorktreePath);
+	const isCollapsed = useUIStore((s) => s.isWorktreePanelCollapsed);
+	const onToggle = useUIStore((s) => s.toggleWorktreePanel);
+	const projectId = activeProject?.id ?? "";
+	const currentBranch = status?.branch ?? "";
 	const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [adding, setAdding] = useState(false);
@@ -148,7 +138,7 @@ export default function WorktreePanel({
 
 	useEffect(() => {
 		void loadWorktrees();
-	}, [loadWorktrees, onRefresh]);
+	}, [loadWorktrees]);
 
 	const openAddForm = () => {
 		const defaultBranch = currentBranch || "main";
@@ -220,7 +210,7 @@ export default function WorktreePanel({
 			}
 
 			await loadWorktrees();
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			setShowAddForm(false);
 			const checkedOutBranch = newBranch ?? requestedBranch;
 			if (copyGitIgnores) {
@@ -258,7 +248,7 @@ export default function WorktreePanel({
 		try {
 			await window.gitagen.repo.pruneWorktrees(projectId);
 			await loadWorktrees();
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			toast.success("Stale worktrees cleaned up");
 		} catch (error) {
 			toast.error("Failed to clean worktrees", getErrorMessage(error, "Unknown error."));
@@ -281,7 +271,7 @@ export default function WorktreePanel({
 		try {
 			await window.gitagen.repo.removeWorktree(projectId, path);
 			setWorktrees((prev) => prev.filter((w) => w.path !== path));
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			toast.success("Worktree removed");
 		} catch (error) {
 			if (isModifiedWorktreeError(error)) {
@@ -299,7 +289,7 @@ export default function WorktreePanel({
 				try {
 					await window.gitagen.repo.removeWorktree(projectId, path, true);
 					setWorktrees((prev) => prev.filter((w) => w.path !== path));
-					onRefresh();
+					void useRepoStore.getState().refreshStatus();
 					toast.success("Worktree removed", "Forced removal");
 					return;
 				} catch (forceError) {
@@ -480,7 +470,7 @@ export default function WorktreePanel({
 															activeWorktreePath: w.path,
 														}
 													);
-													onRefresh();
+													void useRepoStore.getState().refreshStatus();
 												}}
 												className="rounded px-1.5 py-0.5 text-[10px] text-(--text-muted) outline-none hover:bg-(--bg-tertiary) hover:text-(--text-primary)"
 											>

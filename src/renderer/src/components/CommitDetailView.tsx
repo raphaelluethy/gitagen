@@ -1,20 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Shield } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { CommitDetail, DiffStyle, RemoteInfo } from "../../../shared/types";
-import { useTheme } from "../theme/provider";
+import type { CommitDetail, RemoteInfo } from "../../../shared/types";
+import { useThemeStore } from "../stores/themeStore";
+import { useProjectStore } from "../stores/projectStore";
+import { useUIStore } from "../stores/uiStore";
 import { extractLinksFromMessage, type ParsedLink } from "../utils/commit-links";
 import { splitPatchByFile } from "../utils/split-patch";
 import { changeTypeColorClass } from "../utils/status-badge";
 import GravatarAvatar from "./GravatarAvatar";
 import { useToast } from "../toast/provider";
-
-interface CommitDetailViewProps {
-	projectId: string;
-	oid: string;
-	diffStyle: DiffStyle;
-	onClose: () => void;
-}
 
 function formatDate(dateStr: string): { absolute: string; relative: string } {
 	const date = new Date(dateStr);
@@ -47,13 +42,13 @@ function detectChangeType(patch: string): string {
 	return "M";
 }
 
-export default function CommitDetailView({
-	projectId,
-	oid,
-	diffStyle,
-	onClose,
-}: CommitDetailViewProps) {
-	const { resolved } = useTheme();
+export default function CommitDetailView() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const oid = useUIStore((s) => s.selectedCommitOid);
+	const diffStyle = useUIStore((s) => s.diffStyle);
+	const onClose = () => useUIStore.getState().setSelectedCommitOid(null);
+	const resolved = useThemeStore((s) => s.resolved);
+	if (!oid) return null;
 	const { toast } = useToast();
 	const [detail, setDetail] = useState<CommitDetail | null>(null);
 	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);

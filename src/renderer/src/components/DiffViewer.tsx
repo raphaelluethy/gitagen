@@ -1,27 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CircleMinus, CirclePlus, ExternalLink } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
-import { useTheme } from "../theme/provider";
+import { useThemeStore } from "../stores/themeStore";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 import { useToast } from "../toast/provider";
 
-interface DiffViewerProps {
-	projectId: string;
-	repoPath: string;
-	selectedFile: GitFileStatus | null;
-	diffStyle: DiffStyle;
-	onRefresh?: () => void;
-}
-
-export default function DiffViewer({
-	projectId,
-	repoPath: _repoPath,
-	selectedFile,
-	diffStyle,
-	onRefresh,
-}: DiffViewerProps) {
-	const { resolved } = useTheme();
+export default function DiffViewer() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const selectedFile = useRepoStore((s) => s.selectedFile);
+	const refreshKey = useRepoStore((s) => s.refreshKey);
+	const diffStyle = useUIStore((s) => s.diffStyle);
+	const resolved = useThemeStore((s) => s.resolved);
 	const { toast } = useToast();
 	const [patch, setPatch] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -32,19 +24,19 @@ export default function DiffViewer({
 	const letter = selectedFile?.changeType ?? "M";
 
 	const handleStageToggle = useCallback(async () => {
-		if (!projectId || !onRefresh || !selectedFile) return;
+		if (!projectId || !selectedFile) return;
 		try {
 			if (isStaged) {
 				await window.gitagen.repo.unstageFiles(projectId, [selectedFile.path]);
 			} else {
 				await window.gitagen.repo.stageFiles(projectId, [selectedFile.path]);
 			}
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			toast.error("Staging failed", msg);
 		}
-	}, [projectId, onRefresh, selectedFile, isStaged, toast]);
+	}, [projectId, selectedFile, isStaged, toast]);
 
 	useEffect(() => {
 		if (!filePath || !projectId || !selectedFile) {
@@ -72,7 +64,7 @@ export default function DiffViewer({
 				setPatch(null);
 				setLoading(false);
 			});
-	}, [projectId, filePath, selectedFile]);
+	}, [projectId, filePath, selectedFile, refreshKey]);
 
 	if (!selectedFile) {
 		return (

@@ -8,6 +8,7 @@ import type {
 	CommandItem,
 	CommandSubItem,
 } from "../hooks/useCommandRegistry";
+import { useUIStore } from "../stores/uiStore";
 
 type RootStep = {
 	kind: "root";
@@ -118,12 +119,12 @@ function clampIndex(index: number, maxLength: number): number {
 }
 
 interface CommandPaletteProps {
-	open: boolean;
-	onClose: () => void;
 	commands: CommandItem[];
 }
 
-export default function CommandPalette({ open, onClose, commands }: CommandPaletteProps) {
+export default function CommandPalette({ commands }: CommandPaletteProps) {
+	const open = useUIStore((s) => s.isCommandPaletteOpen);
+	const onClose = useUIStore((s) => s.closeCommandPalette);
 	const [step, setStep] = useState<PaletteStep>({ kind: "root", query: "", activeIndex: 0 });
 	const panelRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);

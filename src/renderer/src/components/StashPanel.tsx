@@ -2,23 +2,15 @@ import { useState, useEffect } from "react";
 import { Archive, Plus } from "lucide-react";
 import type { StashEntry } from "../../../shared/types";
 import { cn } from "../lib/cn";
+import { useProjectStore } from "../stores/projectStore";
+import { useUIStore } from "../stores/uiStore";
 
-interface StashPanelProps {
-	projectId: string;
-	onRefresh: () => void;
-	selectedIndex: number | null;
-	onSelect: (index: number | null) => void;
-	onOpenCreateDialog: () => void;
-	refreshKey?: number;
-}
-
-export default function StashPanel({
-	projectId,
-	selectedIndex,
-	onSelect,
-	onOpenCreateDialog,
-	refreshKey,
-}: StashPanelProps) {
+export default function StashPanel() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const selectedIndex = useUIStore((s) => s.selectedStashIndex);
+	const onSelect = useUIStore((s) => s.setSelectedStashIndex);
+	const onOpenCreateDialog = useUIStore((s) => s.showStashDialogOpen);
+	const refreshKey = useUIStore((s) => s.stashRefreshKey);
 	const [entries, setEntries] = useState<StashEntry[]>([]);
 	const [loading, setLoading] = useState(true);
 

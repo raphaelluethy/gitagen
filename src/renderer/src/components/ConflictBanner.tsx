@@ -1,15 +1,9 @@
 import { useState, useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useProjectStore } from "../stores/projectStore";
 
-interface ConflictBannerProps {
-	projectId: string;
-	onResolved: () => void;
-}
-
-export default function ConflictBanner({
-	projectId,
-	onResolved: _onResolved,
-}: ConflictBannerProps) {
+export default function ConflictBanner() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
 	const [conflictFiles, setConflictFiles] = useState<string[]>([]);
 
 	useEffect(() => {

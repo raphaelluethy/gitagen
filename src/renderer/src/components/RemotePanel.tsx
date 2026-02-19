@@ -2,11 +2,8 @@ import { useState, useEffect } from "react";
 import { Upload, Download, RefreshCw, Cloud, Loader2 } from "lucide-react";
 import type { RemoteInfo } from "../../../shared/types";
 import { useToast } from "../toast/provider";
-
-interface RemotePanelProps {
-	projectId: string;
-	onRefresh: () => void;
-}
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
 
 function formatFetchToast(r: {
 	branchesUpdated: number;
@@ -60,7 +57,8 @@ function formatPushToast(r: { commitsPushed: number; refsPushed: number; branch?
 
 type LoadingOp = "fetch" | "pull" | "push" | null;
 
-export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) {
+export default function RemotePanel() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
 	const { toast } = useToast();
 	const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
 	const [loadingOp, setLoadingOp] = useState<LoadingOp>(null);
@@ -82,7 +80,7 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 			const result = await window.gitagen.repo.fetch(projectId, {
 				prune: true,
 			});
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			const { title, desc } = formatFetchToast(result);
 			toast.success(title, desc);
 		} catch (error) {
@@ -96,7 +94,7 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 		setLoadingOp("pull");
 		try {
 			const result = await window.gitagen.repo.pull(projectId);
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			const { title, desc } = formatPullToast(result);
 			toast.success(title, desc);
 		} catch (error) {
@@ -110,7 +108,7 @@ export default function RemotePanel({ projectId, onRefresh }: RemotePanelProps) 
 		setLoadingOp("push");
 		try {
 			const result = await window.gitagen.repo.push(projectId);
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			const { title, desc } = formatPushToast(result);
 			toast.success(title, desc);
 		} catch (error) {

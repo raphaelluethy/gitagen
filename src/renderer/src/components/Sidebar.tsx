@@ -1,41 +1,25 @@
-import { useState, useCallback } from "react";
-import type { GitStatus, GitFileStatus } from "../../../shared/types";
-import type { Project } from "../../../shared/types";
+import { useState, useCallback, useMemo } from "react";
 import { useToast } from "../toast/provider";
 import { FileTreeSection } from "./file-tree/FileTreeSection";
 import { ProjectSwitcher } from "./sidebar/ProjectSwitcher";
 import { SidebarHeader } from "./sidebar/SidebarHeader";
 import { SidebarEmptyState } from "./sidebar/SidebarEmptyState";
-
-export interface SidebarProps {
-	projectId: string;
-	status: GitStatus;
-	selectedFile: GitFileStatus | null;
-	onSelectFile: (file: GitFileStatus) => void;
-	onRefresh: () => void;
-	onBack?: () => void;
-	projects?: Project[];
-	activeProject?: Project | null;
-	onProjectChange?: (project: Project) => void;
-	onAddProject?: () => void;
-	onViewAll?: (section: "staged" | "unstaged" | "untracked") => void;
-}
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore, selectGitStatus } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 
 type SectionKey = "staged" | "unstaged" | "untracked";
 
-export default function Sidebar({
-	projectId,
-	status,
-	selectedFile,
-	onSelectFile,
-	onRefresh,
-	onBack,
-	projects = [],
-	activeProject,
-	onProjectChange,
-	onAddProject,
-	onViewAll,
-}: SidebarProps) {
+export default function Sidebar() {
+	const projects = useProjectStore((s) => s.projects);
+	const activeProject = useProjectStore((s) => s.activeProject);
+	const status = useRepoStore((s) => s.status);
+	const selectedFile = useRepoStore((s) => s.selectedFile);
+	const projectId = activeProject?.id ?? "";
+	const gitStatus = useMemo(
+		() => selectGitStatus(status, activeProject?.path),
+		[status, activeProject?.path]
+	);
 	const { toast } = useToast();
 	const [expandedFoldersBySection, setExpandedFoldersBySection] = useState<
 		Record<SectionKey, Set<string>>
@@ -81,7 +65,9 @@ export default function Sidebar({
 	const onFoldAllUnstaged = useCallback(() => foldAllFolders("unstaged"), [foldAllFolders]);
 	const onFoldAllUntracked = useCallback(() => foldAllFolders("untracked"), [foldAllFolders]);
 
-	const totalChanges = status.staged.length + status.unstaged.length + status.untracked.length;
+	const totalChanges = gitStatus
+		? gitStatus.staged.length + gitStatus.unstaged.length + gitStatus.untracked.length
+		: 0;
 
 	const handleDiscardAll = useCallback(async () => {
 		if (totalChanges === 0) return;
@@ -95,31 +81,35 @@ export default function Sidebar({
 		if (!confirmed) return;
 		try {
 			await window.gitagen.repo.discardAll(projectId);
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 			toast.success("All changes discarded");
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			toast.error("Discard failed", msg);
 		}
-	}, [projectId, totalChanges, onRefresh, toast]);
+	}, [projectId, totalChanges, toast]);
 
 	const hasChanges =
-		status.staged.length > 0 || status.unstaged.length > 0 || status.untracked.length > 0;
+		(gitStatus?.staged.length ?? 0) > 0 ||
+		(gitStatus?.unstaged.length ?? 0) > 0 ||
+		(gitStatus?.untracked.length ?? 0) > 0;
+
+	if (!gitStatus) return null;
 
 	return (
 		<aside className="flex h-full min-w-0 flex-1 flex-col bg-(--bg-sidebar)">
-			{projects.length > 0 && activeProject && onProjectChange && (
+			{projects.length > 0 && activeProject && (
 				<ProjectSwitcher
 					projects={projects}
 					activeProject={activeProject}
-					onProjectChange={onProjectChange}
-					onAddProject={onAddProject}
+					onProjectChange={useProjectStore.getState().setActiveProject}
+					onAddProject={() => void useProjectStore.getState().addProject()}
 				/>
 			)}
 			<SidebarHeader
-				repoPath={status.repoPath}
+				repoPath={gitStatus.repoPath}
 				totalChanges={totalChanges}
-				onBack={onBack}
+				onBack={() => useProjectStore.getState().setActiveProject(null)}
 				onDiscardAll={handleDiscardAll}
 			/>
 			<div className="min-w-0 flex-1 overflow-y-auto py-3">
@@ -127,46 +117,46 @@ export default function Sidebar({
 					projectId={projectId}
 					section="staged"
 					title="Staged"
-					count={status.staged.length}
-					files={status.staged}
+					count={gitStatus.staged.length}
+					files={gitStatus.staged}
 					selectedFile={selectedFile}
-					onSelect={onSelectFile}
-					onRefresh={onRefresh}
+					onSelect={useRepoStore.getState().setSelectedFileAndClearCommit}
+					onRefresh={() => void useRepoStore.getState().refreshStatus()}
 					expandedFolders={expandedFoldersBySection.staged}
 					onToggleFolder={(path) => toggleFolder("staged", path)}
 					onExpandAll={onExpandAllStaged}
 					onFoldAll={onFoldAllStaged}
-					onViewAll={onViewAll}
+					onViewAll={() => useUIStore.getState().setViewMode("all")}
 				/>
 				<FileTreeSection
 					projectId={projectId}
 					section="unstaged"
 					title="Unstaged"
-					count={status.unstaged.length}
-					files={status.unstaged}
+					count={gitStatus.unstaged.length}
+					files={gitStatus.unstaged}
 					selectedFile={selectedFile}
-					onSelect={onSelectFile}
-					onRefresh={onRefresh}
+					onSelect={useRepoStore.getState().setSelectedFileAndClearCommit}
+					onRefresh={() => void useRepoStore.getState().refreshStatus()}
 					expandedFolders={expandedFoldersBySection.unstaged}
 					onToggleFolder={(path) => toggleFolder("unstaged", path)}
 					onExpandAll={onExpandAllUnstaged}
 					onFoldAll={onFoldAllUnstaged}
-					onViewAll={onViewAll}
+					onViewAll={() => useUIStore.getState().setViewMode("all")}
 				/>
 				<FileTreeSection
 					projectId={projectId}
 					section="untracked"
 					title="Untracked"
-					count={status.untracked.length}
-					files={status.untracked}
+					count={gitStatus.untracked.length}
+					files={gitStatus.untracked}
 					selectedFile={selectedFile}
-					onSelect={onSelectFile}
-					onRefresh={onRefresh}
+					onSelect={useRepoStore.getState().setSelectedFileAndClearCommit}
+					onRefresh={() => void useRepoStore.getState().refreshStatus()}
 					expandedFolders={expandedFoldersBySection.untracked}
 					onToggleFolder={(path) => toggleFolder("untracked", path)}
 					onExpandAll={onExpandAllUntracked}
 					onFoldAll={onFoldAllUntracked}
-					onViewAll={onViewAll}
+					onViewAll={() => useUIStore.getState().setViewMode("all")}
 				/>
 				{!hasChanges && <SidebarEmptyState />}
 			</div>

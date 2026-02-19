@@ -1,19 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, GitBranch, Inbox, ArrowDownToLine, Trash2 } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { StashDetail, DiffStyle } from "../../../shared/types";
-import { useTheme } from "../theme/provider";
+import type { StashDetail } from "../../../shared/types";
+import { useThemeStore } from "../stores/themeStore";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 import { splitPatchByFile } from "../utils/split-patch";
 import { changeTypeColorClass } from "../utils/status-badge";
 import { useToast } from "../toast/provider";
-
-interface StashDetailViewProps {
-	projectId: string;
-	index: number;
-	diffStyle: DiffStyle;
-	onClose: () => void;
-	onActionComplete: () => void;
-}
 
 function formatDate(dateStr: string): { absolute: string; relative: string } {
 	const date = new Date(dateStr);
@@ -52,14 +47,17 @@ function getErrorMessage(error: unknown): string {
 	return "Unknown error";
 }
 
-export default function StashDetailView({
-	projectId,
-	index,
-	diffStyle,
-	onClose,
-	onActionComplete,
-}: StashDetailViewProps) {
-	const { resolved } = useTheme();
+export default function StashDetailView() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const index = useUIStore((s) => s.selectedStashIndex);
+	const diffStyle = useUIStore((s) => s.diffStyle);
+	const onClose = () => useUIStore.getState().setSelectedStashIndex(null);
+	const onActionComplete = () => {
+		void useRepoStore.getState().refreshStatus();
+		useUIStore.getState().incrementStashRefreshKey();
+	};
+	const resolved = useThemeStore((s) => s.resolved);
+	if (index === null) return null;
 	const { toast } = useToast();
 	const [detail, setDetail] = useState<StashDetail | null>(null);
 	const [loading, setLoading] = useState(true);

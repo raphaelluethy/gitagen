@@ -9,18 +9,13 @@ import {
 	FileCode,
 } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { GitStatus, GitFileStatus, DiffStyle } from "../../../shared/types";
+import type { GitFileStatus, DiffStyle } from "../../../shared/types";
 import { changeTypeColorClass, changeTypeLabel } from "../utils/status-badge";
-import { useTheme } from "../theme/provider";
+import { useThemeStore } from "../stores/themeStore";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore, selectGitStatus } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 import { useToast } from "../toast/provider";
-
-interface AllChangesViewProps {
-	projectId: string;
-	gitStatus: GitStatus;
-	diffStyle: DiffStyle;
-	selectedFile: GitFileStatus | null;
-	onRefresh: () => void;
-}
 
 function fileKey(file: GitFileStatus): string {
 	return `${file.status}:${file.path}`;
@@ -30,7 +25,7 @@ function FileChangeCard({
 	projectId,
 	file,
 	diffStyle,
-	onRefresh,
+	refreshKey,
 	isExpanded,
 	isSelected,
 	onToggleExpand,
@@ -41,7 +36,7 @@ function FileChangeCard({
 	projectId: string;
 	file: GitFileStatus;
 	diffStyle: DiffStyle;
-	onRefresh: () => void;
+	refreshKey: number;
 	isExpanded: boolean;
 	isSelected: boolean;
 	onToggleExpand: () => void;
@@ -49,7 +44,7 @@ function FileChangeCard({
 	cachedPatch?: string | null;
 	onPatchLoaded?: (path: string, patch: string) => void;
 }) {
-	const { resolved } = useTheme();
+	const resolved = useThemeStore((s) => s.resolved);
 	const { toast } = useToast();
 	const [patch, setPatch] = useState<string | null>(cachedPatch ?? null);
 	const [loading, setLoading] = useState(false);
@@ -81,7 +76,7 @@ function FileChangeCard({
 				setPatch(null);
 				setLoading(false);
 			});
-	}, [projectId, file.path, scope, isExpanded, cachedPatch]);
+	}, [projectId, file.path, scope, isExpanded, cachedPatch, refreshKey]);
 
 	const handleStageToggle = async () => {
 		if (!projectId) return;
@@ -94,7 +89,7 @@ function FileChangeCard({
 			} else {
 				await window.gitagen.repo.stageFiles(projectId, [file.path]);
 			}
-			onRefresh();
+			void useRepoStore.getState().refreshStatus();
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			toast.error("Staging failed", msg);
@@ -204,13 +199,20 @@ function FileChangeCard({
 	);
 }
 
-export default function AllChangesView({
-	projectId,
-	gitStatus,
-	diffStyle,
-	selectedFile,
-	onRefresh,
-}: AllChangesViewProps) {
+export default function AllChangesView() {
+	const activeProject = useProjectStore((s) => s.activeProject);
+	const status = useRepoStore((s) => s.status);
+	const selectedFile = useRepoStore((s) => s.selectedFile);
+	const refreshKey = useRepoStore((s) => s.refreshKey);
+	const diffStyle = useUIStore((s) => s.diffStyle);
+	const projectId = activeProject?.id ?? "";
+	const gitStatus = useMemo(
+		() => selectGitStatus(status, activeProject?.path),
+		[status, activeProject?.path]
+	);
+
+	if (!gitStatus) return null;
+
 	const allFiles: GitFileStatus[] = useMemo(
 		() => [...gitStatus.staged, ...gitStatus.unstaged, ...gitStatus.untracked],
 		[gitStatus]
@@ -235,6 +237,10 @@ export default function AllChangesView({
 			if (!currentPaths.has(key)) patchCacheRef.current.delete(key);
 		}
 	}, [allFiles]);
+
+	useEffect(() => {
+		patchCacheRef.current.clear();
+	}, [refreshKey]);
 
 	useEffect(() => {
 		setExpandedKeys((prev) => {
@@ -353,7 +359,7 @@ export default function AllChangesView({
 										projectId={projectId}
 										file={file}
 										diffStyle={diffStyle}
-										onRefresh={onRefresh}
+										refreshKey={refreshKey}
 										isExpanded={expandedKeys.has(key_)}
 										isSelected={key_ === selectedKey}
 										onToggleExpand={() => toggleExpand(file)}

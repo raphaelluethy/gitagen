@@ -3,18 +3,13 @@ import { GitBranch, ChevronDown, Check } from "lucide-react";
 import type { BranchInfo } from "../../../shared/types";
 import { useToast } from "../toast/provider";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
 
-interface BranchSelectorProps {
-	projectId: string;
-	currentBranch: string;
-	onBranchChange: () => void;
-}
-
-export default function BranchSelector({
-	projectId,
-	currentBranch,
-	onBranchChange,
-}: BranchSelectorProps) {
+export default function BranchSelector() {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const status = useRepoStore((s) => s.status);
+	const currentBranch = status?.branch ?? "";
 	const [branches, setBranches] = useState<BranchInfo[]>([]);
 	const [open, setOpen] = useState(false);
 	const [loading, setLoading] = useState(false);
@@ -39,7 +34,7 @@ export default function BranchSelector({
 			setLoading(true);
 			try {
 				await window.gitagen.repo.switchBranch(projectId, name);
-				onBranchChange();
+				void useRepoStore.getState().refreshStatus();
 				setOpen(false);
 				toast.success("Switched to branch", name);
 			} catch (error) {
@@ -49,7 +44,7 @@ export default function BranchSelector({
 				setLoading(false);
 			}
 		},
-		[projectId, currentBranch, onBranchChange, toast]
+		[projectId, currentBranch, toast]
 	);
 
 	return (

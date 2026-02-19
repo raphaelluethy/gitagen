@@ -11,6 +11,9 @@ import {
 	ContextMenuTrigger,
 } from "./ui/context-menu";
 import { CreateTagDialog } from "./CreateTagDialog";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 
 /** Local extension: pre-computed relative time string to avoid new Date() on every row render */
 type CommitWithFormattedDate = CommitInfo & { formattedDate: string };
@@ -18,18 +21,6 @@ type CommitWithFormattedDate = CommitInfo & { formattedDate: string };
 const ROW_HEIGHT = 80;
 const OVERSCAN = 5;
 const PAGE_SIZE = 25;
-
-interface LogPanelProps {
-	projectId: string;
-	selectedOid?: string | null;
-	onSelectCommit?: (oid: string) => void;
-	/** Cached commits from openProject - shown instantly, no spinner */
-	initialCommits?: CommitInfo[] | null;
-	/** Cached unpushed OIDs for annotating initialCommits with pushed status */
-	initialUnpushedOids?: string[] | null;
-	/** Whether repo has remotes (for CreateTagDialog push option) */
-	hasRemotes?: boolean;
-}
 
 function annotateWithPushedStatus(
 	commits: CommitInfo[],
@@ -103,15 +94,17 @@ function formatRelativeTime(date: Date): string {
 	return "just now";
 }
 
-export default function LogPanel({
-	projectId,
-	selectedOid,
-	onSelectCommit,
-	initialCommits,
-	initialUnpushedOids,
-	hasRemotes = true,
-}: LogPanelProps) {
+export default function LogPanel() {
 	const { toast } = useToast();
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const cachedLog = useRepoStore((s) => s.cachedLog);
+	const remotes = useRepoStore((s) => s.remotes);
+	const selectedOid = useUIStore((s) => s.selectedCommitOid);
+	const onSelectCommit = useUIStore((s) => s.setSelectedCommitOid);
+	const initialCommits = cachedLog?.projectId === projectId ? cachedLog.commits : null;
+	const initialUnpushedOids =
+		cachedLog?.projectId === projectId ? (cachedLog.unpushedOids ?? null) : null;
+	const hasRemotes = remotes.length > 0;
 	const [commits, setCommits] = useState<CommitWithFormattedDate[]>([]);
 	const [unpushedOids, setUnpushedOids] = useState<Set<string> | null>(null);
 	const [tagsByOid, setTagsByOid] = useState<Map<string, string[]>>(new Map());

@@ -3,13 +3,9 @@ import { Archive } from "lucide-react";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { ModalShell } from "./ui/modal-shell";
 import { useToast } from "../toast/provider";
-
-interface StashDialogProps {
-	open: boolean;
-	onClose: () => void;
-	projectId: string;
-	onStashCreated: () => void;
-}
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 
 function getErrorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
@@ -17,12 +13,14 @@ function getErrorMessage(error: unknown): string {
 	return "Unknown error";
 }
 
-export default function StashDialog({
-	open,
-	onClose,
-	projectId,
-	onStashCreated,
-}: StashDialogProps) {
+export default function StashDialog() {
+	const open = useUIStore((s) => s.showStashDialog);
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
+	const onClose = useUIStore((s) => s.showStashDialogClose);
+	const handleStashCreated = () => {
+		void useRepoStore.getState().refreshStatus();
+		useUIStore.getState().incrementStashRefreshKey();
+	};
 	const [message, setMessage] = useState("");
 	const [includeUntracked, setIncludeUntracked] = useState(true);
 	const [loading, setLoading] = useState(false);
@@ -36,7 +34,7 @@ export default function StashDialog({
 				includeUntracked,
 			});
 			toast.success("Stash created");
-			onStashCreated();
+			handleStashCreated();
 			onClose();
 			setMessage("");
 			setIncludeUntracked(true);

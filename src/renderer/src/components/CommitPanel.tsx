@@ -1,20 +1,15 @@
 import { useState, useCallback } from "react";
 import { Send, GitCommit, Sparkles, Loader2, Bot } from "lucide-react";
 import { useToast } from "../toast/provider";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 
-interface CommitPanelProps {
-	projectId: string;
-	onCommit: () => void;
-	onOpenGitAgent?: () => void;
-	disabled?: boolean;
-}
+const COMMIT_AGENT_INITIAL_PROMPT =
+	"Analyze all changes and propose 1 cohesive commit by default (maximum 2 only when there is a strong boundary).";
 
-export default function CommitPanel({
-	projectId,
-	onCommit,
-	onOpenGitAgent,
-	disabled,
-}: CommitPanelProps) {
+export default function CommitPanel({ disabled }: { disabled?: boolean } = {}) {
+	const projectId = useProjectStore((s) => s.activeProject?.id ?? "");
 	const [message, setMessage] = useState("");
 	const [amend, setAmend] = useState(false);
 	const [loading, setLoading] = useState(false);
@@ -48,7 +43,7 @@ export default function CommitPanel({
 		try {
 			await window.gitagen.repo.commit(projectId, trimmed, { amend });
 			setMessage("");
-			onCommit();
+			void useRepoStore.getState().refreshStatus();
 			toast.success("Changes committed");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Commit failed";
@@ -76,8 +71,10 @@ export default function CommitPanel({
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
-						onClick={onOpenGitAgent}
-						disabled={disabled || !onOpenGitAgent}
+						onClick={() =>
+							useUIStore.getState().openGitAgent(COMMIT_AGENT_INITIAL_PROMPT)
+						}
+						disabled={disabled}
 						className="btn-icon rounded-md p-1"
 						title="Open GitAgent"
 					>

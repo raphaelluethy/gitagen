@@ -5,7 +5,6 @@ import {
 	useCallback,
 	useMemo,
 	useRef,
-	useReducer,
 	Component,
 	type ReactNode,
 	type ErrorInfo,
@@ -63,98 +62,39 @@ import StartPage from "./components/StartPage";
 import { FpsMonitor } from "./components/FpsMonitor";
 import { Dialog, DialogContent } from "./components/ui/dialog";
 import { ModalShell } from "./components/ui/modal-shell";
-import { ThemeProvider, useTheme } from "./theme/provider";
-import { SettingsProvider, useSettings } from "./settings/provider";
 import { ToastProvider, useToast } from "./toast/provider";
+import { AppEffects } from "./components/AppEffects";
+import {
+	useProjectStore,
+	useRepoStore,
+	useUIStore,
+	useSettingsStore,
+	useThemeStore,
+	selectGitStatus,
+} from "./stores";
 import { parseRemoteForLinks } from "./utils/commit-links";
 import { getAppRouteId } from "./lib/appRoute";
 import {
 	useCommandRegistry,
 	type CommandActions,
 	type CommandContext,
-	type RightPanelTab,
 	type SettingsTab,
-	type ViewMode,
 } from "./hooks/useCommandRegistry";
 import type {
-	CommitInfo,
-	Project,
-	RepoStatus,
-	GitStatus,
 	GitFileStatus,
-	DiffStyle,
 	ConfigEntry,
 	AppSettings,
 	AIProviderDescriptor,
 	CommitStyle,
 	AIProviderInstance,
 	AIProviderType,
-	ConflictState,
 	FontFamily,
-	BranchInfo,
-	RemoteInfo,
 } from "../../shared/types";
 
 const MAIN_LAYOUT_FALLBACK = [20, 80];
 const CONTENT_LAYOUT_FALLBACK = [70, 30];
-const LAST_PROJECT_KEY = "gitagen:lastProjectId";
-const COMMIT_AGENT_INITIAL_PROMPT =
-	"Analyze all changes and propose 1 cohesive commit by default (maximum 2 only when there is a strong boundary).";
 
 type Layout = { [id: string]: number };
-
-interface RepoState {
-	status: RepoStatus | null;
-	currentBranchInfo: BranchInfo | null;
-	remotes: RemoteInfo[];
-	activeWorktreePath: string | null;
-	cachedLog: {
-		projectId: string;
-		commits: CommitInfo[];
-		unpushedOids: string[] | null;
-	} | null;
-}
-
-type RepoAction =
-	| { type: "SET_STATUS"; payload: RepoStatus | null }
-	| { type: "SET_BRANCH_INFO"; payload: BranchInfo | null }
-	| { type: "SET_REMOTES"; payload: RemoteInfo[] }
-	| { type: "SET_WORKTREE_PATH"; payload: string | null }
-	| { type: "SET_CACHED_LOG"; payload: RepoState["cachedLog"] }
-	| { type: "CLEAR_REPO_STATE" };
-
-function repoReducer(state: RepoState, action: RepoAction): RepoState {
-	switch (action.type) {
-		case "SET_STATUS":
-			return { ...state, status: action.payload };
-		case "SET_BRANCH_INFO":
-			return { ...state, currentBranchInfo: action.payload };
-		case "SET_REMOTES":
-			return { ...state, remotes: action.payload };
-		case "SET_WORKTREE_PATH":
-			return { ...state, activeWorktreePath: action.payload };
-		case "SET_CACHED_LOG":
-			return { ...state, cachedLog: action.payload };
-		case "CLEAR_REPO_STATE":
-			return {
-				status: null,
-				currentBranchInfo: null,
-				remotes: [],
-				activeWorktreePath: null,
-				cachedLog: null,
-			};
-		default:
-			return state;
-	}
-}
-
-const initialRepoState: RepoState = {
-	status: null,
-	currentBranchInfo: null,
-	remotes: [],
-	activeWorktreePath: null,
-	cachedLog: null,
-};
 
 function sanitizeTwoPanelLayout(
 	layout: unknown,
@@ -211,23 +151,6 @@ function sanitizeTwoPanelLayout(
 	}
 
 	return { [opts.panelIds[0]]: first, [opts.panelIds[1]]: second };
-}
-
-function repoStatusToGitFileStatus(
-	status: RepoStatus,
-	type: "staged" | "unstaged" | "untracked"
-): GitFileStatus[] {
-	const items =
-		type === "staged"
-			? status.staged
-			: type === "unstaged"
-				? status.unstaged
-				: status.untracked;
-	return items.map((item) => ({
-		path: typeof item === "string" ? item : item.path,
-		status: type,
-		changeType: typeof item === "string" ? "M" : item.changeType,
-	}));
 }
 
 function getLatestConfigValue(entries: ConfigEntry[], key: string): string {
@@ -304,36 +227,31 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 function AppContent() {
 	const { toast } = useToast();
-	const { settings: appSettings } = useSettings();
-	const [projects, setProjects] = useState<Project[]>([]);
-	const [activeProject, setActiveProject] = useState<Project | null>(null);
-	const [repoState, dispatch] = useReducer(repoReducer, initialRepoState);
-	const [selectedFile, setSelectedFile] = useState<GitFileStatus | null>(null);
-	const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
-	const [viewMode, setViewMode] = useState<ViewMode>("single");
-	const [showSettings, setShowSettings] = useState(false);
-	const [showGitAgent, setShowGitAgent] = useState(false);
-	const [gitAgentInitialPrompt, setGitAgentInitialPrompt] = useState<string | undefined>(
-		undefined
-	);
-	const [rightTab, setRightTab] = useState<RightPanelTab>("log");
-	const [selectedCommitOid, setSelectedCommitOid] = useState<string | null>(null);
-	const [selectedStashIndex, setSelectedStashIndex] = useState<number | null>(null);
-	const [showStashDialog, setShowStashDialog] = useState(false);
-	const [stashRefreshKey, setStashRefreshKey] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [projectLoading, setProjectLoading] = useState(false);
-	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
-	const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
-	const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-	const [settingsTabOverride, setSettingsTabOverride] = useState<SettingsTab | null>(null);
-	const [isWorktreePanelCollapsed, setIsWorktreePanelCollapsed] = useState(
-		() => !appSettings.showWorktreePanel
-	);
+	const projects = useProjectStore((s) => s.projects);
+	const activeProject = useProjectStore((s) => s.activeProject);
+	const loading = useProjectStore((s) => s.loading);
+	const projectLoading = useProjectStore((s) => s.projectLoading);
+	const status = useRepoStore((s) => s.status);
+	const remotes = useRepoStore((s) => s.remotes);
+	const activeWorktreePath = useRepoStore((s) => s.activeWorktreePath);
+	const selectedFile = useRepoStore((s) => s.selectedFile);
+	const diffStyle = useUIStore((s) => s.diffStyle);
+	const viewMode = useUIStore((s) => s.viewMode);
+	const showSettings = useUIStore((s) => s.showSettings);
+	const rightTab = useUIStore((s) => s.rightTab);
+	const selectedCommitOid = useUIStore((s) => s.selectedCommitOid);
+	const selectedStashIndex = useUIStore((s) => s.selectedStashIndex);
+	const isRightPanelCollapsed = useUIStore((s) => s.isRightPanelCollapsed);
+	const isLeftPanelCollapsed = useUIStore((s) => s.isLeftPanelCollapsed);
+	const settingsTabOverride = useUIStore((s) => s.settingsTabOverride);
+	const isWorktreePanelCollapsed = useUIStore((s) => s.isWorktreePanelCollapsed);
 	const rightPanelRef = useRef<PanelImperativeHandle>(null);
 	const leftPanelRef = useRef<PanelImperativeHandle>(null);
 
-	const { status, currentBranchInfo, remotes, activeWorktreePath, cachedLog } = repoState;
+	const gitStatus = useMemo(
+		() => selectGitStatus(status, activeProject?.path),
+		[status, activeProject?.path]
+	);
 
 	const mainLayout = useDefaultLayout({
 		id: "gitagen-main-layout-v4",
@@ -373,10 +291,10 @@ function AppContent() {
 		const panel = rightPanelRef.current;
 		if (panel?.isCollapsed()) {
 			panel.expand();
-			setIsRightPanelCollapsed(false);
+			useUIStore.getState().setIsRightPanelCollapsed(false);
 		} else {
 			panel?.collapse();
-			setIsRightPanelCollapsed(true);
+			useUIStore.getState().setIsRightPanelCollapsed(true);
 		}
 	}, []);
 
@@ -384,216 +302,36 @@ function AppContent() {
 		const panel = leftPanelRef.current;
 		if (panel?.isCollapsed()) {
 			panel.expand();
-			setIsLeftPanelCollapsed(false);
+			useUIStore.getState().setIsLeftPanelCollapsed(false);
 		} else {
 			panel?.collapse();
-			setIsLeftPanelCollapsed(true);
+			useUIStore.getState().setIsLeftPanelCollapsed(true);
 		}
 	}, []);
 
 	const toggleWorktreePanel = useCallback(() => {
-		setIsWorktreePanelCollapsed((prev) => !prev);
-	}, []);
-
-	const handleViewAll = useCallback(() => {
-		setViewMode("all");
+		useUIStore.getState().toggleWorktreePanel();
 	}, []);
 
 	const handleSelectFile = useCallback((file: GitFileStatus) => {
-		setSelectedFile(file);
-		setSelectedCommitOid(null);
+		useRepoStore.getState().setSelectedFileAndClearCommit(file);
 	}, []);
 
 	const openGitAgent = useCallback((initialPrompt?: string) => {
-		setGitAgentInitialPrompt(initialPrompt);
-		setShowGitAgent(true);
+		useUIStore.getState().openGitAgent(initialPrompt);
 	}, []);
 
 	const refreshStatus = useCallback(() => {
-		if (!activeProject) return;
-		window.gitagen.repo.getStatus(activeProject.id).then((status) => {
-			if (status) dispatch({ type: "SET_STATUS", payload: status });
-		});
-	}, [activeProject?.id]);
-	const refreshStatusAndPrefs = refreshStatus;
-
-	useEffect(() => {
-		window.gitagen.projects.list().then((list: Project[]) => {
-			setProjects(list);
-			setLoading(false);
-			const lastId =
-				typeof localStorage !== "undefined" ? localStorage.getItem(LAST_PROJECT_KEY) : null;
-			if (lastId && list.some((p) => p.id === lastId)) {
-				const project = list.find((p) => p.id === lastId) ?? null;
-				if (project) setActiveProject(project);
-			}
-		});
+		void useRepoStore.getState().refreshStatus();
 	}, []);
 
-	useEffect(() => {
-		if (activeProject) {
-			try {
-				localStorage.setItem(LAST_PROJECT_KEY, activeProject.id);
-			} catch {
-				// ignore localStorage quota / privacy errors
-			}
-		}
-	}, [activeProject?.id]);
+	const handleAddProject = useCallback(async () => {
+		await useProjectStore.getState().addProject();
+	}, []);
 
-	useEffect(() => {
-		dispatch({ type: "CLEAR_REPO_STATE" });
-		setSelectedFile(null);
-		setSelectedCommitOid(null);
-		if (!activeProject) {
-			setProjectLoading(false);
-			return;
-		}
-		setProjectLoading(true);
-		const currentId = activeProject.id;
-		window.gitagen.repo
-			.openProject(currentId)
-			.then((data) => {
-				if (!data) return;
-				dispatch({ type: "SET_STATUS", payload: data.status });
-				dispatch({
-					type: "SET_WORKTREE_PATH",
-					payload: data.prefs?.activeWorktreePath ?? null,
-				});
-				dispatch({
-					type: "SET_BRANCH_INFO",
-					payload: data.branches.find((b) => b.current) ?? null,
-				});
-				dispatch({ type: "SET_REMOTES", payload: data.remotes });
-				if (data.cachedLog && data.cachedLog.length > 0) {
-					dispatch({
-						type: "SET_CACHED_LOG",
-						payload: {
-							projectId: currentId,
-							commits: data.cachedLog,
-							unpushedOids: data.cachedUnpushedOids,
-						},
-					});
-				}
-			})
-			.catch((error) => {
-				console.error("[App] openProject failed:", error);
-			})
-			.finally(() => {
-				setProjectLoading(false);
-			});
-	}, [activeProject?.id]);
-
-	useEffect(() => {
-		if (!activeProject) return;
-
-		const startWatching = () => {
-			window.gitagen.repo.watchProject(activeProject.id);
-		};
-
-		const stopWatching = () => {
-			window.gitagen.repo.unwatchProject(activeProject.id);
-		};
-
-		const handleFocus = () => {
-			refreshStatus();
-			startWatching();
-		};
-
-		const handleBlur = () => {
-			stopWatching();
-		};
-
-		if (document.hasFocus()) {
-			startWatching();
-		}
-
-		window.addEventListener("focus", handleFocus);
-		window.addEventListener("blur", handleBlur);
-
-		return () => {
-			stopWatching();
-			window.removeEventListener("focus", handleFocus);
-			window.removeEventListener("blur", handleBlur);
-		};
-	}, [activeProject?.id, refreshStatus]);
-
-	useEffect(() => {
-		if (!selectedFile || !status) return;
-		const lookup = (
-			items: RepoStatus["staged"] | RepoStatus["unstaged"] | RepoStatus["untracked"],
-			type: "staged" | "unstaged" | "untracked"
-		) => {
-			for (const item of items) {
-				const path = typeof item === "string" ? item : item.path;
-				if (path === selectedFile.path) return type;
-			}
-			return null;
-		};
-		const newStatus =
-			lookup(status.staged, "staged") ??
-			lookup(status.unstaged, "unstaged") ??
-			lookup(status.untracked, "untracked");
-		if (newStatus && newStatus !== selectedFile.status) {
-			setSelectedFile((prev) => (prev ? { ...prev, status: newStatus } : prev));
-		}
-	}, [status, selectedFile?.path]);
-
-	useEffect(() => {
-		const unsubscribeUpdated = window.gitagen.events.onRepoUpdated(
-			(payload: { projectId: string; updatedAt: number }) => {
-				if (!activeProject || payload.projectId !== activeProject.id) return;
-				refreshStatus();
-			}
-		);
-		const unsubscribeConflicts = window.gitagen.events.onConflictDetected(
-			(payload: { projectId: string; state: ConflictState }) => {
-				if (!activeProject || payload.projectId !== activeProject.id) return;
-				refreshStatus();
-			}
-		);
-		const unsubscribeErrors = window.gitagen.events.onRepoError(
-			(payload: { projectId: string | null; message: string; name: string }) => {
-				if (!activeProject) return;
-				if (payload.projectId && payload.projectId !== activeProject.id) return;
-				toast.error(payload.name, payload.message);
-			}
-		);
-		return () => {
-			unsubscribeUpdated();
-			unsubscribeConflicts();
-			unsubscribeErrors();
-		};
-	}, [activeProject?.id, refreshStatus, toast]);
-
-	const handleAddProject = async () => {
-		const path: string | null = await window.gitagen.settings.selectFolder();
-		if (!path) return;
-		const name = path.split("/").filter(Boolean).pop() || "repo";
-		const p = await window.gitagen.projects.add(name, path);
-		setProjects((prev) => [p, ...prev]);
-		setActiveProject(p);
-	};
-
-	const handleRemoveProject = useCallback(
-		async (projectId: string) => {
-			await window.gitagen.projects.remove(projectId);
-			setProjects((prev) => prev.filter((p) => p.id !== projectId));
-			if (activeProject?.id === projectId) {
-				setActiveProject(null);
-			}
-		},
-		[activeProject?.id]
-	);
-
-	const gitStatus: GitStatus | null =
-		activeProject && status
-			? {
-					repoPath: activeProject.path,
-					staged: repoStatusToGitFileStatus(status, "staged"),
-					unstaged: repoStatusToGitFileStatus(status, "unstaged"),
-					untracked: repoStatusToGitFileStatus(status, "untracked"),
-				}
-			: null;
+	const handleRemoveProject = useCallback(async (projectId: string) => {
+		await useProjectStore.getState().removeProject(projectId);
+	}, []);
 
 	const appRoute = getAppRouteId({
 		loading,
@@ -603,10 +341,6 @@ function AppContent() {
 		showSettings,
 		selectedCommitOid,
 	});
-
-	const closeCommandPalette = useCallback(() => {
-		setIsCommandPaletteOpen(false);
-	}, []);
 
 	const commandContext = useMemo<CommandContext>(
 		() => ({
@@ -644,52 +378,34 @@ function AppContent() {
 	const commandActions = useMemo<CommandActions>(
 		() => ({
 			onOpenProject: (project) => {
-				setActiveProject(project);
-				setShowSettings(false);
-				setSelectedCommitOid(null);
+				useProjectStore.getState().setActiveProject(project);
+				useUIStore.getState().closeSettings();
 			},
 			onAddProject: handleAddProject,
 			onBackToProjects: () => {
-				setShowSettings(false);
-				setSelectedCommitOid(null);
-				setActiveProject(null);
+				useUIStore.getState().closeSettings();
+				useProjectStore.getState().setActiveProject(null);
 			},
-			onOpenGitAgent: () => {
-				openGitAgent();
-			},
-			onOpenSettings: (tab) => {
-				setSettingsTabOverride(tab ?? null);
-				setShowSettings(true);
-				setSelectedCommitOid(null);
-			},
-			onCloseSettings: () => {
-				setShowSettings(false);
-				setSettingsTabOverride(null);
-			},
-			onSetViewMode: setViewMode,
-			onSetDiffStyle: setDiffStyle,
-			onSetRightTab: setRightTab,
+			onOpenGitAgent: () => openGitAgent(),
+			onOpenSettings: (tab) => useUIStore.getState().openSettings(tab),
+			onCloseSettings: () => useUIStore.getState().closeSettings(),
+			onSetViewMode: (mode) => useUIStore.getState().setViewMode(mode),
+			onSetDiffStyle: (style) => useUIStore.getState().setDiffStyle(style),
+			onSetRightTab: (tab) => useUIStore.getState().setRightTab(tab),
 			onToggleLeftPanel: toggleLeftPanel,
 			onToggleRightPanel: toggleRightPanel,
 			onRefreshStatus: refreshStatus,
-			onRefreshStatusAndPrefs: refreshStatusAndPrefs,
+			onRefreshStatusAndPrefs: refreshStatus,
 			onSelectFile: handleSelectFile,
-			onOpenCommitDetail: (oid) => {
-				setSelectedCommitOid(oid);
-			},
-			onCloseCommitDetail: () => {
-				setSelectedCommitOid(null);
-			},
-			onNotifyError: (message) => {
-				toast.error(message);
-			},
+			onOpenCommitDetail: (oid) => useUIStore.getState().setSelectedCommitOid(oid),
+			onCloseCommitDetail: () => useUIStore.getState().setSelectedCommitOid(null),
+			onNotifyError: (message) => toast.error(message),
 		}),
 		[
 			handleAddProject,
 			handleSelectFile,
 			openGitAgent,
 			refreshStatus,
-			refreshStatusAndPrefs,
 			toggleLeftPanel,
 			toggleRightPanel,
 			toast,
@@ -704,7 +420,7 @@ function AppContent() {
 			if (event.key.toLowerCase() !== "p") return;
 			if (appRoute === "loading") return;
 			event.preventDefault();
-			setIsCommandPaletteOpen((prev) => !prev);
+			useUIStore.setState((s) => ({ isCommandPaletteOpen: !s.isCommandPaletteOpen }));
 		};
 		document.addEventListener("keydown", handleKeyDown);
 		return () => {
@@ -714,43 +430,16 @@ function AppContent() {
 
 	useEffect(() => {
 		if (appRoute === "loading") {
-			setIsCommandPaletteOpen(false);
+			useUIStore.getState().closeCommandPalette();
 		}
 	}, [appRoute]);
 
 	const withPalette = (content: ReactNode) => (
 		<>
 			{content}
-			{appRoute !== "loading" && (
-				<CommandPalette
-					open={isCommandPaletteOpen}
-					onClose={closeCommandPalette}
-					commands={commands}
-				/>
-			)}
-			{activeProject && (
-				<GitAgentModal
-					open={showGitAgent}
-					onClose={() => {
-						setShowGitAgent(false);
-						setGitAgentInitialPrompt(undefined);
-						refreshStatus();
-					}}
-					projectId={activeProject.id}
-					initialPrompt={gitAgentInitialPrompt}
-				/>
-			)}
-			{activeProject && (
-				<StashDialog
-					open={showStashDialog}
-					onClose={() => setShowStashDialog(false)}
-					projectId={activeProject.id}
-					onStashCreated={() => {
-						refreshStatus();
-						setStashRefreshKey((k) => k + 1);
-					}}
-				/>
-			)}
+			{appRoute !== "loading" && <CommandPalette commands={commands} />}
+			{activeProject && <GitAgentModal />}
+			{activeProject && <StashDialog />}
 		</>
 	);
 
@@ -786,7 +475,7 @@ function AppContent() {
 		return withPalette(
 			<StartPage
 				projects={projects}
-				onSelectProject={setActiveProject}
+				onSelectProject={useProjectStore.getState().setActiveProject}
 				onAddProject={handleAddProject}
 				onRemoveProject={handleRemoveProject}
 			/>
@@ -799,10 +488,7 @@ function AppContent() {
 				<SettingsPanel
 					projectId={activeProject.id}
 					activeTabOverride={settingsTabOverride}
-					onClose={() => {
-						setShowSettings(false);
-						setSettingsTabOverride(null);
-					}}
+					onClose={() => useUIStore.getState().closeSettings()}
 				/>
 			</div>
 		);
@@ -820,7 +506,7 @@ function AppContent() {
 						</p>
 						<button
 							type="button"
-							onClick={() => setActiveProject(null)}
+							onClick={() => useProjectStore.getState().setActiveProject(null)}
 							className="text-sm text-(--accent-primary) hover:underline"
 						>
 							Back to projects
@@ -833,7 +519,7 @@ function AppContent() {
 
 	return withPalette(
 		<div className="flex h-screen flex-col bg-(--bg-primary)">
-			<ConflictBanner projectId={activeProject.id} onResolved={refreshStatus} />
+			<ConflictBanner />
 			<Group
 				className="flex flex-1 min-h-0"
 				id="main-layout"
@@ -850,23 +536,11 @@ function AppContent() {
 					maxSize="35%"
 					panelRef={leftPanelRef}
 					onResize={(size) => {
-						setIsLeftPanelCollapsed(size.asPercentage < 1);
+						useUIStore.getState().setIsLeftPanelCollapsed(size.asPercentage < 1);
 					}}
 				>
 					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-						<Sidebar
-							projectId={activeProject.id}
-							status={gitStatus}
-							selectedFile={selectedFile}
-							onSelectFile={handleSelectFile}
-							onRefresh={refreshStatus}
-							onBack={() => setActiveProject(null)}
-							projects={projects}
-							activeProject={activeProject}
-							onProjectChange={setActiveProject}
-							onAddProject={handleAddProject}
-							onViewAll={handleViewAll}
-						/>
+						<Sidebar />
 					</div>
 					{isWorktreePanelCollapsed ? (
 						<button
@@ -880,16 +554,7 @@ function AppContent() {
 							<ChevronRight size={11} className="ml-auto" />
 						</button>
 					) : (
-						<WorktreePanel
-							projectId={activeProject.id}
-							projectName={activeProject.name}
-							projectPath={activeProject.path}
-							currentBranch={status?.branch ?? ""}
-							activeWorktreePath={activeWorktreePath}
-							onRefresh={refreshStatus}
-							isCollapsed={isWorktreePanelCollapsed}
-							onToggle={toggleWorktreePanel}
-						/>
+						<WorktreePanel />
 					)}
 				</Panel>
 				<Separator className="panel-resize-handle" />
@@ -914,18 +579,9 @@ function AppContent() {
 								)}
 							</button>
 							<div className="mx-0.5 hidden h-4 w-px bg-(--border-secondary) sm:block" />
-							<WorktreeSelector
-								projectId={activeProject.id}
-								activeWorktreePath={activeWorktreePath}
-								mainRepoPath={activeProject.path}
-								onWorktreeChange={refreshStatus}
-							/>
+							<WorktreeSelector />
 							<div className="mx-0.5 h-4 w-px bg-(--border-secondary)" />
-							<BranchSelector
-								projectId={activeProject.id}
-								currentBranch={status?.branch ?? ""}
-								onBranchChange={refreshStatus}
-							/>
+							<BranchSelector />
 							{remotes.length > 0 && (
 								<button
 									type="button"
@@ -959,7 +615,7 @@ function AppContent() {
 						>
 							<button
 								type="button"
-								onClick={() => setViewMode("single")}
+								onClick={() => useUIStore.getState().setViewMode("single")}
 								title="Single file view"
 								className="tab-item"
 								role="tab"
@@ -969,7 +625,7 @@ function AppContent() {
 							</button>
 							<button
 								type="button"
-								onClick={() => setViewMode("all")}
+								onClick={() => useUIStore.getState().setViewMode("all")}
 								title="All changes view"
 								className="tab-item"
 								role="tab"
@@ -985,7 +641,7 @@ function AppContent() {
 						>
 							<button
 								type="button"
-								onClick={() => setDiffStyle("unified")}
+								onClick={() => useUIStore.getState().setDiffStyle("unified")}
 								title="Unified diff"
 								className="tab-item"
 								role="tab"
@@ -995,7 +651,7 @@ function AppContent() {
 							</button>
 							<button
 								type="button"
-								onClick={() => setDiffStyle("split")}
+								onClick={() => useUIStore.getState().setDiffStyle("split")}
 								title="Split diff"
 								className="tab-item"
 								role="tab"
@@ -1014,13 +670,7 @@ function AppContent() {
 							>
 								<Sparkles size={15} />
 							</button>
-							<SyncButtons
-								projectId={activeProject.id}
-								ahead={currentBranchInfo?.ahead ?? 0}
-								behind={currentBranchInfo?.behind ?? 0}
-								hasRemotes={remotes.length > 0}
-								onComplete={refreshStatus}
-							/>
+							<SyncButtons />
 							<div className="mx-0.5 h-4 w-px bg-(--border-secondary)" />
 							<button
 								type="button"
@@ -1039,10 +689,7 @@ function AppContent() {
 							</button>
 							<button
 								type="button"
-								onClick={() => {
-									setSettingsTabOverride(null);
-									setShowSettings(true);
-								}}
+								onClick={() => useUIStore.getState().openSettings()}
 								className="btn-icon rounded-md p-1.5"
 								title="Settings"
 								aria-label="Open settings"
@@ -1060,23 +707,9 @@ function AppContent() {
 					>
 						<Panel id="center" className="flex min-w-0 flex-1 flex-col" minSize="30%">
 							{selectedCommitOid ? (
-								<CommitDetailView
-									projectId={activeProject.id}
-									oid={selectedCommitOid}
-									diffStyle={diffStyle}
-									onClose={() => setSelectedCommitOid(null)}
-								/>
+								<CommitDetailView />
 							) : selectedStashIndex !== null ? (
-								<StashDetailView
-									projectId={activeProject.id}
-									index={selectedStashIndex}
-									diffStyle={diffStyle}
-									onClose={() => setSelectedStashIndex(null)}
-									onActionComplete={() => {
-										refreshStatus();
-										setStashRefreshKey((k) => k + 1);
-									}}
-								/>
+								<StashDetailView />
 							) : (
 								<Group
 									className="flex min-h-0 flex-1 flex-col"
@@ -1089,23 +722,7 @@ function AppContent() {
 										className="flex min-h-0 flex-1 flex-col"
 										minSize="30%"
 									>
-										{viewMode === "all" ? (
-											<AllChangesView
-												projectId={activeProject.id}
-												gitStatus={gitStatus}
-												diffStyle={diffStyle}
-												selectedFile={selectedFile}
-												onRefresh={refreshStatus}
-											/>
-										) : (
-											<DiffViewer
-												projectId={activeProject.id}
-												repoPath={gitStatus.repoPath}
-												selectedFile={selectedFile}
-												diffStyle={diffStyle}
-												onRefresh={refreshStatus}
-											/>
-										)}
+										{viewMode === "all" ? <AllChangesView /> : <DiffViewer />}
 									</Panel>
 									<Separator className="panel-resize-handle" />
 									<Panel
@@ -1114,13 +731,7 @@ function AppContent() {
 										minSize="10%"
 										defaultSize="25%"
 									>
-										<CommitPanel
-											projectId={activeProject.id}
-											onCommit={refreshStatus}
-											onOpenGitAgent={() =>
-												openGitAgent(COMMIT_AGENT_INITIAL_PROMPT)
-											}
-										/>
+										<CommitPanel />
 									</Panel>
 								</Group>
 							)}
@@ -1135,7 +746,9 @@ function AppContent() {
 							maxSize="45%"
 							panelRef={rightPanelRef}
 							onResize={(size) => {
-								setIsRightPanelCollapsed(size.asPercentage < 1);
+								useUIStore
+									.getState()
+									.setIsRightPanelCollapsed(size.asPercentage < 1);
 							}}
 						>
 							<div className="flex min-h-0 flex-1 flex-col">
@@ -1146,7 +759,7 @@ function AppContent() {
 								>
 									<button
 										type="button"
-										onClick={() => setRightTab("log")}
+										onClick={() => useUIStore.getState().setRightTab("log")}
 										className="tab-item flex-1"
 										role="tab"
 										aria-selected={rightTab === "log"}
@@ -1156,7 +769,7 @@ function AppContent() {
 									</button>
 									<button
 										type="button"
-										onClick={() => setRightTab("stash")}
+										onClick={() => useUIStore.getState().setRightTab("stash")}
 										className="tab-item flex-1"
 										role="tab"
 										aria-selected={rightTab === "stash"}
@@ -1166,7 +779,7 @@ function AppContent() {
 									</button>
 									<button
 										type="button"
-										onClick={() => setRightTab("remote")}
+										onClick={() => useUIStore.getState().setRightTab("remote")}
 										className="tab-item flex-1"
 										role="tab"
 										aria-selected={rightTab === "remote"}
@@ -1180,44 +793,19 @@ function AppContent() {
 										className={`h-full overflow-auto ${rightTab !== "log" ? "hidden" : ""}`}
 										aria-hidden={rightTab !== "log"}
 									>
-										<LogPanel
-											projectId={activeProject.id}
-											selectedOid={selectedCommitOid}
-											onSelectCommit={setSelectedCommitOid}
-											initialCommits={
-												cachedLog?.projectId === activeProject.id
-													? cachedLog.commits
-													: null
-											}
-											initialUnpushedOids={
-												cachedLog?.projectId === activeProject.id
-													? (cachedLog.unpushedOids ?? null)
-													: null
-											}
-											hasRemotes={remotes.length > 0}
-										/>
+										<LogPanel />
 									</div>
 									<div
 										className={`h-full overflow-auto ${rightTab !== "stash" ? "hidden" : ""}`}
 										aria-hidden={rightTab !== "stash"}
 									>
-										<StashPanel
-											projectId={activeProject.id}
-											onRefresh={refreshStatus}
-											selectedIndex={selectedStashIndex}
-											onSelect={setSelectedStashIndex}
-											onOpenCreateDialog={() => setShowStashDialog(true)}
-											refreshKey={stashRefreshKey}
-										/>
+										<StashPanel />
 									</div>
 									<div
 										className={`h-full overflow-auto ${rightTab !== "remote" ? "hidden" : ""}`}
 										aria-hidden={rightTab !== "remote"}
 									>
-										<RemotePanel
-											projectId={activeProject.id}
-											onRefresh={refreshStatus}
-										/>
+										<RemotePanel />
 									</div>
 								</div>
 							</div>
@@ -1919,8 +1507,9 @@ function SettingsPanel({
 		name: string;
 		path: string | null;
 	}>({ name: "", path: null });
-	const { theme, setTheme } = useTheme();
-	const { updateSettings } = useSettings();
+	const theme = useThemeStore((s) => s.theme);
+	const setTheme = useThemeStore((s) => s.setTheme);
+	const updateSettings = useSettingsStore((s) => s.updateSettings);
 	const [uiScale, setUiScale] = useState(1.0);
 	const [uiScaleText, setUiScaleText] = useState("100");
 	const [fontSize, setFontSize] = useState(14);
@@ -2661,54 +2250,19 @@ function SettingsPanel({
 	);
 }
 
+function FpsMonitorWrapper() {
+	const devMode = useSettingsStore((s) => s.devMode);
+	return <FpsMonitor enabled={devMode} />;
+}
+
 export default function App() {
-	const [initialTheme, setInitialTheme] = useState<"dark" | "light" | "system">("system");
-	const [initialSettings, setInitialSettings] = useState<{
-		uiScale: number;
-		fontSize: number;
-		commitMessageFontSize: number;
-		fontFamily: FontFamily;
-		devMode: boolean;
-		autoExpandSingleFolder: boolean;
-		showWorktreePanel: boolean;
-	}>({
-		uiScale: 1.0,
-		fontSize: 14,
-		commitMessageFontSize: 14,
-		fontFamily: "system",
-		devMode: false,
-		autoExpandSingleFolder: true,
-		showWorktreePanel: true,
-	});
-
-	useEffect(() => {
-		window.gitagen?.settings
-			?.getGlobal?.()
-			.then((s: AppSettings | undefined) => {
-				if (s?.theme) setInitialTheme(s.theme);
-				setInitialSettings({
-					uiScale: s?.uiScale ?? 1.0,
-					fontSize: s?.fontSize ?? 14,
-					commitMessageFontSize: s?.commitMessageFontSize ?? 14,
-					fontFamily: s?.fontFamily ?? "system",
-					devMode: s?.devMode ?? false,
-					autoExpandSingleFolder: s?.autoExpandSingleFolder ?? true,
-					showWorktreePanel: s?.showWorktreePanel ?? true,
-				});
-			})
-			.catch(() => {});
-	}, []);
-
 	return (
-		<ThemeProvider initialTheme={initialTheme}>
-			<SettingsProvider initialSettings={initialSettings}>
-				<ToastProvider>
-					<ErrorBoundary>
-						<AppContent />
-					</ErrorBoundary>
-					<FpsMonitor enabled={initialSettings.devMode} />
-				</ToastProvider>
-			</SettingsProvider>
-		</ThemeProvider>
+		<ToastProvider>
+			<AppEffects />
+			<ErrorBoundary>
+				<AppContent />
+			</ErrorBoundary>
+			<FpsMonitorWrapper />
+		</ToastProvider>
 	);
 }

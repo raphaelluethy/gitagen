@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 import { Toaster, toast as sonnerToast } from "sonner";
 import { Copy, Check } from "lucide-react";
-import { useTheme } from "../theme/provider";
+import { useThemeStore } from "../stores/themeStore";
 
 interface ToastContextValue {
 	toast: ((message: string) => void) & {
@@ -66,7 +66,7 @@ function createToast(): ToastContextValue["toast"] {
 const toastInstance = createToast();
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-	const { resolved } = useTheme();
+	const resolved = useThemeStore((s) => s.resolved);
 
 	return (
 		<>

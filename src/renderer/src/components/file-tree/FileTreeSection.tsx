@@ -3,7 +3,7 @@ import { Folder, FolderOpen, List, ListMinus, ListPlus } from "lucide-react";
 import type { GitFileStatus } from "../../../../shared/types";
 import type { FileTreeNode } from "./types";
 import { buildFileTree } from "./utils";
-import { useSettings } from "../../settings/provider";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { useToast } from "../../toast/provider";
 import { TreeItem } from "./TreeItem";
 
@@ -64,7 +64,7 @@ export function FileTreeSection({
 	onFoldAll,
 	onViewAll,
 }: FileTreeSectionProps) {
-	const { settings } = useSettings();
+	const autoExpandSingleFolder = useSettingsStore((s) => s.autoExpandSingleFolder);
 	const { toast } = useToast();
 	const tree = useMemo(() => buildFileTree(files), [files]);
 
@@ -75,14 +75,14 @@ export function FileTreeSection({
 	}, [projectId]);
 
 	useEffect(() => {
-		if (settings.autoExpandSingleFolder && tree.length > 0 && !autoExpanded) {
+		if (autoExpandSingleFolder && tree.length > 0 && !autoExpanded) {
 			const paths = getAutoExpandPaths(tree);
 			if (paths.length > 0) {
 				onExpandAll(new Set(paths));
 				setAutoExpanded(true);
 			}
 		}
-	}, [settings.autoExpandSingleFolder, tree, onExpandAll, autoExpanded]);
+	}, [autoExpandSingleFolder, tree, onExpandAll, autoExpanded]);
 
 	const onToggleFolderWithAutoExpand = useCallback(
 		(path: string) => {

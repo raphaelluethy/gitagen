@@ -10,11 +10,14 @@ import { GIT_AGENT_SYSTEM_PROMPT } from "../lib/git-agent-prompt";
 import { createGitAgentTools } from "./git-agent/tools";
 import GitActionProposal, { type GitActionPlanInput } from "./git-agent/GitActionProposal";
 import type { AIProviderInstance } from "../../../shared/types";
+import { useProjectStore } from "../stores/projectStore";
+import { useRepoStore } from "../stores/repoStore";
+import { useUIStore } from "../stores/uiStore";
 
 interface GitAgentModalProps {
-	open: boolean;
-	onClose: () => void;
-	projectId: string;
+	open?: boolean;
+	onClose?: () => void;
+	projectId?: string;
 	initialPrompt?: string;
 	systemPrompt?: string;
 }
@@ -100,13 +103,28 @@ function summarizeToolInput(toolName: string, input: unknown): string | null {
 	}
 }
 
-export default function GitAgentModal({
-	open,
-	onClose,
-	projectId,
-	initialPrompt,
-	systemPrompt,
-}: GitAgentModalProps) {
+export default function GitAgentModal(props: GitAgentModalProps = {}) {
+	const {
+		open: openProp,
+		onClose: onCloseProp,
+		projectId: projectIdProp,
+		initialPrompt: initialPromptProp,
+		systemPrompt,
+	} = props;
+	const openFromStore = useUIStore((s) => s.showGitAgent);
+	const projectIdFromStore = useProjectStore((s) => s.activeProject?.id ?? "");
+	const initialPromptFromStore = useUIStore((s) => s.gitAgentInitialPrompt);
+	const open = openProp ?? openFromStore;
+	const projectId = projectIdProp ?? projectIdFromStore;
+	const initialPrompt = initialPromptProp ?? initialPromptFromStore;
+	const onClose = useCallback(() => {
+		if (onCloseProp) {
+			onCloseProp();
+		} else {
+			useUIStore.getState().closeGitAgent();
+			void useRepoStore.getState().refreshStatus();
+		}
+	}, [onCloseProp]);
 	const [provider, setProvider] = useState<AIProviderInstance | null>(null);
 	const [initError, setInitError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);

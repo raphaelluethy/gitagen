@@ -40,6 +40,7 @@ import {
 	Sparkles,
 	Palette,
 	Bug,
+	Link,
 } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import CommandPalette from "./components/CommandPalette";
@@ -65,6 +66,7 @@ import { ModalShell } from "./components/ui/modal-shell";
 import { ThemeProvider, useTheme } from "./theme/provider";
 import { SettingsProvider, useSettings } from "./settings/provider";
 import { ToastProvider, useToast } from "./toast/provider";
+import { parseRemoteForLinks } from "./utils/commit-links";
 import { getAppRouteId } from "./lib/appRoute";
 import {
 	useCommandRegistry,
@@ -924,6 +926,30 @@ function AppContent() {
 								currentBranch={status?.branch ?? ""}
 								onBranchChange={refreshStatus}
 							/>
+							{remotes.length > 0 && (
+								<button
+									type="button"
+									onClick={() => {
+										const remote = parseRemoteForLinks(remotes[0].url);
+										if (remote) {
+											const branch = status?.branch || "main";
+											const url =
+												remote.host === "github"
+													? `https://github.com/${remote.owner}/${remote.repo}/tree/${branch}`
+													: `https://gitlab.com/${remote.owner}/${remote.repo}/-/tree/${branch}`;
+											window.gitagen.app.openExternal(url);
+										} else {
+											window.gitagen.app.openExternal(remotes[0].url);
+										}
+									}}
+									className="btn-icon rounded-md p-1.5"
+									data-tooltip="Open remote repository"
+									data-tooltip-position="bottom"
+									aria-label="Open remote repository"
+								>
+									<Link size={14} />
+								</button>
+							)}
 						</div>
 						<div className="mx-1 hidden h-4 w-px bg-(--border-secondary) sm:block" />
 						<div

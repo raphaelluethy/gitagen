@@ -543,14 +543,52 @@ function FileTreeSection({
 		return [];
 	}, []);
 
+	const [autoExpanded, setAutoExpanded] = useState(false);
+
 	useEffect(() => {
-		if (settings.autoExpandSingleFolder && tree.length > 0) {
+		setAutoExpanded(false);
+	}, [projectId]);
+
+	useEffect(() => {
+		if (settings.autoExpandSingleFolder && tree.length > 0 && !autoExpanded) {
 			const paths = getAutoExpandPaths(tree);
 			if (paths.length > 0) {
 				onExpandAll(new Set(paths));
+				setAutoExpanded(true);
 			}
 		}
-	}, [settings.autoExpandSingleFolder, tree, onExpandAll, getAutoExpandPaths]);
+	}, [settings.autoExpandSingleFolder, tree, onExpandAll, getAutoExpandPaths, autoExpanded]);
+
+	const onToggleFolderWithAutoExpand = useCallback(
+		(path: string) => {
+			if (!expandedFolders.has(path)) {
+				// We are opening the folder, so we should check for auto-expand again
+				// However, the current tree only contains the node we just toggled.
+				// We need to find the node in the tree to check its children.
+				const findNode = (nodes: FileTreeNode[]): FileTreeNode | null => {
+					for (const node of nodes) {
+						if (node.path === path) return node;
+						if (node.children) {
+							const found = findNode(node.children);
+							if (found) return found;
+						}
+					}
+					return null;
+				};
+
+				const node = findNode(tree);
+				if (node && node.children) {
+					const paths = getAutoExpandPaths(node.children);
+					if (paths.length > 0) {
+						onExpandAll(new Set([path, ...paths]));
+						return;
+					}
+				}
+			}
+			onToggleFolder(path);
+		},
+		[expandedFolders, tree, getAutoExpandPaths, onExpandAll, onToggleFolder]
+	);
 
 	if (tree.length === 0) return null;
 
@@ -655,7 +693,7 @@ function FileTreeSection({
 						selectedFile={selectedFile}
 						onSelect={onSelect}
 						expandedFolders={expandedFolders}
-						onToggleFolder={onToggleFolder}
+						onToggleFolder={onToggleFolderWithAutoExpand}
 					/>
 				))}
 			</div>

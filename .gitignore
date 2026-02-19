@@ -48,3 +48,5 @@ Thumbs.db
 
 # Local dev database (migrated via `just db:dev`)
 .gitagen-dev.db
+
+.junie/

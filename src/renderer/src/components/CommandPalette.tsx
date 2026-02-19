@@ -151,7 +151,7 @@ export default function CommandPalette({ open, onClose, commands }: CommandPalet
 		if (step.kind === "confirm") {
 			confirmButtonRef.current?.focus();
 		}
-	}, [open, step]);
+	}, [open, step.kind]);
 
 	useEffect(() => {
 		if (!open) return;

@@ -189,7 +189,9 @@ export default function LogPanel({
 					const annotated = annotateWithPushedStatus(page, unpushedOids);
 					setCommits((current) => {
 						const existingOids = new Set(current.map((c) => c.oid));
-						const newItems = addFormattedDates(annotated.filter((c) => !existingOids.has(c.oid)));
+						const newItems = addFormattedDates(
+							annotated.filter((c) => !existingOids.has(c.oid))
+						);
 						return [...current, ...newItems];
 					});
 				}

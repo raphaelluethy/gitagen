@@ -157,18 +157,12 @@ export async function setProjectPrefs(
 		.onConflictDoUpdate({
 			target: projectPrefs.projectId,
 			set: {
-				includeIgnored:
-					sql`COALESCE(${prefs.includeIgnored !== undefined ? (prefs.includeIgnored ? 1 : 0) : null}, include_ignored)`,
-				changedOnly:
-					sql`COALESCE(${prefs.changedOnly !== undefined ? (prefs.changedOnly ? 1 : 0) : null}, changed_only)`,
-				expandedDirs:
-					sql`COALESCE(${prefs.expandedDirs !== undefined ? JSON.stringify(prefs.expandedDirs) : null}, expanded_dirs)`,
-				selectedFilePath:
-					sql`COALESCE(${prefs.selectedFilePath !== undefined ? prefs.selectedFilePath : null}, selected_file_path)`,
-				sidebarScrollTop:
-					sql`COALESCE(${prefs.sidebarScrollTop !== undefined ? prefs.sidebarScrollTop : null}, sidebar_scroll_top)`,
-				activeWorktreePath:
-					sql`COALESCE(${prefs.activeWorktreePath !== undefined ? prefs.activeWorktreePath : null}, active_worktree_path)`,
+				includeIgnored: sql`COALESCE(${prefs.includeIgnored !== undefined ? (prefs.includeIgnored ? 1 : 0) : null}, include_ignored)`,
+				changedOnly: sql`COALESCE(${prefs.changedOnly !== undefined ? (prefs.changedOnly ? 1 : 0) : null}, changed_only)`,
+				expandedDirs: sql`COALESCE(${prefs.expandedDirs !== undefined ? JSON.stringify(prefs.expandedDirs) : null}, expanded_dirs)`,
+				selectedFilePath: sql`COALESCE(${prefs.selectedFilePath !== undefined ? prefs.selectedFilePath : null}, selected_file_path)`,
+				sidebarScrollTop: sql`COALESCE(${prefs.sidebarScrollTop !== undefined ? prefs.sidebarScrollTop : null}, sidebar_scroll_top)`,
+				activeWorktreePath: sql`COALESCE(${prefs.activeWorktreePath !== undefined ? prefs.activeWorktreePath : null}, active_worktree_path)`,
 			},
 		});
 }

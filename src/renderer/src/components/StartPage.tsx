@@ -342,24 +342,24 @@ export default function StartPage({
 										gridTemplateColumns: `repeat(${recentColCount}, minmax(0, 1fr))`,
 									}}
 								>
-								{recent.map((p, i) => (
-									<ProjectCard
-										key={p.id}
-										project={p}
-										status={statusMap[p.id]}
-										isRecent
-										onOpen={() => handleOpen(p)}
-										onRemove={
-											onRemoveProject
-												? () => onRemoveProject(p.id)
-												: undefined
-										}
-										worktreeCount={p.worktreeChildren?.length}
-										worktreeChildren={p.worktreeChildren}
-										onOpenWorktree={handleOpen}
-										animationDelay={i * 50}
-									/>
-								))}
+									{recent.map((p, i) => (
+										<ProjectCard
+											key={p.id}
+											project={p}
+											status={statusMap[p.id]}
+											isRecent
+											onOpen={() => handleOpen(p)}
+											onRemove={
+												onRemoveProject
+													? () => onRemoveProject(p.id)
+													: undefined
+											}
+											worktreeCount={p.worktreeChildren?.length}
+											worktreeChildren={p.worktreeChildren}
+											onOpenWorktree={handleOpen}
+											animationDelay={i * 50}
+										/>
+									))}
 								</div>
 							</div>
 						</section>

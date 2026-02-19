@@ -459,7 +459,15 @@ export function registerRepoHandlers(): void {
 							return null;
 						})
 					)
-				).filter((r): r is { path: string; scope: "staged" | "unstaged" | "untracked"; diff: string } => r != null);
+				).filter(
+					(
+						r
+					): r is {
+						path: string;
+						scope: "staged" | "unstaged" | "untracked";
+						diff: string;
+					} => r != null
+				);
 				debugRepo(
 					"repo:getAllDiffs",
 					`ok projectId=${projectId} took=${Date.now() - startedAt}ms entries=${entries.length} results=${results.length}`

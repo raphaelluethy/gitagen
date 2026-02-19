@@ -81,7 +81,9 @@ export async function getAppSettings(): Promise<AppSettings> {
 	}
 
 	const db = await getDb();
-	const rows = await db.select({ key: appSettings.key, value: appSettings.value }).from(appSettings);
+	const rows = await db
+		.select({ key: appSettings.key, value: appSettings.value })
+		.from(appSettings);
 	const map = new Map<string, string | null>();
 	for (const row of rows) {
 		map.set(row.key, row.value);

@@ -32,6 +32,7 @@ Gitagen is a native Git client designed for speed and simplicity. It features a 
 - **AI-assisted commits** — generate commit messages with configurable AI providers
 - **Dark and light themes** — follows system preference or manual toggle
 - **Per-project settings** — gitconfig resolution, UI state persistence
+- **CLI opener** — open a repository directly in Gitagen from Terminal
 
 ## Tech Stack
 
@@ -55,6 +56,8 @@ src/
 ```
 
 The app enforces strict process isolation: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. All Git operations run in the main process; the renderer communicates exclusively through IPC.
+
+See `docs/ARCHITECTURE.md` for a deeper walkthrough (IPC flows, cache strategy, watcher lifecycle, and startup path).
 
 ## Getting Started
 
@@ -101,9 +104,30 @@ This removes the quarantine attribute that causes the "damaged" or "unidentified
 
 GitHub Actions also builds a macOS `.dmg` via `.github/workflows/build-macos-dmg.yml` when a `v*` tag is pushed. The DMG version is derived from the tag (for example, `v0.0.3` produces `Gitagen-0.0.3-<arch>.dmg`). Download it from the workflow run artifacts or release assets.
 
-### Other Commands
+### Command Line Tool
+
+Gitagen ships with a small CLI helper script (`resources/cli/gitagen`) that opens repositories in the app.
+
+1. Install from app menu: `Gitagen > Install Command Line Tool...`
+2. Use it from Terminal:
 
 ```bash
+gitagen                 # Open Gitagen start page
+gitagen .               # Open current repository
+gitagen /path/to/repo   # Open specific repository
+```
+
+Internally, this launches the app with `--open-repo <path>`, which routes to the existing app instance.
+
+### Scripts
+
+```bash
+pnpm dev          # Start Electron + renderer in development mode
+pnpm build        # Build main/preload/renderer output
+pnpm preview      # Preview built app
+pnpm pack:mac     # Build a macOS DMG without publishing
+pnpm dist:mac     # Build + pack macOS DMG
+pnpm release      # Build + publish macOS release
 pnpm typecheck    # TypeScript type checking (tsgo)
 pnpm lint         # Lint with oxlint
 pnpm lint:fix     # Lint and auto-fix

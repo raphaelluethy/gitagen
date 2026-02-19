@@ -26,8 +26,9 @@ Gitagen is an Electron-based Git client with a strict **main → preload → ren
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  window.gitagen                                                               │    │
 │  │  • projects: list, add, remove, switchTo, listGrouped                         │    │
-│  │  • repo: openProject, getTree, getStatus, getPatch, stage/unstage, commit…   │    │
-│  │  • settings: getGlobal, setGlobal, getProjectPrefs, discoverGitBinaries…      │    │
+│  │  • repo: openProject, getTree, getStatus, getPatch, stage/unstage, commit…    │    │
+│  │    plus watchProject/unwatchProject, worktrees, tags, rebase, cherry-pick      │    │
+│  │  • settings: getGlobal, getGlobalWithKeys, setGlobal, project prefs, AI config │    │
 │  │  • events: onRepoUpdated, onRepoError, onConflictDetected, onOpenRepo…        │    │
 │  │  • app: openExternal, confirm                                                │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
@@ -61,6 +62,7 @@ Gitagen is an Electron-based Git client with a strict **main → preload → ren
 │                                                                                       │
 │  ipcMain.handle("projects:*", ...)   ipcMain.handle("settings:*", ...)                 │
 │  ipcMain.handle("repo:*", ...)       ipcMain.handle("app:*", ...)                      │
+│  ipcMain.handle("cli:*", ...)                                                          │
 │                                                                                       │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │  IPC Handlers (src/main/ipc/)                                                 │    │
@@ -94,7 +96,8 @@ Gitagen is an Electron-based Git client with a strict **main → preload → ren
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │  FILESYSTEM                                                                           │
 │  • User's Git repos (project paths)                                                   │
-│  • ~/.gitagen (SQLite DB, settings, managed worktrees)                                │
+│  • app.getPath("userData")/gitagen.db (SQLite cache + app/project settings)           │
+│  • ~/.gitagen (managed worktree directories)                                           │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -130,6 +133,16 @@ Main broadcasts events when the repo state changes; the renderer subscribes via 
 | `ai:commitChunk`          | AI streaming commit message                                                 | Update textarea in real time                    |
 
 Each `events.on*` returns an unsubscribe function; components typically call it in a `useEffect` cleanup.
+
+---
+
+## CLI Integration
+
+Gitagen includes a helper CLI script (`resources/cli/gitagen`) that launches the app and can pass `--open-repo <path>`.
+
+- Main registers `cli:getStatus`, `cli:install`, and `cli:uninstall` in `src/main/ipc/cli.ts`
+- Install/uninstall uses an elevated symlink at `/usr/local/bin/gitagen`
+- Opening from CLI goes through the same `events:openRepo` flow used by second-instance deep links
 
 ---
 
@@ -180,7 +193,7 @@ Changes are debounced (300ms). When fired, `emitRepoUpdated(projectId)` is broad
 ### 1. **Fast Startup (<500ms target)**
 
 - SQLite caches status, tree, patches, and commit log
-- Cached log is returned on `repo:openProject` before any `git` calls
+- Cached log is parsed and returned as part of `repo:openProject`, while fresh status/branches/remotes load in parallel
 - LRU in-memory caches for status (1s TTL) and toplevel paths (5min)
 - Preload runs `preloadRecentProjectLogs()` in background to warm cache for recent projects
 
@@ -188,7 +201,7 @@ Changes are debounced (300ms). When fired, `emitRepoUpdated(projectId)` is broad
 
 - `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`
 - Preload validates projectId (UUID), paths (no `..`, null bytes), URLs (http/https only)
-- `app:openExternal` restricts allowed domains (e.g. GitHub, GitLab); others require confirmation
+- Main additionally enforces `https` for `app:openExternal`; known Git hosts open directly, others require confirmation
 - `repo:openInEditor` checks path is inside repo to avoid traversal
 
 ### 3. **Worktree Support**
@@ -206,6 +219,7 @@ Changes are debounced (300ms). When fired, `emitRepoUpdated(projectId)` is broad
 ### 5. **Single-Instance + Deep Linking**
 
 - `app.requestSingleInstanceLock()` ensures one app instance
+- `resources/cli/gitagen` launches app instances with `--open-repo <path>`
 - `--open-repo /path` opens that repo in the existing window
 - `events:openRepo` carries `projectId` and optional `worktreePath`
 
